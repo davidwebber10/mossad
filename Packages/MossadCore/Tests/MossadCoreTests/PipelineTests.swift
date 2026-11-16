@@ -539,6 +539,59 @@ final class PipelineTests: XCTestCase {
         XCTAssertTrue(note.contains("Summary 1"))
     }
 
+    // A failed "Transcribe again" leaves a meeting with no transcript and no summary; a second one must not keep
+    // that in place of the meeting Undo brings back.
+    func testUndoAfterTwoTranscribeAgainsWhereTheFirstFailedBringsBackTheLastWholeMeeting() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        transcriber.error = Boom()
+        _ = await p.transcribeAgain(id, speakers: nil)
+        for _ in 1..<Pipeline.maxAttempts { await p.process(id) }
+        XCTAssertEqual(try load(id).status, .failed)
+        transcriber.error = nil
+        let ran = await p.transcribeAgain(id, speakers: 3)
+        XCTAssertTrue(ran)
+        let restored = await p.restorePreviousTranscript(id)
+        XCTAssertTrue(restored)
+        let r = try load(id)
+        XCTAssertEqual(r.status, .written)
+        XCTAssertEqual(r.summary, "Summary 1")
+        XCTAssertEqual(r.decisions.map(\.text), ["Decision 1"])
+        XCTAssertEqual(r.actionItems.count, 1)
+        XCTAssertFalse(r.utterances.isEmpty)
+    }
+
+    // A run that wrote the meeting without a summary (the model failed each time) is not a whole meeting either.
+    func testUndoAfterTranscribeAgainWithoutASummaryBringsBackTheOneWithIt() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        summarizer.fail = true
+        _ = await p.transcribeAgain(id, speakers: nil)
+        for _ in 1..<Pipeline.maxSummaryAttempts { await p.process(id) }
+        XCTAssertEqual(try load(id).summaryMissing, true)
+        XCTAssertEqual(try load(id).status, .written)
+        summarizer.fail = false
+        _ = await p.transcribeAgain(id, speakers: 3)
+        XCTAssertNotNil(try load(id).summary)
+        let restored = await p.restorePreviousTranscript(id)
+        XCTAssertTrue(restored)
+        let r = try load(id)
+        XCTAssertEqual(r.summary, "Summary 1")
+        XCTAssertEqual(r.decisions.map(\.text), ["Decision 1"])
+    }
+
+    // After a run that succeeded, a new "Transcribe again" keeps that run's meeting for Undo.
+    func testUndoAfterTwoGoodTranscribeAgainsBringsBackTheSecondToLast() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        _ = await p.transcribeAgain(id, speakers: nil)
+        _ = await p.transcribeAgain(id, speakers: 3)
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id), fileName: Pipeline.previousFileName).summary, "Summary 2")
+    }
+
     func testTranscribeAgainNeedsTheAudioTracks() async throws {
         let id = try makeRecord()
         let p = pipeline()
@@ -1375,6 +1428,25 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(r.topics, [SummaryTopic(title: "Freight", summary: "Amy books it.")])
         XCTAssertEqual(r.decisions.map(\.text), ["Decision 1"])
         XCTAssertEqual(r.speakerNames["them:A"], "Alex Rivera")
+    }
+
+    // The kept summary still takes the reply's title, so a guess such as "with Speaker A" goes, in the note too.
+    func testNamingAVoiceWithAKeptSummaryStillTakesTheNewTitle() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        summarizer.title = "Freight planning with Speaker A"
+        await p.process(id)
+        let oldNote = try XCTUnwrap(try load(id).markdownPath)
+        summarizer.overview = ""
+        summarizer.title = "Freight planning with Alex Rivera"
+        await p.applyNames(callID: id, names: ["them:A": "Alex Rivera"])
+        let r = try load(id)
+        XCTAssertEqual(r.summary, "Summary 1")
+        XCTAssertEqual(r.generatedTitle, "Freight planning with Alex Rivera")
+        let note = try XCTUnwrap(r.markdownPath)
+        XCTAssertTrue(note.contains("Freight planning with Alex Rivera"))
+        XCTAssertTrue(try String(contentsOfFile: note, encoding: .utf8).contains("Summary 1"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: oldNote), "the note under the old title must not stay")
     }
 
     func testApplyNamesRewritesFileAndLearnsVoices() async throws {

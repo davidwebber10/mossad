@@ -272,6 +272,13 @@ public actor Pipeline {
         FileManager.default.fileExists(atPath: dir.appendingPathComponent(previousFileName).path)
     }
 
+    /// Undo brings back the last whole meeting: a run that failed or ended without the transcript or the summary the
+    /// kept copy has does not replace it. A quit or a crash resumes that run, and "Transcribe again" waits for its end.
+    static func keepsUndoCopy(kept: CallRecord, current: CallRecord) -> Bool {
+        (current.utterances.isEmpty && !kept.utterances.isEmpty)
+            || (current.summary?.nonBlank == nil && kept.summary?.nonBlank != nil)
+    }
+
     /// Transcribes a finished meeting again from its audio, optionally with how many people spoke, then names the
     /// voices and writes a new summary and note. The current record is kept first, so the person can go back.
     @discardableResult
@@ -281,8 +288,11 @@ public actor Pipeline {
               Self.canTranscribeAgain(dir), !inFlight.contains(id) else { return false }
         do {
             let previous = dir.appendingPathComponent(Self.previousFileName)
-            try? FileManager.default.removeItem(at: previous)
-            try FileManager.default.copyItem(at: dir.appendingPathComponent(CallRecord.fileName), to: previous)
+            let kept = try? CallRecord.load(from: dir, fileName: Self.previousFileName)
+            if kept.map({ Self.keepsUndoCopy(kept: $0, current: r) }) != true {
+                try? FileManager.default.removeItem(at: previous)
+                try FileManager.default.copyItem(at: dir.appendingPathComponent(CallRecord.fileName), to: previous)
+            }
         } catch {
             Log.error("Could not keep the transcript of \(id) before transcribing again: \(error)")
             return false
@@ -1024,9 +1034,9 @@ public actor Pipeline {
         }), !inFlight.contains(id),
               // Names changed during the request: that save's own summary is newer.
               var latest = edit(id, { $0.speakerNames == names }) else { return }
-        guard latest.applyUnlessIncomplete(s) else {
+        // A kept summary is saved too: the reply's title replaces a guess such as "with Speaker A", note name and all.
+        if !latest.applyUnlessIncomplete(s) {
             Log.info("The new summary for \(id) has no overview or an empty topic; the meeting keeps its summary")
-            return
         }
         latest.summaryMissing = nil
         save(&latest, dir: dir)
