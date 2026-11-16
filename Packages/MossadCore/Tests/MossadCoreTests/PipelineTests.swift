@@ -34,6 +34,9 @@ final class FakeSummarizer: Summarizing, @unchecked Sendable {
     var delayOnCall: [Int: Duration] = [:]
     var lastKnownTags: [String] = []
     var title: String?
+    /// Replaces the overview of the next replies, such as "" for a reply with no overview.
+    var overview: String?
+    var topics: [SummaryTopic] = []
     func summarize(transcript: String, title: String, knownTags: [String]) async throws -> MeetingSummary {
         lastKnownTags = knownTags
         calls += 1
@@ -41,7 +44,7 @@ final class FakeSummarizer: Summarizing, @unchecked Sendable {
         lastTranscript = transcript
         if let delay = delayOnCall[call] { try await Task.sleep(for: delay) }
         if fail { throw SummaryError.malformed }
-        return MeetingSummary(summary: "Summary \(call)", actionItems: [ActionItem(owner: "Alex Rivera", task: "send forecast")],
+        return MeetingSummary(summary: overview ?? "Summary \(call)", topics: topics, actionItems: [ActionItem(owner: "Alex Rivera", task: "send forecast")],
                               decisions: [Decision(text: "Decision \(call)", at: nil)], headline: "Headline \(call)", title: self.title)
     }
 }
@@ -377,6 +380,106 @@ final class PipelineTests: XCTestCase {
         XCTAssertFalse(r.utterances.contains { $0.speakerKey == "me:B" })
         XCTAssertNil(r.speakerNames["me:B"])
         XCTAssertEqual(r.speakerNames["them:A"], "Alex Rivera")
+    }
+
+    // Asking for a new summary sends a second request too: an incomplete reply keeps the summary the meeting has,
+    // and counts as no failure, so nothing is retried or marked missing.
+    func testANewSummaryThatIsIncompleteKeepsTheOneTheMeetingHas() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        summarizer.topics = [SummaryTopic(title: "Freight", summary: "Amy books it.")]
+        await p.process(id)
+        summarizer.overview = " "
+        summarizer.topics = [SummaryTopic(title: "Freight", summary: "")]
+        await p.regenerateSummary(id)
+        let r = try load(id)
+        XCTAssertEqual(summarizer.calls, 2)
+        XCTAssertEqual(r.summary, "Summary 1")
+        XCTAssertEqual(r.topics, [SummaryTopic(title: "Freight", summary: "Amy books it.")])
+        XCTAssertEqual(r.decisions.map(\.text), ["Decision 1"])
+        XCTAssertEqual(r.status, .written)
+        XCTAssertNil(r.summaryMissing)
+        XCTAssertNil(r.failureReason)
+    }
+
+    func testATopicWithNoTitleIsIncompleteToo() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        summarizer.topics = [SummaryTopic(title: "Freight", summary: "Amy books it.")]
+        await p.process(id)
+        summarizer.topics = [SummaryTopic(title: " ", summary: "Amy books it.")]
+        await p.regenerateSummary(id)
+        XCTAssertEqual(try load(id).summary, "Summary 1")
+    }
+
+    // The backfill counts a kept summary as done, so it does not pay again for a meeting that gets such replies.
+    func testTheBackfillCountsAKeptSummaryAsDone() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        var r = try load(id)
+        r.summaryVersion = nil
+        try r.save(to: paths.callDirectory(id))
+        summarizer.overview = ""
+        let ok = await p.backfill(id)
+        XCTAssertTrue(ok)
+        XCTAssertEqual(try load(id).summary, "Summary 1")
+        XCTAssertEqual(try load(id).summaryVersion, SummaryBackfill.currentVersion)
+    }
+
+    func testAKeptSummaryStillTakesTheNewTitle() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        summarizer.overview = ""
+        summarizer.title = "Freight planning with Amy"
+        await p.regenerateSummary(id)
+        let r = try load(id)
+        XCTAssertEqual(r.summary, "Summary 1")
+        XCTAssertEqual(r.generatedTitle, "Freight planning with Amy")
+    }
+
+    // "Transcribe again" drops all of the old summary, so a failed new summary never leaves old topics, action items,
+    // or decisions beside the new transcript. Undo brings them back.
+    func testTranscribingAgainDropsTheWholeOldSummary() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        summarizer.topics = [SummaryTopic(title: "Freight", summary: "Amy books it.")]
+        await p.process(id)
+        summarizer.fail = true
+        _ = await p.transcribeAgain(id, speakers: nil)
+        let r = try load(id)
+        XCTAssertNil(r.summary)
+        XCTAssertEqual(r.topics, [])
+        XCTAssertEqual(r.actionItems, [])
+        XCTAssertEqual(r.decisions, [])
+        XCTAssertNil(r.headline)
+    }
+
+    // A first summary has nothing to keep: an incomplete reply is written once, with no paid retries.
+    func testAnIncompleteFirstSummaryIsWrittenOnce() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        summarizer.overview = ""
+        await p.process(id)
+        let r = try load(id)
+        XCTAssertEqual(summarizer.calls, 1)
+        XCTAssertEqual(r.status, .written)
+        XCTAssertNil(r.summaryMissing)
+        XCTAssertEqual(r.actionItems.count, 1)
+    }
+
+    // The old summary describes the old transcript, so after "Transcribe again" the new reply replaces it.
+    func testAfterTranscribingAgainAnIncompleteReplyReplacesTheOldSummary() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        summarizer.overview = ""
+        let ran = await p.transcribeAgain(id, speakers: nil)
+        XCTAssertTrue(ran)
+        let r = try load(id)
+        XCTAssertEqual(r.summary, "")
+        XCTAssertEqual(r.decisions.map(\.text), ["Decision 2"])
     }
 
     func testRegenerateSummaryWritesANewSummaryForAFinishedMeeting() async throws {
@@ -1254,6 +1357,24 @@ final class PipelineTests: XCTestCase {
         let id = try makeRecord()
         await pipeline().runPending()
         XCTAssertEqual(try load(id).status, .written)
+    }
+
+    // A call's summary was erased when a voice was named: the new reply had action items but no overview, no topic
+    // text, and no decisions. A reply like that never replaces the summary the meeting has.
+    func testNamingAVoiceKeepsTheSummaryWhenTheNewReplyHasNoOverview() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        summarizer.topics = [SummaryTopic(title: "Freight", summary: "Amy books it.")]
+        await p.process(id)
+        summarizer.overview = ""
+        summarizer.topics = [SummaryTopic(title: "Freight", summary: "")]
+        await p.applyNames(callID: id, names: ["them:A": "Alex Rivera"])
+        let r = try load(id)
+        XCTAssertEqual(summarizer.calls, 2)
+        XCTAssertEqual(r.summary, "Summary 1")
+        XCTAssertEqual(r.topics, [SummaryTopic(title: "Freight", summary: "Amy books it.")])
+        XCTAssertEqual(r.decisions.map(\.text), ["Decision 1"])
+        XCTAssertEqual(r.speakerNames["them:A"], "Alex Rivera")
     }
 
     func testApplyNamesRewritesFileAndLearnsVoices() async throws {

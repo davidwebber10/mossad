@@ -93,13 +93,7 @@ public enum MeetingMerge {
         merged.themUtterances = them
         merged.end = sorted.map(\.end).max() ?? merged.end
         // The summary and the note are written again for the whole meeting.
-        merged.summary = nil
-        merged.headline = nil
-        merged.topics = []
-        merged.kind = nil
-        merged.hasOutcomes = nil
-        merged.actionItems = []
-        merged.decisions = []
+        merged.clearSummary()
         merged.status = .identified
         merged.attempts = 0
         merged.nextAttempt = nil
