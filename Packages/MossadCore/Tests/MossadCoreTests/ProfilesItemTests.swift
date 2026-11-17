@@ -72,7 +72,10 @@ final class ProfilesItemTests: XCTestCase {
         let two = registry()
         var one = ProfileRegistry()
         one.profiles[0].sync = "icloud"
+        one.writer = "aaaaaaaaaaaaaaaa"
         let item = ProfilesItem.make(from: two)
+        var own = item
+        own.writer = one.writer
         var other = item
         other.profiles[1].name = "Client"
         var newer = item
@@ -83,7 +86,8 @@ final class ProfilesItemTests: XCTestCase {
             (loaded(two), .found(other), .write(item), "two, another"),
             (loaded(two), .found(newer), .leave, "two, newer"),
             (loaded(two), .unknown, .write(item), "two, unknown"),
-            (loaded(one), .found(item), .delete, "one, found"),
+            (loaded(one), .found(own), .delete, "one, this Mac's own item"),
+            (loaded(one), .found(item), .leave, "one, an item with no writer"),
             (loaded(one), .none, .leave, "one, none"),
             (loaded(one), .found(newer), .leave, "one, newer"),
             (loaded(two, .unreadable), .found(item), .leave, "unreadable"),

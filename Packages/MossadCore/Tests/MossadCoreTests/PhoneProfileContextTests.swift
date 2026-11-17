@@ -14,12 +14,13 @@ final class PhoneProfileContextTests: XCTestCase {
         XCTAssertTrue(c.isDefault)
         XCTAssertEqual(c.root(documents: documents, environment: [:]).path, "/D/Mossad")
         XCTAssertEqual(c.root(documents: documents, environment: ["MOSSAD_ROOT": "/tmp/x"]).path, "/tmp/x")
-        XCTAssertEqual(c.root(documents: documents, environment: ["MOSSAD_ROOT": ""]).path, "/D/Mossad")
+        XCTAssertEqual(c.root(documents: documents, environment: ["MOSSAD_ROOT": ""]).path, URL(fileURLWithPath: "").path,
+                       "as today's Paths.live")
         let phone = AppIdentity(bundleID: "com.dwebber.mossad.phone")
         XCTAssertEqual(c.keychainService, "com.dwebber.mossad")
         XCTAssertEqual(c.keychainService, phone.keychainService)
         XCTAssertNil(c.settingsSuite)
-        let s = UserDefaults(suiteName: "PhoneProfileContextTests.\(UUID().uuidString)")!
+        let s = try! MadeUpSuite(self).defaults
         XCTAssertTrue(c.settings(standard: s, makeSuite: { _ in XCTFail("the first profile makes no suite"); return nil }) === s)
         XCTAssertEqual(c.cloudZone, "Mossad")
         XCTAssertEqual(c.cloudZone, phone.cloudZone)
@@ -61,8 +62,8 @@ final class PhoneProfileContextTests: XCTestCase {
     }
 
     func testAProfileWhoseSettingsCannotBeMadeNeverGetsTheFirstProfilesSettings() {
-        let s = UserDefaults(suiteName: "PhoneProfileContextTests.\(UUID().uuidString)")!
-        let t = UserDefaults(suiteName: "PhoneProfileContextTests.\(UUID().uuidString)")!
+        let s = try! MadeUpSuite(self).defaults
+        let t = try! MadeUpSuite(self).defaults
         XCTAssertNil(context(work).settings(standard: s, makeSuite: { _ in nil }))
         var asked: String?
         XCTAssertTrue(context(work).settings(standard: s, makeSuite: { asked = $0; return t }) === t)

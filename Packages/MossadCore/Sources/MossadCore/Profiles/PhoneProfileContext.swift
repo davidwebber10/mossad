@@ -9,7 +9,11 @@ public struct PhoneProfile: Codable, Equatable, Sendable, Identifiable {
     public var color: ProfileColor
     /// "icloud", "server", or "off", as the Mac said. A word this build does not know is kept and reads as not known.
     public var syncName: String?
-    public var source: Source
+    /// A source of a newer build reads as `.item`, and is written back as it was read until this build changes it.
+    public var source: Source {
+        didSet { sourceText = nil }
+    }
+    private var sourceText: String?
     /// Since when the Mac no longer lists it.
     public var gone: Date?
 
@@ -23,6 +27,28 @@ public struct PhoneProfile: Codable, Equatable, Sendable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey { case id, name, color, syncName = "sync", source, gone }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        color = try c.decode(ProfileColor.self, forKey: .color)
+        syncName = try c.decodeIfPresent(String.self, forKey: .syncName)
+        let raw = try c.decode(String.self, forKey: .source)
+        source = Source(rawValue: raw) ?? .item
+        sourceText = Source(rawValue: raw) == nil ? raw : nil
+        gone = try c.decodeIfPresent(Date.self, forKey: .gone)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(color, forKey: .color)
+        try c.encodeIfPresent(syncName, forKey: .syncName)
+        try c.encode(sourceText ?? source.rawValue, forKey: .source)
+        try c.encodeIfPresent(gone, forKey: .gone)
+    }
 
     /// Nil for no word or a word this build does not know.
     public var sync: SyncChoice? { syncName.flatMap(SyncChoice.init(rawValue:)) }
@@ -47,10 +73,10 @@ public struct PhoneProfileContext: Equatable, Hashable, Sendable {
 
     public var isDefault: Bool { id == Profile.defaultID }
 
-    /// `default`: `MOSSAD_ROOT` when set, else `Documents/Mossad`. Another profile: `<first root> Profiles/<id>`.
+    /// `default`: `MOSSAD_ROOT` when set (as today's `Paths.live` reads it, an empty value too), else
+    /// `Documents/Mossad`. Another profile: `<first root> Profiles/<id>`.
     public func root(documents: URL, environment: [String: String]) -> URL {
-        let first = environment["MOSSAD_ROOT"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
-            ?? documents.appendingPathComponent("Mossad")
+        let first = environment["MOSSAD_ROOT"].map { URL(fileURLWithPath: $0) } ?? documents.appendingPathComponent("Mossad")
         guard !isDefault else { return first }
         return first.deletingLastPathComponent()
             .appendingPathComponent(first.lastPathComponent + " Profiles")

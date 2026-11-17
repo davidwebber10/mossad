@@ -22,9 +22,7 @@ final class PhoneProfileBookTests: XCTestCase {
         ProfileCode.make(profile: Profile(id: club, name: "Club", color: .pink, root: "~/Mossad Club"), sync: .icloud, server: nil)!
     }
 
-    private func suite() -> UserDefaults {
-        UserDefaults(suiteName: "PhoneProfileBookTests.\(UUID().uuidString)")!
-    }
+    private func suite() -> UserDefaults { try! MadeUpSuite(self).defaults }
 
     func testWithNoItemThePhoneListsOnlyTheFirstProfileAndSavesNothing() {
         var book = PhoneProfileBook()
@@ -156,17 +154,18 @@ final class PhoneProfileBookTests: XCTestCase {
         let here = PhoneProfile(id: work, name: "Work", color: .blue, sync: .server, source: .item)
         var gone = here
         gone.gone = t0
+        let later = t0 + 8 * 86_400
         let rows: [(PhoneProfile, Int?, Int?, PhoneProfileBook.Cleanup)] = [
             (here, 0, 0, .stays), (gone, nil, 0, .unknown), (gone, 0, nil, .unknown), (gone, 1, 1, .holds(1)),
             (gone, 0, 2, .holds(2)), (gone, 0, 0, .remove), (.default, 0, 0, .stays), (.default, nil, nil, .stays),
         ]
         for (profile, outbox, audio, expected) in rows {
-            XCTAssertEqual(PhoneProfileBook.cleanup(profile, outbox: outbox, audio: audio), expected,
+            XCTAssertEqual(PhoneProfileBook.cleanup(profile, outbox: outbox, audio: audio, busy: false, now: later), expected,
                            "\(profile.id) \(String(describing: outbox)) \(String(describing: audio))")
         }
         var goneDefault = PhoneProfile.default
         goneDefault.gone = t0
-        XCTAssertEqual(PhoneProfileBook.cleanup(goneDefault, outbox: 0, audio: 0), .stays)
+        XCTAssertEqual(PhoneProfileBook.cleanup(goneDefault, outbox: 0, audio: 0, busy: false, now: later), .stays)
     }
 
     func testANewerBookIsReadAndNeverSaved() throws {

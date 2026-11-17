@@ -12,8 +12,12 @@ public struct PhoneProfileBook: Codable, Equatable, Sendable {
     public var profiles: [PhoneProfile]
     /// Nil is `default`.
     public var active: String?
-    /// The last profile chosen for an import.
+    /// The last profile chosen for an import. `default` is the same as none.
     public var importTarget: String?
+    /// The saved book did not read: not known, so it is never saved over or removed in this run.
+    public private(set) var unreadable = false
+
+    enum CodingKeys: String, CodingKey { case version, profiles, active, importTarget }
 
     public init() {
         version = Self.currentVersion
@@ -46,16 +50,23 @@ public struct PhoneProfileBook: Codable, Equatable, Sendable {
         listed.first { $0.id == importTarget } ?? activeProfile
     }
 
-    /// Among the listed profiles, the name trimmed and the letter case ignored.
+    /// The one listed profile with this name, trimmed and the letter case ignored; two that fit is nobody.
     public func profile(named name: String) -> PhoneProfile? {
+        let fits = profiles(named: name)
+        return fits.count == 1 ? fits[0] : nil
+    }
+
+    /// Every listed profile with this name, for the sentence that names the choices.
+    public func profiles(named name: String) -> [PhoneProfile] {
         let wanted = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !wanted.isEmpty else { return nil }
-        return listed.first { $0.name.compare(wanted, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+        guard !wanted.isEmpty else { return [] }
+        return listed.filter { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).compare(wanted, options: .caseInsensitive) == .orderedSame }
     }
 
     /// What the Keychain gave. Not known changes nothing. No item: every profile the item had leaves, and the first
     /// profile's entry goes. An item: its entries in its order, renamed in place by id; one it dropped leaves (the
-    /// first date stays); a coded one stays until the item has listed it once.
+    /// first date stays); a coded one stays until the item has listed it once. An entry this build could not read is
+    /// not dropped: that profile stays as it was, and with an entry whose id did not read, no profile leaves.
     public mutating func take(_ read: ProfilesItem.Read, now: Date) {
         switch read {
         case .unknown:
@@ -76,8 +87,10 @@ public struct PhoneProfileBook: Codable, Equatable, Sendable {
                 next.append(p)
             }
             let listedIDs = Set(item.profiles.map(\.id))
+            let unreadIDs = Set(item.unread.compactMap { $0 })
+            let anyUnknown = item.unread.contains { $0 == nil }
             for var p in profiles where !listedIDs.contains(p.id) && !p.isDefault {
-                if p.source == .item, p.gone == nil { p.gone = now }
+                if p.source == .item, p.gone == nil, !anyUnknown, !unreadIDs.contains(p.id) { p.gone = now }
                 next.append(p)
             }
             profiles = next
@@ -91,6 +104,8 @@ public struct PhoneProfileBook: Codable, Equatable, Sendable {
             profiles[i].name = code.name
             profiles[i].color = code.color
             profiles[i].syncName = code.sync
+            // A profile the item dropped comes back by its code, and stays until the item lists it again.
+            if profiles[i].gone != nil { profiles[i].source = .code }
             profiles[i].gone = nil
         } else {
             profiles.append(PhoneProfile(id: code.id, name: code.name, color: code.color, sync: SyncChoice(rawValue: code.sync), source: .code))
@@ -117,20 +132,25 @@ public struct PhoneProfileBook: Codable, Equatable, Sendable {
     }
 
     public var isEmpty: Bool {
-        profiles.isEmpty && (active == nil || active == Profile.defaultID) && importTarget == nil
+        profiles.isEmpty && (active == nil || active == Profile.defaultID) && (importTarget == nil || importTarget == Profile.defaultID)
     }
 
-    /// A book that does not read is no profiles: the first profile, as before.
+    /// No book: the first profile, as before. A book that does not read: the first profile for this run, and the
+    /// saved bytes are kept.
     public static func load(_ defaults: UserDefaults) -> PhoneProfileBook {
-        guard let data = defaults.data(forKey: defaultsKey), let book = try? JSONDecoder().decode(PhoneProfileBook.self, from: data) else {
-            return PhoneProfileBook()
+        guard let data = defaults.data(forKey: defaultsKey) else { return PhoneProfileBook() }
+        guard let book = try? JSONDecoder().decode(PhoneProfileBook.self, from: data) else {
+            var unknown = PhoneProfileBook()
+            unknown.unreadable = true
+            return unknown
         }
         return book
     }
 
-    /// Removes the key when the book is empty. A book a newer build wrote is never saved over.
+    /// Removes the key when the book is empty. A book a newer build wrote, or one that did not read, is never saved
+    /// over or removed.
     public func save(to defaults: UserDefaults) {
-        guard version <= Self.currentVersion else { return }
+        guard version <= Self.currentVersion, !unreadable else { return }
         guard !isEmpty else {
             defaults.removeObject(forKey: Self.defaultsKey)
             return
@@ -139,15 +159,21 @@ public struct PhoneProfileBook: Codable, Equatable, Sendable {
         defaults.set(data, forKey: Self.defaultsKey)
     }
 
-    public enum Cleanup: Equatable, Sendable { case stays, holds(Int), unknown, remove }
+    public enum Cleanup: Equatable, Sendable { case stays, holds(Int), unknown, waits, remove }
+
+    /// How long a profile must be gone before its folder goes: one read with no item never removes one at once.
+    public static let removalWait: TimeInterval = 7 * 86_400
 
     /// A profile's folder on the phone: it stays while the profile is listed; a gone one holds while a recording
-    /// waits, is not known while its outbox or its audio cannot be read, and goes when both are empty.
-    public static func cleanup(_ profile: PhoneProfile, outbox: Int?, audio: Int?) -> Cleanup {
-        guard !profile.isDefault, profile.gone != nil else { return .stays }
+    /// waits, is not known while its outbox or its audio cannot be read, waits while an import or an upload of it
+    /// runs and for a week from its saved `gone` date, and goes only then, with both empty.
+    public static func cleanup(_ profile: PhoneProfile, outbox: Int?, audio: Int?, busy: Bool, now: Date) -> Cleanup {
+        guard !profile.isDefault, let gone = profile.gone else { return .stays }
         guard let outbox, let audio else { return .unknown }
         let held = max(outbox, audio)
-        return held > 0 ? .holds(held) : .remove
+        if held > 0 { return .holds(held) }
+        if busy || now.timeIntervalSince(gone) < removalWait { return .waits }
+        return .remove
     }
 }
 
@@ -213,6 +239,9 @@ public enum PhoneProfileWords {
     }
 
     public static func noProfileNamed(_ name: String) -> String { "Mossad has no profile named “\(name)” on this iPhone." }
+    public static func manyNamed(_ name: String, choices: [String]) -> String {
+        "More than one profile on this iPhone is named “\(name)”: \(choices.joined(separator: ", ")). Rename one on your Mac."
+    }
     public static func connected(name: String, host: String) -> String { "Connected “\(name)” to \(host)." }
     public static func added(_ name: String) -> String { "Added “\(name)”." }
     public static let cannotOpen = "This profile could not be opened on this iPhone."

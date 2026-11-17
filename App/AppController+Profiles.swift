@@ -241,22 +241,34 @@ extension AppController {
         next.registry.setServer(hash, for: activeProfile.id)
         do { try next.save(to: Self.registryFile) } catch { Log.error("Profiles: the server could not be noted: \(error)") }
         profiles = readProfiles()
-        updateSharedProfiles()
     }
 
     /// This profile's sync in the registry, for the iPhone's list. As `noteServer`: only with a registry file that
     /// can be saved, and only when the word changed. Then the item follows.
     func noteSync() {
         guard changesProfiles else { return }
-        let read = readProfiles()
-        guard read.state != .none, read.canSave else { return }
-        if read.registry.profile(activeProfile.id)?.sync != syncWith.rawValue {
-            var next = read
-            next.registry.setSync(syncWith.rawValue, for: activeProfile.id)
+        // `notingSync` is nil with no file: a Mac with one profile never gets one from here.
+        if let next = readProfiles().notingSync(syncWith.rawValue, for: activeProfile.id) {
             do { try next.save(to: Self.registryFile) } catch { Log.error("Profiles: the sync could not be noted: \(error)") }
             profiles = readProfiles()
         }
         updateSharedProfiles()
+    }
+
+    /// The registry as it is now, for the item: with two or more live profiles, this Mac's writer id is made once
+    /// and saved first, so the item names its writer. Read on the main actor when the item's turn comes.
+    func profilesForTheItem() -> ProfileRegistry.Loaded {
+        var read = readProfiles()
+        if changesProfiles, read.state == .read, read.registry.live.count >= 2, read.registry.ensureWriter() {
+            do {
+                try read.save(to: Self.registryFile)
+                read = readProfiles()
+            } catch {
+                Log.error("Profiles: the list's writer could not be saved: \(error)")
+                return .none
+            }
+        }
+        return read
     }
 
     // MARK: Delete

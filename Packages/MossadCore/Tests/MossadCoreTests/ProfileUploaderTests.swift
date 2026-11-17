@@ -33,13 +33,10 @@ final class UploaderWorld: @unchecked Sendable {
 @MainActor
 class UploaderTestCase: XCTestCase {
     var folders: [URL] = []
-    var suites: [String] = []
 
     override func tearDown() async throws {
         for f in folders { try? FileManager.default.removeItem(at: f) }
-        for s in suites { UserDefaults().removePersistentDomain(forName: s) }
         folders = []
-        suites = []
     }
 
     func temp() -> URL {
@@ -49,11 +46,8 @@ class UploaderTestCase: XCTestCase {
         return dir
     }
 
-    func defaults() -> UserDefaults {
-        let name = "UploaderTests.\(UUID().uuidString)"
-        suites.append(name)
-        return UserDefaults(suiteName: name)!
-    }
+    /// Settings that leave no file in `~/Library/Preferences`.
+    func defaults() -> UserDefaults { try! MadeUpSuite(self).defaults }
 
     func uploader(_ id: String = "default", root: URL? = nil, settings: UserDefaults? = nil, listed: SyncChoice? = .icloud,
                   world: UploaderWorld, background: @escaping @MainActor (String) -> @MainActor () -> Void = { _ in {} }) -> ProfileUploader {

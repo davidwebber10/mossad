@@ -128,22 +128,22 @@ extension AppController {
         }
     }
 
-    /// One write of the `profiles` item at a time, off the main actor.
-    nonisolated private static let profilesItemQueue = SerialQueue()
+    /// The writes of the `profiles` item, one at a time, off the main actor. Each reads the registry when its turn
+    /// comes, so the last write is always the newest list.
+    nonisolated private static let profilesItemWriter = ProfilesItemWriter(read: ProfilesItem.read) { plan in
+        switch plan {
+        case .write(let item):
+            do { try item.save() } catch { Log.error("Profiles: the list for the iPhone could not be saved") }
+        case .delete: ProfilesItem.delete()
+        case .leave: break
+        }
+    }
 
     /// The `profiles` item for the iPhone, by `ProfilesItem.plan`. With no registry file the Keychain is not touched.
     func updateSharedProfiles() {
         guard writesSharedItems, profiles.state != .none else { return }
-        let loaded = profiles
-        Task.detached(priority: .utility) {
-            try? await Self.profilesItemQueue.run {
-                switch ProfilesItem.decide(loaded, read: ProfilesItem.read) {
-                case .write(let item):
-                    do { try item.save() } catch { Log.error("Profiles: the list for the iPhone could not be saved") }
-                case .delete: ProfilesItem.delete()
-                case .leave: break
-                }
-            }
+        Task.detached(priority: .utility) { [weak self] in
+            await Self.profilesItemWriter.request { await MainActor.run { self?.profilesForTheItem() ?? .none } }
         }
     }
 

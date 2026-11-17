@@ -27,15 +27,22 @@ public struct ProfilesItem: Codable, Equatable, Sendable {
 
     public var version: Int
     public var profiles: [Entry]
+    /// The Mac that wrote it (`ProfileRegistry.writer`). Nil from a Mac of before.
+    public var writer: String?
+    /// Entries this build could not read: their ids, or nil when the id did not read either. Never written.
+    public var unread: [String?] = []
 
-    public init(version: Int = currentVersion, profiles: [Entry]) {
+    enum CodingKeys: String, CodingKey { case version, profiles, writer }
+
+    public init(version: Int = currentVersion, profiles: [Entry], writer: String? = nil) {
         self.version = version
         self.profiles = profiles
+        self.writer = writer
     }
 
-    /// The live profiles, `default` first.
+    /// The live profiles, `default` first, with this Mac's writer id.
     public static func make(from registry: ProfileRegistry) -> ProfilesItem {
-        ProfilesItem(profiles: registry.live.map { Entry(id: $0.id, name: $0.name, color: $0.color, sync: $0.sync) })
+        ProfilesItem(profiles: registry.live.map { Entry(id: $0.id, name: $0.name, color: $0.color, sync: $0.sync) }, writer: registry.writer)
     }
 
     /// Sorted keys, so two Macs with one list write the same bytes.
@@ -47,31 +54,47 @@ public struct ProfilesItem: Codable, Equatable, Sendable {
 
     private struct Lossy: Decodable {
         var version: Int
-        var profiles: [Entry?]?
+        var writer: String?
+        var profiles: [Field]?
 
         struct Field: Decodable {
             var value: Entry?
-            init(from decoder: Decoder) throws { value = try? Entry(from: decoder) }
+            var id: String?
+            private struct IDOnly: Decodable { var id: String }
+            init(from decoder: Decoder) throws {
+                value = try? Entry(from: decoder)
+                id = value?.id ?? (try? IDOnly(from: decoder))?.id
+            }
         }
 
-        enum CodingKeys: String, CodingKey { case version, profiles }
+        enum CodingKeys: String, CodingKey { case version, profiles, writer }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             version = try c.decode(Int.self, forKey: .version)
-            profiles = try c.decodeIfPresent([Field].self, forKey: .profiles)?.map(\.value)
+            writer = try? c.decodeIfPresent(String.self, forKey: .writer)
+            profiles = try c.decodeIfPresent([Field].self, forKey: .profiles)
         }
     }
 
     /// Nil only when the data is no item (no `version`). A newer item is read as far as this build knows it; an entry
-    /// with a bad or repeated id, or one that does not read, is left out.
+    /// with a bad or repeated id is left out; one that does not read is in `unread`, so it is not taken as gone.
     public static func decode(_ data: Data) -> ProfilesItem? {
         guard let lossy = try? JSONDecoder().decode(Lossy.self, from: data) else { return nil }
         var seen = Set<String>()
-        let entries = (lossy.profiles ?? []).compactMap { $0 }.filter { entry in
-            (entry.id == Profile.defaultID || ProfileRegistry.isID(entry.id)) && seen.insert(entry.id).inserted
+        var unread: [String?] = []
+        var entries: [Entry] = []
+        for field in lossy.profiles ?? [] {
+            guard let entry = field.value else {
+                unread.append(field.id)
+                continue
+            }
+            guard entry.id == Profile.defaultID || ProfileRegistry.isID(entry.id), seen.insert(entry.id).inserted else { continue }
+            entries.append(entry)
         }
-        return ProfilesItem(version: lossy.version, profiles: entries)
+        var item = ProfilesItem(version: lossy.version, profiles: entries, writer: lossy.writer)
+        item.unread = unread
+        return item
     }
 
     /// What the Keychain gave: an item, no item, or not known (any other failure, or data that is no item).
@@ -79,8 +102,9 @@ public struct ProfilesItem: Codable, Equatable, Sendable {
     public enum Plan: Equatable, Sendable { case write(ProfilesItem), delete, leave }
 
     /// The Mac's rule. With no registry file, or one that cannot be saved (unreadable, partial, newer): leave. With
-    /// two or more live profiles: write unless the item is the same or newer. With one: delete an item this build
-    /// knows; leave one it does not, and one it cannot read.
+    /// two or more live profiles: write unless the item is the same or newer; with two Macs of one iCloud account the
+    /// last writer wins, as for `ai` and `server`. With one: delete only this Mac's own item; leave another Mac's,
+    /// one with no writer, one this build does not know, and one it cannot read.
     public static func plan(_ loaded: ProfileRegistry.Loaded, existing: Read) -> Plan {
         guard loaded.state == .read else { return .leave }
         if case .found(let found) = existing, found.version > currentVersion { return .leave }
@@ -89,7 +113,7 @@ public struct ProfilesItem: Codable, Equatable, Sendable {
             if case .found(let found) = existing, found == item { return .leave }
             return .write(item)
         }
-        if case .found = existing { return .delete }
+        if case .found(let found) = existing, let own = loaded.registry.writer, found.writer == own { return .delete }
         return .leave
     }
 
@@ -117,8 +141,13 @@ public struct ProfilesItem: Codable, Equatable, Sendable {
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var out: CFTypeRef?
         let status = SecItemCopyMatching(q as CFDictionary, &out)
+        return read(status: status, data: out as? Data)
+    }
+
+    /// The rule of a Keychain answer: `.none` only for "not found".
+    public static func read(status: OSStatus, data: Data?) -> Read {
         if status == errSecItemNotFound { return .none }
-        guard status == errSecSuccess, let data = out as? Data, let item = decode(data) else { return .unknown }
+        guard status == errSecSuccess, let data, let item = decode(data) else { return .unknown }
         return .found(item)
     }
 
@@ -140,5 +169,26 @@ public struct ProfilesItem: Codable, Equatable, Sendable {
 
     public static func delete() {
         SharedItemsGate.perform { SecItemDelete(query() as CFDictionary) }
+    }
+}
+
+/// The Mac's writes of the item, one at a time. Each request reads the registry when its turn comes, so two requests
+/// in a row can never leave the older state in the item, whatever order their callers ran in.
+public actor ProfilesItemWriter {
+    private let queue = SerialQueue()
+    private let read: @Sendable () -> ProfilesItem.Read
+    private let apply: @Sendable (ProfilesItem.Plan) -> Void
+
+    public init(read: @escaping @Sendable () -> ProfilesItem.Read, apply: @escaping @Sendable (ProfilesItem.Plan) -> Void) {
+        self.read = read
+        self.apply = apply
+    }
+
+    public func request(current: @escaping @Sendable () async -> ProfileRegistry.Loaded) async {
+        let read = read, apply = apply
+        _ = try? await queue.run {
+            let loaded = await current()
+            apply(ProfilesItem.decide(loaded, read: read))
+        }
     }
 }

@@ -3,7 +3,7 @@ import Foundation
 /// The profile code: one profile of the Mac for the iPhone, where iCloud Keychain is off. It holds the profile's id,
 /// name, color, and how it syncs; for a server also the address and the secret, so it is shown only for a minute.
 /// The old `mossad-server:` code still pairs the first profile.
-public struct ProfileCode: Codable, Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible {
+public struct ProfileCode: Codable, Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public static let scheme = "mossad-profile"
     public static let currentVersion = 1
 
@@ -55,6 +55,14 @@ public struct ProfileCode: Codable, Equatable, Sendable, CustomStringConvertible
     /// Never the secret, in a log line or a debugger.
     public var description: String { "ProfileCode(\(id))" }
     public var debugDescription: String { description }
+    /// `dump` and a debugger see no secret.
+    public var customMirror: Mirror {
+        Mirror(self, children: ["version": version, "id": id, "name": name, "color": color, "sync": sync, "address": address as Any],
+               displayStyle: .struct)
+    }
+
+    /// The longest text a code can be: a scanner that reads a long text is not reading a code.
+    public static let maxLength = 4_096
 
     public enum Parsed: Equatable, Sendable {
         case profile(ProfileCode), server(ServerConnection), newer, damaged, notMossad
@@ -74,6 +82,7 @@ public struct ProfileCode: Codable, Equatable, Sendable, CustomStringConvertible
     /// Either scheme. The version is read before anything else, so a newer code is refused in its own words.
     public static func parse(_ text: String) -> Parsed {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard t.count <= maxLength else { return isCode(String(t.prefix(32))) ? .damaged : .notMossad }
         if t.hasPrefix(ServerPairing.scheme + ":") {
             return ServerPairing.connection(fromCode: t).map(Parsed.server) ?? .damaged
         }
@@ -84,15 +93,20 @@ public struct ProfileCode: Codable, Equatable, Sendable, CustomStringConvertible
         guard versioned.version <= currentVersion else { return .newer }
         guard var code = try? JSONDecoder().decode(ProfileCode.self, from: data),
               code.id == Profile.defaultID || ProfileRegistry.isID(code.id) else { return .damaged }
-        let name = code.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        // No control characters; cut to the limit, then trimmed, so a cut never ends in a space.
+        let plain = String(String.UnicodeScalarView(code.name.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }))
+        let name = String(plain.trimmingCharacters(in: .whitespacesAndNewlines).prefix(ProfileRules.nameLimit))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return .damaged }
-        code.name = String(name.prefix(ProfileRules.nameLimit))
+        code.name = name
         switch code.sync {
         case SyncChoice.icloud.rawValue:
             code.address = nil
             code.secret = nil
         case SyncChoice.server.rawValue:
-            guard let address = code.address, let checked = ServerConnection.address(from: address.absoluteString),
+            // The secret goes in a header on every call: only https.
+            guard let address = code.address, address.scheme?.lowercased() == "https",
+                  let checked = ServerConnection.address(from: address.absoluteString),
                   let secret = code.secret, !secret.isEmpty else { return .damaged }
             code.address = checked
         default:
