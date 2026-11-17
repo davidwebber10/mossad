@@ -165,6 +165,22 @@ final class IdentityCorpusTests: XCTestCase {
         }
     }
 
+    /// A saved name with a part in brackets on the invite rules and the phone call's person: only the same whole
+    /// name is that person; the plain name is a guess (a fit), never the person.
+    func testASavedNameWithBracketsOnTheInviteAndThePhoneCall() {
+        let acme = VoiceProfile(name: "Sam Carter (Acme)", isOwner: false, embeddings: [[1, 0, 0, 0]])
+        let plain = InviteRoster(invite: CallInvite(guests: [CallInvite.Guest(name: "Sam Carter")]), profiles: [acme], people: [])
+        XCTAssertFalse(plain.invited.contains("Sam Carter (Acme)"), "the plain name is not the saved person")
+        XCTAssertEqual(plain.voiceless.first?.fits, ["Sam Carter (Acme)"], "only a fit, which never teaches the voice")
+        let whole = InviteRoster(invite: CallInvite(guests: [CallInvite.Guest(name: "Sam Carter (Acme)")]), profiles: [acme], people: [])
+        XCTAssertTrue(whole.invited.contains("Sam Carter (Acme)"))
+
+        let person = Person(displayName: "Sam Carter (Acme)", isOwner: false, origin: .voiceNaming, at: Date())
+        let hint = PersonHint(name: "Sam Carter (Acme)", personID: person.id.rawValue)
+        XCTAssertFalse(CalendarMatcher.isPerson(Invitee(name: "Sam Carter", email: nil), of: hint, people: [person]))
+        XCTAssertTrue(CalendarMatcher.isPerson(Invitee(name: "Sam Carter (Acme)", email: nil), of: hint, people: [person]))
+    }
+
     /// Review scenario A: Samantha Carter is saved, and a new person, Samuel Carter, is named "Sam Carter".
     func testAShortNameOfANewPersonDoesNotGoIntoAnotherPersonsProfile() throws {
         try library(["Samantha Carter", "Alexandra Smith", "Patricia Lee", "Christopher Nair"]) { library in
