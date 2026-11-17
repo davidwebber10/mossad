@@ -14,8 +14,10 @@ enum AnalyticsRoute: Hashable { case people }
 @Observable
 @MainActor
 final class PhoneStore {
-    /// The App and the Shortcuts action use the one store.
-    static let shared = PhoneStore()
+    /// The profile this store shows, from its first line to its last. A switch builds a new store.
+    let context: PhoneProfileContext
+    /// This profile's outbox, sync store, and uploads: the one object for the profile, for the app's life.
+    let uploader: ProfileUploader
 
     private(set) var meetings: [CallRecord] = []
     /// The meetings by day for the list, as small rows made off the main thread when the meetings change.
@@ -32,20 +34,19 @@ final class PhoneStore {
     private(set) var chats: [Chat] = []
     private(set) var commitments = CommitmentBook()
     /// Room recordings made here that the Mac has not turned into meetings yet, from their first second.
-    private(set) var outbox = Outbox()
+    var outbox: Outbox { uploader.outbox }
     /// Recordings uploading now: one upload per recording at a time.
-    private(set) var uploading: Set<String> = []
+    var uploading: Set<String> { uploader.uploading }
     /// The coach's score per meeting, for the lists.
     private(set) var scores: [String: Int] = [:]
     private(set) var syncing = false
     private(set) var lastSync: Date?
     /// The sync problem to show, and why each room recording waits. A single dropped connection is retried
     /// quietly and shows only when it repeats.
-    private(set) var syncStatus: SyncStatus = {
-        var s = SyncStatus()
-        s.show(PhoneStore.hook("MOSSAD_ERROR").flatMap(ErrorPreview.sample))
-        return s
-    }()
+    var syncStatus: SyncStatus {
+        get { uploader.syncStatus }
+        set { uploader.syncStatus = newValue }
+    }
     var error: FriendlyError? { syncStatus.shown }
     /// Bumped when a coach review changes here, so open reviews read it again.
     private(set) var coachVersion = 0
@@ -61,9 +62,6 @@ final class PhoneStore {
     var moment: Moment?
     /// A short message for a link that cannot open, such as to a meeting that is not on this iPhone yet.
     var notice: String?
-    /// An audio file that iOS handed over from the share sheet, shown in the import screen until it closes.
-    var incomingAudio: IncomingAudio? = PhoneStore.hook("MOSSAD_IMPORT_AFTER") == nil
-        ? PhoneStore.hook("MOSSAD_IMPORT").map { IncomingAudio(url: URL(fileURLWithPath: $0)) } : nil
     /// The room recorder's screen is open: the import screen shows over it.
     var recorderScreenOpen = false
 
@@ -83,8 +81,17 @@ final class PhoneStore {
     @ObservationIgnored private var indexed: (meetings: Int, chats: [Chat])?
     @ObservationIgnored private var indexing: Task<Void, Never>?
 
-    /// The room recorder. The store owns it, so a recording outlives its screen.
-    let recorder = RoomRecorder()
+    /// The app's one room recorder, so a recording outlives its screen and a switch of profile.
+    let recorder: RoomRecorder
+    /// Each meeting's numbers, kept while this store lives: only a new or changed meeting is read again. Shared by
+    /// Analytics and Coach › Goals.
+    let facts = MeetingFactsCache()
+    /// The cards the owner already saw in the deck, in this profile's own settings.
+    var findingsSeen: String {
+        didSet { uploader.settings.set(findingsSeen, forKey: "findingsSeen") }
+    }
+    /// Closed after a switch: it starts no read, sync, index, findings, or timer, and only finishes an edit made.
+    @ObservationIgnored private var life = StoreLife()
 
     /// Questions about one meeting that are running or failed, by call id, so they outlive the meeting's sections.
     @ObservationIgnored private var meetingChats: [String: ChatRun] = [:]
@@ -95,26 +102,20 @@ final class PhoneStore {
         let id = UUID()
     }
 
-    let paths = Paths.live
-    /// Where this iPhone syncs: iCloud (the default), the owner's own server, or nowhere.
-    private(set) var syncWith = SyncChoice(rawValue: UserDefaults.standard.string(forKey: "syncWith") ?? "") ?? .icloud
-    @ObservationIgnored private var engine: (key: String, sync: CloudSync)?
-    @ObservationIgnored private let keychain = Keychain.app
+    let paths: Paths
+    /// Where this profile syncs: iCloud, the owner's own server, or nowhere. Not known shows as nowhere.
+    var syncWith: SyncChoice { uploader.syncWith ?? .off }
     private var chatStore: ChatStore { ChatStore(directory: paths.chats) }
     /// `MOSSAD_ROOT` points the simulator at a sample folder; nothing syncs then.
     private let offline = ProcessInfo.processInfo.environment["MOSSAD_ROOT"] != nil
     /// Every write to a file that a pull also writes (commitments, the coach's memory, chats, reviews), and the
     /// pull itself, run one at a time, so neither saves over what the other merged.
-    @ObservationIgnored let writes = SerialQueue()
-    /// The handed files that an import reads now: the launch's inbox cleanup leaves them.
-    @ObservationIgnored var importing: Set<String> = []
+    var writes: SerialQueue { uploader.writes }
     @ObservationIgnored private var syncTask: (key: String, task: Task<Void, Never>)?
     /// The first read of the outbox and the meetings; a sync and a new recording wait for it.
     @ObservationIgnored var launch: Task<Void, Never>?
-    @ObservationIgnored private var outboxRead: Task<Void, Never>?
-    /// Recordings whose parts are being joined now, and whether the recovery pass runs: one of each at a time.
-    @ObservationIgnored var joining: Set<String> = []
-    @ObservationIgnored private var recovering = false
+    /// Recordings whose parts are being joined now, or whose shared audio is being added.
+    var joining: Set<String> { uploader.joining }
     @ObservationIgnored private var loading: Task<Void, Never>?
 
     /// A development hook for screenshots, read only with a sample folder so a real install never sees one.
@@ -132,7 +133,14 @@ final class PhoneStore {
         }
     }
 
-    init() {
+    init(context: PhoneProfileContext, uploader: ProfileUploader, recorder: RoomRecorder) {
+        self.context = context
+        self.uploader = uploader
+        self.recorder = recorder
+        paths = uploader.paths
+        findingsSeen = uploader.settings.string(forKey: "findingsSeen") ?? ""
+        recentSearches = uploader.settings.stringArray(forKey: "recentSearches") ?? []
+        if let shown = Self.hook("MOSSAD_ERROR").flatMap(ErrorPreview.sample) { uploader.syncStatus.show(shown) }
         // Development hooks for screenshots: `MOSSAD_OPEN=<call id>` opens a meeting, `MOSSAD_TAB` picks a tab.
         if let id = ProcessInfo.processInfo.environment["MOSSAD_OPEN"], !id.isEmpty { path = [id] }
         // `MOSSAD_MOMENT=<call id>@<seconds>` opens a meeting at a moment, as a commitment does.
@@ -150,33 +158,41 @@ final class PhoneStore {
         case "search": tab = .search
         default: break
         }
-        #if DEBUG
-        // `MOSSAD_IMPORT_AFTER=<seconds>` hands the `MOSSAD_IMPORT` file over later, as a share while a sheet is open.
-        if let after = Self.hook("MOSSAD_IMPORT_AFTER").flatMap(Double.init), let path = Self.hook("MOSSAD_IMPORT") {
-            Task {
-                try? await Task.sleep(for: .seconds(after))
-                incomingAudio = IncomingAudio(url: URL(fileURLWithPath: path))
-            }
-        }
-        #endif
+        // The profile that shows: its store pulls and settles, and an import reads the meetings in memory.
+        uploader.shown = true
+        uploader.known = { [weak self] in self?.meetings.map { CallImport.Known(id: $0.id, start: $0.start, end: $0.end) } ?? [] }
+        uploader.onStoreChange = { [weak self] in self?.storeChanged() }
         // The first frame does not wait for the disk.
-        let outboxRead = Task { await readOutbox() }
-        self.outboxRead = outboxRead
-        launch = Task {
-            await outboxRead.value
-            clearOldInbox()
-            await load(meetings: true)
+        launch = Task { [weak self] in
+            guard let uploader = self?.uploader else { return }
+            await uploader.ready()
+            await self?.load(meetings: true)
             // Joining a long recording takes a while; a sync does not wait for it.
-            Task {
-                await recoverRecordings()
-                await sendOutbox()
+            Task { [weak self] in
+                guard let self, life.allows(.read) else { return }
+                await uploader.recover(active: recorder.id)
+                await uploader.sendOutbox()
             }
         }
     }
 
+    /// After a switch: nothing of this store starts again. A running sync or read ends first; an edit already made
+    /// is still saved and sent. Then the uploader is left to its own passes.
+    func close() async {
+        life.close()
+        syncTask?.task.cancel()
+        indexing?.cancel()
+        await launch?.value
+        await loading?.value
+        await syncTask?.task.value
+        uploader.shown = false
+        uploader.known = nil
+        uploader.onStoreChange = nil
+    }
+
     /// The AI the Mac shares through iCloud Keychain, when the owner turned that on.
     var languageModel: (any LanguageModel)? {
-        guard let shared = SharedAIKey.load(), let provider = AIProvider(rawValue: shared.provider) else { return nil }
+        guard let shared = SharedAIKey.load(profile: context.id), let provider = AIProvider(rawValue: shared.provider) else { return nil }
         return provider.model(shared.model, apiKey: shared.key, usage: nil)
     }
 
@@ -226,6 +242,7 @@ final class PhoneStore {
     /// Reads the folder off the main thread and shows the result. The meetings (each `call.json` with its full
     /// transcript) are read only when asked: an edit to a task or a chat does not read them again.
     func load(meetings readMeetings: Bool) async {
+        guard life.allows(.read) else { return }
         let previous = loading
         let paths = paths
         let task = Task {
@@ -242,6 +259,7 @@ final class PhoneStore {
     @ObservationIgnored private var coachStamp: Int?
 
     private func apply(_ s: Snapshot) {
+        guard !life.closed else { return }
         // After a change made here (a note on a review) the open review reads again. After a read of the folder,
         // only when a review file or the coach's memory changed: this runs at every return to the app.
         let coachChanged = s.meetings == nil || s.coachStamp != coachStamp || profile != s.profile
@@ -256,12 +274,16 @@ final class PhoneStore {
             if owner != s.owner { owner = s.owner }
             if scores != s.scores { scores = s.scores }
             if !loaded { loaded = true }
-            settleOutbox()
+            uploader.settle(arrived: Outbox.arrived(m))
         }
         if profile != s.profile { profile = s.profile }
         let readsChanged = personas != s.personas
         if readsChanged { personas = s.personas }
-        if people != s.people { people = s.people }
+        if people != s.people {
+            people = s.people
+            // The import's person choices read this profile's saved people.
+            Task { await uploader.loadPeople() }
+        }
         if chats != s.chats { chats = s.chats }
         if commitments != s.commitments { commitments = s.commitments }
         if coachChanged || readsChanged {
@@ -276,6 +298,7 @@ final class PhoneStore {
 
     /// Builds the search index again when meetings or chats changed, and only swaps the tasks when only they did.
     private func refreshSearch() {
+        guard life.allows(.index) else { return }
         let meetings = meetings, chats = chats, tasks = commitments.items
         if let indexed, indexed.meetings == meetingsVersion, indexed.chats == chats {
             searchIndex.setTasks(tasks)
@@ -319,48 +342,21 @@ final class PhoneStore {
 
     // MARK: Sync
 
-    /// The server this iPhone uses: the one set up here, or the one the Mac shared through iCloud Keychain.
-    var server: ServerConnection? {
-        if let text = UserDefaults.standard.string(forKey: "serverAddress"), let address = ServerConnection.address(from: text),
-           let secret = keychain.get(.serverSecret) {
-            return ServerConnection(address: address, secret: secret)
-        }
-        return ServerPairing.shared()
-    }
+    /// The server this profile uses: the one set up here, or the one the Mac shared for it through iCloud Keychain.
+    var server: ServerConnection? { uploader.server }
 
     /// "iCloud" or "your server", for messages.
-    var place: String { syncWith == .server ? "your server" : "iCloud" }
+    var place: String { uploader.place }
 
-    /// The store in use and its name, which the outbox keeps for each upload.
-    private var cloud: (key: String, sync: CloudSync)? {
-        guard !offline else { return nil }
-        let key: String
-        let store: any RecordStore
-        switch syncWith {
-        case .icloud: key = "icloud"; store = CloudKitStore()
-        case .server:
-            guard let c = server else { return nil }
-            key = "server:\(c.address.absoluteString)"
-            store = ServerStore(c)
-        case .off: return nil
-        }
-        if let engine, engine.key == key { return engine }
-        let sync = CloudSync(paths: paths, store: store)
-        engine = (key, sync)
-        return engine
-    }
+    func choose(_ choice: SyncChoice) { uploader.choose(choice) }
 
-    func choose(_ choice: SyncChoice) {
-        guard choice != syncWith else { return }
-        use(choice)
-    }
+    /// Keeps a checked server for this profile and syncs with it.
+    func connect(_ c: ServerConnection) { uploader.connect(c) }
 
-    /// Moves to a store (also to another server): the sync for the old one stops, and one for the new one starts now.
-    private func use(_ choice: SyncChoice) {
-        syncWith = choice
-        UserDefaults.standard.set(choice.rawValue, forKey: "syncWith")
-        engine = nil
-        syncStatus.show(nil)
+    func disconnectServer() { uploader.disconnectServer() }
+
+    /// The store-only part of a move to another store: the sync for the old one stops, and one for the new one starts.
+    private func storeChanged() {
         lastSync = nil
         syncTask?.task.cancel()
         syncTask = nil
@@ -368,23 +364,12 @@ final class PhoneStore {
         Task { await sync() }
     }
 
-    /// Keeps a checked server on this iPhone and syncs with it.
-    func connect(_ c: ServerConnection) {
-        do { try keychain.set(c.secret, for: .serverSecret) } catch { Log.error("Saving the server secret failed: \(error)") }
-        UserDefaults.standard.set(c.address.absoluteString, forKey: "serverAddress")
-        use(.server)
-    }
-
-    func disconnectServer() {
-        keychain.delete(.serverSecret)
-        UserDefaults.standard.removeObject(forKey: "serverAddress")
-        choose(.icloud)
-    }
-
     /// Syncs, or waits for the sync already running for the same store, so a pull to refresh ends when it does.
     func sync() async {
+        guard life.allows(.sync) else { return }
         await launch?.value
-        let key = cloud?.key ?? "none:\(syncWith.rawValue)"
+        guard life.allows(.sync) else { return }
+        let key = uploader.cloud?.key ?? "none:\(syncWith.rawValue)"
         if let running = syncTask, running.key == key {
             await running.task.value
             return
@@ -403,8 +388,8 @@ final class PhoneStore {
 
     /// One sync with one store. A result for a store that is no longer the choice is dropped.
     private func runSync(key: String) async {
-        func current() -> Bool { !Task.isCancelled && (cloud?.key ?? "none:\(syncWith.rawValue)") == key }
-        if let cloud = cloud?.sync {
+        func current() -> Bool { !Task.isCancelled && !life.closed && (uploader.cloud?.key ?? "none:\(syncWith.rawValue)") == key }
+        if let cloud = uploader.cloud?.sync {
             do {
                 // One quiet second try: a phone that just woke the app often has no route for a moment.
                 try await writes.run {
@@ -429,7 +414,7 @@ final class PhoneStore {
             // Also after a failed pull, so each waiting recording gets its own reason. Upload problems stay on
             // their recordings; a good pull does not clear them.
             await sendOutbox()
-            retryUnfinishedRecordings()
+            uploader.retryUnfinished(active: recorder.id)
         } else {
             if syncWith == .server, !offline { syncStatus.show(FriendlyError(kind: .notConnected, context: .syncing)) }
             await load(meetings: true)
@@ -439,8 +424,7 @@ final class PhoneStore {
     /// While a room recording waits for its meeting, the app checks now and then without a pull to refresh.
     var waitsForTheMac: Bool {
         // Not for the recording in progress: a sync each minute of a meeting would read every meeting each time.
-        let active = recorder.id
-        return outbox.entries.contains { $0.id != active } && !offline && syncWith != .off
+        uploader.waits(active: recorder.id) && !offline
     }
 
     // MARK: Opening from Search
@@ -460,7 +444,7 @@ final class PhoneStore {
 
     // MARK: Recent searches
 
-    private(set) var recentSearches = UserDefaults.standard.stringArray(forKey: "recentSearches") ?? []
+    private(set) var recentSearches: [String]
 
     func remember(search: String) {
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -468,18 +452,18 @@ final class PhoneStore {
         var list = recentSearches.filter { $0.caseInsensitiveCompare(q) != .orderedSame }
         list.insert(q, at: 0)
         recentSearches = Array(list.prefix(8))
-        UserDefaults.standard.set(recentSearches, forKey: "recentSearches")
+        uploader.settings.set(recentSearches, forKey: "recentSearches")
     }
 
     func clearRecentSearches() {
         recentSearches = []
-        UserDefaults.standard.removeObject(forKey: "recentSearches")
+        uploader.settings.removeObject(forKey: "recentSearches")
     }
 
     /// Reads back what changed here (not the meetings) and sends it to the sync store, in the background.
     private func share() async {
         await load(meetings: false)
-        guard let cloud = cloud?.sync else { return }
+        guard let cloud = uploader.cloud?.sync else { return }
         do { _ = try await writes.run { try await cloud.pushShared() } } catch { Log.error("Sending changes to \(place) failed: \(error)") }
     }
 
@@ -569,242 +553,37 @@ final class PhoneStore {
 
     // MARK: Room recordings
 
-    var recordingsFolder: URL { paths.root.appendingPathComponent("Recordings") }
-    private var outboxFile: URL { recordingsFolder.appendingPathComponent(Outbox.fileName) }
-
-    /// Returns false when the write failed. A room recording's entry exists from its start, so a lost write is
-    /// repaired by the next launch's scan; an import must know, as the scan would make it a room recording.
-    @discardableResult
-    func saveOutbox() -> Bool {
-        defer { syncStatus.keepUploads(for: Set(outbox.entries.filter { !$0.isSent }.map(\.id))) }
-        do {
-            try outbox.save(to: outboxFile)
-            return true
-        } catch {
-            Log.error("Saving the outbox failed: \(error)")
-            return false
-        }
-    }
-
-    /// An imported recording's entry, saved before its audio is in the folder. False when it could not be saved:
-    /// then the entry is gone again.
-    func addImported(_ recording: PhoneRecording) -> Bool {
-        outbox.addFinished(recording)
-        guard outbox[recording.id]?.recording == recording, saveOutbox() else {
-            if outbox[recording.id]?.recording == recording { outbox.remove(recording.id) }
-            return false
-        }
-        return true
-    }
-
-    /// Takes back an imported recording whose audio could not be added.
-    func dropImported(_ id: String) {
-        outbox.remove(id)
-        saveOutbox()
-    }
-
-    /// Removes recordings whose meeting has arrived from the Mac, with their audio. Only an in-person meeting or a
-    /// phone call counts: ids are start times, and a call on the Mac can start in the same second as a recording.
-    private func settleOutbox() {
-        let done = outbox.settle(arrived: Outbox.arrived(meetings))
-        guard !done.isEmpty else { return }
-        let dir = recordingsFolder
-        for id in done { RoomAudio.delete(id, in: dir) }
-        saveOutbox()
-    }
-
-    /// At launch, before anything else touches the outbox: a file that cannot be read is set aside, and the scan
-    /// below fills the outbox again from the audio on disk.
-    private func readOutbox() async {
-        let file = outboxFile
-        let (box, aside) = await Task.detached { Outbox.loadOrSetAside(from: file) }.value
-        if let aside { Log.error("The outbox could not be read; it is kept as \(aside.lastPathComponent)") }
-        outbox = box
-    }
-
-    /// Finishes each recording that the app never finished, and each audio file with no entry, as the Mac does for
-    /// its own calls after a crash. It runs at launch, and again after a sync while a recording is not saved.
-    private func recoverRecordings() async {
-        guard !recovering else { return }
-        recovering = true
-        defer { recovering = false }
-        let dir = recordingsFolder
-        guard let audio = await Task.detached(operation: { RoomAudio.ids(in: dir) }).value else {
-            // Unknown is not empty: no entry is removed because the folder would not list.
-            Log.error("The recordings folder could not be listed; recovery waits")
-            return
-        }
-        for id in outbox.withoutAudio(audioIDs: audio, active: recorder.id) where !joining.contains(id) {
-            Log.error("The room recording \(id) has no audio on this iPhone; its entry is removed")
-            outbox.remove(id)
-            saveOutbox()
-        }
-        for id in outbox.needsRecovery(audioIDs: audio, active: recorder.id) {
-            // Looked at again: the Stop path may have finished it while this pass joined another one.
-            guard id != recorder.id, !joining.contains(id), outbox[id].map({ $0.state == .recording }) ?? true else { continue }
-            joining.insert(id)
-            let found = await Task.detached { () -> (short: Bool, end: Date?) in
-                // Once the parts are joined, the file's date is the join's, not the meeting's end.
-                (RoomAudio.isSurelyShort(id, in: dir, minimum: ProcessingQueue.minimumCallDuration),
-                 RoomAudio.parts(of: id, in: dir).isEmpty ? nil : RoomAudio.lastWrite(of: id, in: dir))
-            }.value
-            if found.short {
-                // Short by every measure: each part opened, and its bytes agree.
-                RoomAudio.delete(id, in: dir)
-                outbox.remove(id)
-                saveOutbox()
-                joining.remove(id)
-                continue
-            }
-            if outbox[id] == nil {
-                let start = RoomAudio.start(of: id) ?? found.end ?? Date()
-                outbox.begin(PhoneRecording(id: id, start: start, end: start, title: nil))
-            }
-            await join(id, end: found.end, title: nil)
-        }
-    }
-
-    /// Tries again for recordings that could not be saved, without waiting for the next launch.
-    private func retryUnfinishedRecordings() {
-        let active = recorder.id
-        guard !recovering, outbox.entries.contains(where: { $0.state == .recording && $0.id != active && !joining.contains($0.id) })
-        else { return }
-        Task {
-            await recoverRecordings()
-            await sendOutbox()
-        }
-    }
-
-    /// Joins a stopped recording's parts into the file to send, and puts it in line. The caller has put the id in
-    /// `joining`. A part that cannot be read does not hold back the rest: what reads is joined and sent, the bad
-    /// part stays on the iPhone under its own name, and the row says so. Any other failure (a full disk) keeps
-    /// every part, and the next sync tries again.
-    private func join(_ id: String, end: Date?, title: String?) async {
-        defer { joining.remove(id) }
-        let dir = recordingsFolder
-        let result = await Task.detached { () -> Result<RoomAudio.Joined, any Error> in
-            do {
-                return .success(try RoomAudio.finish(id, in: dir))
-            } catch is RoomAudio.Unreadable {
-                return Result { try RoomAudio.finish(id, in: dir, salvage: true) }
-            } catch {
-                return .failure(error)
-            }
-        }.value
-        switch result {
-        case .success(let joined):
-            let start = outbox[id]?.recording.start ?? Date()
-            outbox.finish(id, end: end ?? start.addingTimeInterval(joined.length), title: title)
-            if joined.setAside.isEmpty {
-                Log.info("Saved the room recording \(id) (\(Int(joined.length)) s)")
-            } else {
-                Log.error("The room recording \(id) was saved without parts that could not be read; they stay as \(joined.setAside.joined(separator: ", "))")
-                outbox.setTrouble(id, .partUnreadable)
-            }
-        case .failure(let error):
-            // The parts stay, and the entry stays `recording`. Logged once, not at each try.
-            if outbox[id]?.trouble != .notSaved { Log.error("Saving the room recording \(id) failed: \(error)") }
-            outbox.setTrouble(id, .notSaved)
-        }
-        saveOutbox()
-    }
+    var recordingsFolder: URL { uploader.recordingsFolder }
 
     func startRecording() async {
         // The outbox is read first, so the read never replaces this recording's entry.
-        await outboxRead?.value
+        await uploader.ready()
         guard let rec = await recorder.start(into: recordingsFolder) else { return }
-        outbox.begin(rec)
-        saveOutbox()
+        uploader.begin(rec)
     }
 
     /// Keeps the name the owner types in the entry, so a recording that the app never finishes still has it.
     func keepRecordingTitle() {
-        guard let id = recorder.id, let entry = outbox[id] else { return }
-        let t = recorder.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = t.isEmpty ? nil : t
-        guard entry.recording.title != title else { return }
-        outbox.retitle(id, title)
-        saveOutbox()
+        guard let id = recorder.id else { return }
+        uploader.keepTitle(id, recorder.title)
     }
 
-    /// Stops the recording, keeps it unless it is short (or the owner discarded a short one), joins its parts into
-    /// one file, and sends it. The phone may be locked right after Stop, so this asks for background time.
+    /// Stops the recording; the uploader keeps it unless it is short, joins its parts, and sends it.
     func stopRecording(discard: Bool) {
         guard let stopped = recorder.stop() else { return }
-        let dir = recordingsFolder, id = stopped.id
-        outbox.retitle(id, stopped.title)
-        joining.insert(id)
-        Task {
-            let time = BackgroundTime("Finish the room recording")
-            defer { time.end() }
-            let deleted = await Task.detached { () -> Bool in
-                let measured = RoomAudio.length(of: id, in: dir)
-                if RoomRecording.keep(measured: measured, counted: stopped.counted, discard: discard) { return false }
-                // The owner's own "Discard" is enough. Without it, a part that did not open may hold more than the
-                // count says, so the files must also be short by every measure.
-                guard discard || RoomAudio.isSurelyShort(id, in: dir, minimum: ProcessingQueue.minimumCallDuration) else { return false }
-                RoomAudio.delete(id, in: dir)
-                return true
-            }.value
-            if deleted {
-                joining.remove(id)
-                outbox.remove(id)
-                saveOutbox()
-                return
-            }
-            await join(id, end: stopped.end, title: nil)
-            await sendOutbox()
-        }
+        uploader.finish(stopped.id, end: stopped.end, counted: stopped.counted, title: stopped.title, discard: discard)
     }
 
     /// Whether a row offers "Remove".
-    func canRemoveRecording(_ id: String) -> Bool {
-        outbox.canRemove(id, active: recorder.id, busy: uploading.union(joining))
-    }
+    func canRemoveRecording(_ id: String) -> Bool { uploader.canRemove(id, active: recorder.id) }
 
-    /// The owner's "Remove": the row, its audio, and any parts set aside. Nothing else deletes a recording that the
-    /// Mac does not have.
-    func removeRecording(_ id: String) {
-        guard canRemoveRecording(id) else { return }
-        RoomAudio.delete(id, in: recordingsFolder, setAside: true)
-        outbox.remove(id)
-        saveOutbox()
-        Log.info("The owner removed the room recording \(id)")
-    }
+    /// The owner's "Remove". Nothing else deletes a recording that the Mac does not have.
+    func removeRecording(_ id: String) { uploader.remove(id, active: recorder.id) }
 
     /// The owner's "Send again" on a recording whose meeting has not come back.
-    func sendAgain(_ id: String) {
-        outbox.sendAgain(id)
-        saveOutbox()
-        Task { await sendOutbox() }
-    }
+    func sendAgain(_ id: String) { uploader.sendAgain(id) }
 
-    /// Uploads what the store does not have yet, and again what it took long ago with no meeting back, or what
-    /// another store took. The audio stays here until the meeting comes back from the Mac.
-    func sendOutbox() async {
-        guard let engine = cloud else { return }
-        let key = engine.key, cloud = engine.sync
-        let dir = recordingsFolder
-        for listed in outbox.due(store: key, now: Date()) {
-            // Looked at again here: another pass may have sent it while this one uploaded the one before. An import
-            // whose audio is still being added waits in `joining`.
-            guard !uploading.contains(listed.id), !joining.contains(listed.id),
-                  let entry = outbox.due(store: key, now: Date()).first(where: { $0.id == listed.id }) else { continue }
-            uploading.insert(entry.id)
-            let time = BackgroundTime("Upload the room recording")
-            do {
-                try await cloud.upload(entry.recording, audio: RoomAudio.finished(entry.id, in: dir))
-                outbox.markSent(entry.id, store: key, at: Date())
-                saveOutbox()
-                syncStatus.uploaded(entry.id)
-            } catch {
-                Log.error("Uploading the room recording failed: \(error)")
-                syncStatus.uploadFailed(entry.id, FriendlyError(error, context: .uploadingAudio, service: place))
-            }
-            time.end()
-            uploading.remove(entry.id)
-        }
-    }
+    func sendOutbox() async { await uploader.sendOutbox() }
 
     // MARK: Commitments
 
@@ -906,6 +685,7 @@ final class PhoneStore {
 
     /// Reads the cards of all calls again, off the main thread. Only the calls of the last two weeks can have one.
     func refreshFindings() {
+        guard life.allows(.findings) else { return }
         // Development hook for screenshots: `MOSSAD_DECK_CARDS=<file>` is a JSON list of made-up cards to show.
         if let path = Self.hook("MOSSAD_DECK_CARDS"), let data = FileManager.default.contents(atPath: path),
            let sample = try? JSONDecoder().decode([CoachFinding].self, from: data) {

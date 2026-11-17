@@ -153,7 +153,7 @@ struct ConnectServerView: View {
                         }
                         .buttonStyle(.phoneFill(wide: true))
                         .disabled(!DataScannerViewController.isSupported)
-                        if let shared = ServerPairing.shared() {
+                        if let shared = ServerPairing.shared(profile: store.context.id) {
                             VStack(alignment: .leading, spacing: Rhythm.itemGap) {
                                 Button { check(shared) } label: {
                                     HStack(spacing: Space.m) {

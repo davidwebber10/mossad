@@ -14,10 +14,9 @@ struct MeetingsListView: View {
     @Namespace private var zoom
     /// The coach's findings deck. Development hook for screenshots: `MOSSAD_FINDINGS=1` opens it.
     @State private var findings = PhoneStore.hook("MOSSAD_FINDINGS") != nil
-    /// The cards the owner already saw in the deck. The row is for a new card only, not a standing prompt.
-    @AppStorage("findingsSeen") private var seen = ""
+    /// The row is for a new card only, not a standing prompt: the cards the owner already saw are the profile's own.
     private var hasNewFindings: Bool {
-        let known = Set(seen.split(separator: "\n").map(String.init))
+        let known = Set(store.findingsSeen.split(separator: "\n").map(String.init))
         return store.findings.contains { !known.contains($0.id) }
     }
 

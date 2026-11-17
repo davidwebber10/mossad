@@ -15,11 +15,11 @@ extension View {
 
 private struct CallImportSheet: ViewModifier {
     let shows: Bool
-    @Environment(PhoneStore.self) private var store
+    @Environment(PhoneProfiles.self) private var profiles
 
     func body(content: Content) -> some View {
-        content.sheet(item: Binding(get: { shows ? store.incomingAudio : nil },
-                                    set: { if shows { store.incomingAudio = $0 } })) { CallImportScreen(incoming: $0) }
+        content.sheet(item: Binding(get: { shows ? profiles.incomingAudio : nil },
+                                    set: { if shows { profiles.incomingAudio = $0 } })) { CallImportScreen(incoming: $0) }
     }
 }
 
@@ -28,6 +28,7 @@ private struct CallImportSheet: ViewModifier {
 struct CallImportScreen: View {
     let incoming: IncomingAudio
     @Environment(PhoneStore.self) private var store
+    @Environment(PhoneProfiles.self) private var profiles
     @Environment(\.dismiss) private var dismiss
     @State private var file: CallImport.File?
     /// Empty until the owner types or takes the file's name: the phone's title is the meeting's for good.
@@ -177,6 +178,7 @@ struct CallImportScreen: View {
         switch await store.importCall(draft, from: incoming.url) {
         case .success:
             added = true
+            profiles.discardIncoming(incoming.url)
             store.tab = .meetings
             store.path = []
             dismiss()
@@ -189,8 +191,8 @@ struct CallImportScreen: View {
 
     private func discardUnlessAdded() {
         // A newer share of the same file in its place keeps it for that screen.
-        guard !added, store.incomingAudio.map({ $0.id != incoming.id && $0.url == incoming.url }) != true else { return }
-        store.discardIncoming(incoming.url)
+        guard !added, profiles.incomingAudio.map({ $0.id != incoming.id && $0.url == incoming.url }) != true else { return }
+        profiles.discardIncoming(incoming.url)
     }
 }
 

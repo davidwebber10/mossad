@@ -16,7 +16,7 @@ struct AddRecordingIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let store = PhoneStore.shared
+        let store = PhoneProfiles.shared.store
         // The file under its own name, so the rules see what the share gave.
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

@@ -38,6 +38,9 @@ final class RoomRecorder: NSObject, AVAudioRecorderDelegate {
 
     /// A start waits for the microphone permission; a second call in that time must not replace the first.
     @ObservationIgnored private var starting = false
+
+    /// A recording runs, or a start is on its way: no switch of profile now.
+    var busy: Bool { id != nil || starting }
     @ObservationIgnored private var recorder: AVAudioRecorder?
     @ObservationIgnored private var started = Date()
     @ObservationIgnored private var dir = URL(fileURLWithPath: NSTemporaryDirectory())
