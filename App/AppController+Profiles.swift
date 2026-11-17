@@ -30,8 +30,28 @@ extension AppController {
 
     func switchProfile(to id: String) {
         guard changesProfiles else { return }
+        runSwitch(to: id, file: Self.registryFile, home: Self.home, extra: [], environment: ProcessInfo.processInfo.environment)
+    }
+
+    #if DEBUG
+    /// `MOSSAD_PROFILE_SWITCH=<id>` on a made-up registry: the real mechanics of a switch once, for the proof that a
+    /// switch ends with one copy of the other profile. The new instance starts with `--background` and no hook;
+    /// `MOSSAD_PROFILE_SWITCH_FAIL=1` gives it an unknown profile, so its start fails.
+    func proofSwitch(to id: String, file: URL, failing: Bool) {
+        guard AppIdentity.current.madeUpRegistry, !AppIdentity.current.isPreview else { return }
+        var environment = ProcessInfo.processInfo.environment
+        environment["MOSSAD_PROFILE_SWITCH"] = nil
+        environment["MOSSAD_PROFILE_SWITCH_FAIL"] = nil
+        environment["MOSSAD_PROOF_DAYS"] = nil
+        runSwitch(to: id, file: file, home: nil, extra: ["--background"] + (failing ? ["--profile", "ffffffff"] : []), environment: environment)
+    }
+    #endif
+
+    /// The mechanics of a switch: decide, save `active`, start the new instance, then quit or put `active` back.
+    private func runSwitch(to id: String, file: URL, home: URL?, extra: [String], environment: [String: String]) {
         profileProblem = nil
-        let read = readProfiles()
+        let read = ProfileRegistry.load(from: file, home: home)
+        profiles = read
         switch ProfileSwitch.decide(to: id, registry: read, active: activeProfile.id, recording: isRecording, arguments: CommandLine.arguments) {
         case .stay: return
         case .refused(let why): profileProblem = why
@@ -40,58 +60,78 @@ extension AppController {
             if save {
                 var next = read
                 next.registry.setActive(id)
-                do { try next.save(to: Self.registryFile) } catch {
+                do { try next.save(to: file) } catch {
                     Log.error("Profiles: the switch could not save the list: \(error)")
                     profileProblem = Self.unreadableProfiles
                     return
                 }
             }
-            startInstance(arguments: arguments, saved: save, was: was)
+            startInstance(arguments: arguments + extra, environment: environment, saved: save, was: was, file: file, home: home)
         }
     }
 
-    /// Starts the new instance as `restartAsWorkingCopy` does, and quits only with proof of a new process.
-    private func startInstance(arguments: [String], saved: Bool, was: String) {
+    /// Starts the new instance as `restartAsWorkingCopy` does, and quits only with proof of a new process that is
+    /// still running a moment later (a start that fails ends at once). The Mac-wide lock is let go first, so the new
+    /// instance never waits for this one; a failed start takes it again.
+    private func startInstance(arguments: [String], environment: [String: String], saved: Bool, was: String, file: URL, home: URL?) {
         let config = NSWorkspace.OpenConfiguration()
         config.createsNewApplicationInstance = true
         config.arguments = arguments
-        config.environment = ProcessInfo.processInfo.environment
+        config.environment = environment
+        let start = Date()
+        foregroundLock = nil
         Log.info("Profiles: switching")
         Task {
-            var started = false
             var newInstance: NSRunningApplication?
             do {
                 let app = try await NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config)
-                started = app.processIdentifier != ProcessInfo.processInfo.processIdentifier && !app.isTerminated
-                if started { newInstance = app }
+                Log.info("Profiles: the new instance (pid \(app.processIdentifier)) started after \(Self.seconds(since: start)) s")
+                if app.processIdentifier != ProcessInfo.processInfo.processIdentifier, !app.isTerminated { newInstance = app }
             } catch {
                 Log.error("Profiles: the new instance did not start: \(error)")
             }
-            switch ProfileSwitch.afterStart(started: started, saved: saved, was: was) {
+            if let app = newInstance {
+                try? await Task.sleep(for: .seconds(1.5))
+                if app.isTerminated {
+                    Log.error("Profiles: the new instance ended at once")
+                    newInstance = nil
+                }
+            }
+            let back = { (problem: String) in
+                if saved {
+                    var restore = ProfileRegistry.load(from: file, home: home)
+                    restore.registry.setActive(was)
+                    if restore.canSave { try? restore.save(to: file) }
+                }
+                self.profiles = ProfileRegistry.load(from: file, home: home)
+                if self.foregroundLock == nil, ProfileLaunch.takesForegroundLock(AppIdentity.current),
+                   case .held(let lock) = InstanceLock.acquire(root: Self.macWideLockFolder) {
+                    self.foregroundLock = lock
+                }
+                self.profileProblem = problem
+                Log.info("Profiles: the switch did not happen; this copy goes on")
+            }
+            switch ProfileSwitch.afterStart(started: newInstance != nil, saved: saved, was: was) {
             case .quit:
                 // A call that started after the decision: the new instance goes, `active` comes back, no quit.
                 if case .refused(let why) = ProfileSwitch.atQuit(recording: isRecording) {
                     newInstance?.terminate()
-                    if saved {
-                        var back = readProfiles()
-                        back.registry.setActive(was)
-                        if back.canSave { try? back.save(to: Self.registryFile) }
-                    }
-                    profiles = readProfiles()
-                    profileProblem = why
+                    back(why)
                     return
                 }
+                Log.info("Profiles: quitting after \(Self.seconds(since: start)) s")
                 NSApp.terminate(nil)
-            case .restore(let active):
-                var back = readProfiles()
-                back.registry.setActive(active)
-                if back.canSave { try? back.save(to: Self.registryFile) }
-                profiles = readProfiles()
-                profileProblem = "Could not switch. Mossad stays in \(activeProfile.name)."
-            case .stay:
-                profileProblem = "Could not switch. Mossad stays in \(activeProfile.name)."
+            case .restore, .stay:
+                back("Could not switch. Mossad stays in \(activeProfile.name).")
             }
         }
+    }
+
+    private static func seconds(since start: Date) -> String { String(format: "%.2f", Date().timeIntervalSince(start)) }
+
+    /// The folder of the Mac-wide lock: beside the registry, or beside a made-up one.
+    static var macWideLockFolder: URL {
+        AppIdentity.current.macWideLockFolder(home: FileManager.default.homeDirectoryForCurrentUser, environment: ProcessInfo.processInfo.environment)
     }
 
     func addProfile(name: String, color: ProfileColor) {
@@ -124,7 +164,7 @@ extension AppController {
         Log.info("Profiles: added one")
         // The first file of the Mac: this copy started with no Mac-wide lock. It takes it now, so the new instance
         // waits for it to quit, as after every later switch.
-        if foregroundLock == nil, case .held(let lock) = InstanceLock.acquire(root: ProfileRegistry.folder(home: Self.home)) {
+        if foregroundLock == nil, case .held(let lock) = InstanceLock.acquire(root: Self.macWideLockFolder) {
             foregroundLock = lock
         }
         switchProfile(to: profile.id)

@@ -179,9 +179,20 @@ final class ProfileRulesTests: XCTestCase {
         XCTAssertFalse(ProfileLaunch.takesForegroundLock(AppIdentity(bundleID: main)))
         XCTAssertTrue(ProfileLaunch.takesForegroundLock(AppIdentity(bundleID: main, registry: read)))
         XCTAssertTrue(ProfileLaunch.takesForegroundLock(AppIdentity(bundleID: main, registry: newer)))
-        XCTAssertFalse(ProfileLaunch.takesForegroundLock(AppIdentity(bundleID: main, arguments: ["Mossad", "--profile", "1a2b3c4d"], registry: read, madeUpRegistry: true)))
+        // A made-up registry has its own Mac-wide lock, beside its file, never the real one.
+        XCTAssertTrue(ProfileLaunch.takesForegroundLock(AppIdentity(bundleID: main, arguments: ["Mossad", "--profile", "1a2b3c4d"], registry: read, madeUpRegistry: true)))
         XCTAssertFalse(ProfileLaunch.takesForegroundLock(AppIdentity(bundleID: main, arguments: ["--ui-preview"], environment: ["MOSSAD_ROOT": "/tmp/demo"], registry: read)))
         XCTAssertFalse(ProfileLaunch.takesForegroundLock(AppIdentity(bundleID: AppIdentity.rehearsalBundleID, registry: read)))
         XCTAssertFalse(ProfileLaunch.takesForegroundLock(AppIdentity(bundleID: main, environment: ["MOSSAD_ROOT": "/tmp/demo"], registry: read)))
+    }
+
+    func testTheMacWideLockOfAMadeUpRegistryIsBesideItsFile() {
+        let home = URL(fileURLWithPath: "/Users/someone")
+        let real = AppIdentity(bundleID: AppIdentity.mainBundleID, registry: read)
+        XCTAssertEqual(real.macWideLockFolder(home: home, environment: [:]).path, "/Users/someone/Library/Application Support/Mossad")
+        let made = AppIdentity(bundleID: AppIdentity.mainBundleID, arguments: ["Mossad", "--profile", "1a2b3c4d"], registry: read, madeUpRegistry: true)
+        XCTAssertEqual(made.macWideLockFolder(home: home, environment: ["MOSSAD_PROFILES": "/tmp/proof/profiles.json"]).path, "/tmp/proof")
+        // A made-up flag with no file named never falls back to the real folder.
+        XCTAssertEqual(made.macWideLockFolder(home: home, environment: [:]).path, FileManager.default.temporaryDirectory.path)
     }
 }

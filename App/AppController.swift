@@ -650,7 +650,7 @@ final class AppController: ObservableObject {
             // folder's. `LaunchLocks` decides what this copy keeps; a second copy keeps no lock.
             var macWide: LaunchLocks.Result?
             if ProfileLaunch.takesForegroundLock(AppIdentity.current) {
-                switch InstanceLock.acquire(root: ProfileRegistry.folder(home: FileManager.default.homeDirectoryForCurrentUser)) {
+                switch InstanceLock.acquire(root: Self.macWideLockFolder) {
                 case .held(let lock): foregroundLock = lock; macWide = .held
                 case .taken: macWide = .taken
                 case .failed(let code):
@@ -670,6 +670,8 @@ final class AppController: ObservableObject {
                 }
             }
             let decision = LaunchLocks.decide(macWide: macWide, folder: folder)
+            Log.info("Profiles: this copy is \(AppIdentity.current.profile.id)\(AppIdentity.current.madeUpRegistry ? " at \(paths.root.path)" : ""); "
+                     + "Mac-wide lock \(macWide.map { "\($0)" } ?? "not used"), folder lock \(folder.map { "\($0)" } ?? "not tried"), second copy \(decision.secondCopy)")
             if !decision.keepsMacWide { foregroundLock = nil }
             if decision.secondCopy {
                 isSecondCopy = true

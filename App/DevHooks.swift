@@ -36,6 +36,13 @@ enum DevHooks {
             for r in c.meetings where Calendar.current.isDateInToday(r.start) && r.status == .written { c.regenerateSummary(r.id) }
         }
         let looks = preview || debug
+        #if DEBUG
+        // `MOSSAD_PROFILE_SWITCH=<id>` on a made-up registry: one real switch, a few seconds after launch.
+        if let id = env["MOSSAD_PROFILE_SWITCH"], let file = env["MOSSAD_PROFILES"], AppIdentity.current.madeUpRegistry, !preview {
+            let failing = env["MOSSAD_PROFILE_SWITCH_FAIL"] == "1"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { c.proofSwitch(to: id, file: URL(fileURLWithPath: file), failing: failing) }
+        }
+        #endif
         // `MOSSAD_PROOF_DAYS=<n>` on a made-up registry: a setting written through `@AppStorage` into the profile's
         // suite, and what Sparkle reads, for the proof that a profile's swap holds.
         // Never as `default`, which on a made-up registry is the owner's real install (it does not start as one anyway).

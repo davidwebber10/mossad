@@ -15,7 +15,7 @@ extension AppController {
                 if case .held = InstanceLock.acquire(root: paths.root) { folderFree = true }
                 // With profiles, the other copy may be another profile: its Mac-wide lock must be free too.
                 let macWideFree: Bool? = ProfileLaunch.takesForegroundLock(AppIdentity.current)
-                    ? InstanceLock.waitUntilFree(root: ProfileRegistry.folder(home: FileManager.default.homeDirectoryForCurrentUser), timeout: 0)
+                    ? InstanceLock.waitUntilFree(root: Self.macWideLockFolder, timeout: 0)
                     : nil
                 let free = LaunchLocks.mayRestart(folderFree: folderFree, macWideFree: macWideFree)
                 if free != otherCopyQuit {

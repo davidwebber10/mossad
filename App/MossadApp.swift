@@ -24,7 +24,8 @@ struct MossadEntry {
         let wait = ProfileSwitch.waitSeconds(CommandLine.arguments)
         if wait > 0, !CommandLine.arguments.contains(where: AppIdentity.commands.contains) {
             let start = Date()
-            _ = InstanceLock.waitUntilFree(root: ProfileRegistry.folder(home: FileManager.default.homeDirectoryForCurrentUser), timeout: wait)
+            _ = InstanceLock.waitUntilFree(root: identity.macWideLockFolder(home: FileManager.default.homeDirectoryForCurrentUser,
+                                                                            environment: ProcessInfo.processInfo.environment), timeout: wait)
             _ = InstanceLock.waitUntilFree(root: Paths.live.root, timeout: max(0, wait - Date().timeIntervalSince(start)))
         }
         // Before any resolver: the app, `--mcp`, and each command-line step read the same company domains.

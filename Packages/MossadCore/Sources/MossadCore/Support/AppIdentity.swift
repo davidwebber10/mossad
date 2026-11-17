@@ -160,6 +160,14 @@ extension AppIdentity {
     /// made-up registry.
     public var writesSharedItems: Bool { !isPreview && !madeUpRegistry }
 
+    /// Where the Mac-wide lock is: beside the registry. A made-up registry has its own beside its file (a temporary
+    /// folder when none is named), so a proof run never takes or waits for the real one.
+    public func macWideLockFolder(home: URL, environment: [String: String]) -> URL {
+        guard madeUpRegistry else { return ProfileRegistry.folder(home: home) }
+        guard let file = environment["MOSSAD_PROFILES"], !file.isEmpty else { return FileManager.default.temporaryDirectory }
+        return URL(fileURLWithPath: file).deletingLastPathComponent()
+    }
+
     /// Whether this copy may write the real registry: a copy that takes profiles, on the real file. Never a preview,
     /// Rehearsal, a `MOSSAD_ROOT` run, or a made-up registry. (An inert copy is stopped by the app.)
     public var mayChangeRegistry: Bool { takesProfiles && !madeUpRegistry }
