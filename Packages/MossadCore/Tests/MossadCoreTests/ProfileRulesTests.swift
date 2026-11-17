@@ -195,4 +195,12 @@ final class ProfileRulesTests: XCTestCase {
         // A made-up flag with no file named never falls back to the real folder.
         XCTAssertEqual(made.macWideLockFolder(home: home, environment: [:]).path, FileManager.default.temporaryDirectory.path)
     }
+
+    func testTheSwitcherShowsTheLineOfAnotherProfileOnly() throws {
+        let menu = try XCTUnwrap(ProfileMenu(two, active: "default", recording: false, status: ["1a2b3c4d": "2 meetings in work", "default": "x"]))
+        XCTAssertNil(menu.rows[0].status)
+        XCTAssertEqual(menu.rows[1].status, "2 meetings in work")
+        let plain = try XCTUnwrap(ProfileMenu(two, active: "default", recording: false))
+        XCTAssertNil(plain.rows[0].status); XCTAssertNil(plain.rows[1].status)
+    }
 }
