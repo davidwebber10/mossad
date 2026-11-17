@@ -140,6 +140,11 @@ struct MeetingDetailView: View {
                 } else {
                     LiveTranscriptPanel(record: record, top: Self.underTabs + 28, jump: $liveJump)
                 }
+            } else if record.status != .written, let row = controller.moveRow(record) {
+                // A meeting that waits to move is not processed here: its row's sentence takes the progress's place.
+                ScrollView {
+                    MoveRowLine(record: record, row: row).detailColumn(top: 28)
+                }
             } else if processingFirstTime, let step = ProcessingStep(status: record.status) {
                 // Until the first note is written the tabs have nothing to show, so the progress takes their place.
                 ScrollView {

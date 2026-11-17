@@ -360,7 +360,8 @@ extension CallRecord: @retroactive Identifiable {
         case .recording: .recording
         case .failed: .failed
         case .written: unknownSpeakers.isEmpty ? nil : .needsNames
-        default: .processing
+        // A call that waits to move (or is held for the owner) is not processed here.
+        default: moveTo == nil ? .processing : nil
         }
     }
 
