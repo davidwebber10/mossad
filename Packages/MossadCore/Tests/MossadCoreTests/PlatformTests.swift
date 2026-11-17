@@ -68,4 +68,26 @@ final class PlatformTests: XCTestCase {
         XCTAssertNil(CalendarMatcher.bestEvent(for: .phoneCall, meetingID: nil, start: t0, end: t0 + 600, in: [e]))
         XCTAssertNil(CalendarMatcher.bestEvent(for: .unknown, meetingID: nil, start: t0, end: t0 + 600, in: [e]))
     }
+
+    func testAPlatformThisBuildDoesNotKnowIsWrittenBackAsItWasRead() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try CallRecord(id: "20270115-090000", platform: .meet, bundleID: "com.google.Chrome", start: t0, end: t0 + 600, status: .written).save(to: dir)
+        let file = dir.appendingPathComponent(CallRecord.fileName)
+        try String(contentsOf: file, encoding: .utf8).replacingOccurrences(of: #""meet""#, with: #""fax""#).write(to: file, atomically: true, encoding: .utf8)
+
+        var r = try CallRecord.load(from: dir)
+        XCTAssertEqual(r.platform, .unknown)
+        r.summary = "Saved by this build."
+        try r.save(to: dir)
+        let text = try String(contentsOf: file, encoding: .utf8)
+        XCTAssertTrue(text.contains(#""platform":"fax""#), text)
+        XCTAssertEqual(try CallRecord.load(from: dir).platform, .unknown)
+
+        // A platform this build sets is written as itself.
+        r.platform = .phoneCall
+        try r.save(to: dir)
+        XCTAssertTrue(try String(contentsOf: file, encoding: .utf8).contains(#""platform":"phoneCall""#))
+    }
 }

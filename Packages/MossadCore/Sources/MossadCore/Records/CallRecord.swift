@@ -187,7 +187,8 @@ public struct Decision: Codable, Equatable, Sendable, Hashable {
 
 public struct CallRecord: Codable, Equatable, Sendable {
     public var id: String
-    public var platform: Platform
+    /// A platform this build does not know reads as `unknown` and is written back as it was read.
+    @KeptPlatform public var platform: Platform
     public var bundleID: String
     public var start: Date
     public var end: Date
@@ -436,8 +437,38 @@ extension CallRecord {
         screenGaps = try c.decodeIfPresent([ScreenGap].self, forKey: .screenGaps)
         deletedScreens = try c.decodeIfPresent([String].self, forKey: .deletedScreens)
         source = try c.decodeIfPresent(String.self, forKey: .source)
+        _platform = try c.decode(KeptPlatform.self, forKey: .platform)
         gemini = try c.decodeIfPresent(GeminiNotesRef.self, forKey: .gemini)
         personHint = try c.decodeIfPresent(PersonHint.self, forKey: .personHint)
+    }
+}
+
+/// A record's platform with the text it was read from, so a platform of a newer build is not lost when this build
+/// saves the record. Any change of the platform here drops the text.
+@propertyWrapper
+public struct KeptPlatform: Codable, Equatable, Sendable {
+    private var value: Platform
+    private var raw: String?
+
+    public init(wrappedValue: Platform) { value = wrappedValue }
+
+    public var wrappedValue: Platform {
+        get { value }
+        set {
+            value = newValue
+            raw = nil
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let text = try decoder.singleValueContainer().decode(String.self)
+        value = Platform(rawValue: text) ?? .unknown
+        raw = value == .unknown ? text : nil
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(raw ?? value.rawValue)
     }
 }
 
