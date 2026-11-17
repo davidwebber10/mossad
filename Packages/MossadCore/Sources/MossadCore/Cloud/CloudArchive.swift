@@ -54,7 +54,8 @@ public final class CloudArchive: @unchecked Sendable {
     public func sync(keepLocalDays: Int?, now: Date = Date(), pipeline: Pipeline, holdLeftovers: Bool = false) async -> Report {
         var report = Report()
         await retryDeletes()
-        for r in ProcessingQueue(paths: paths).allRecords() where r.status == .written {
+        // A meeting whose move waits is not uploaded: its backup copy would outlive the removal's backup step.
+        for r in ProcessingQueue(paths: paths).allRecords() where r.status == .written && r.moveTo == nil {
             let dir = paths.callDirectory(r.id)
             let local = Recording.url(in: dir)
             let size = Self.size(local)

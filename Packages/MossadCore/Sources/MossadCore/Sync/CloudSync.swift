@@ -564,7 +564,7 @@ public actor CloudSync {
             let local = try chats.load(remote.id)
             let kept = local.map { Chat.merged($0, remote) } ?? remote
             guard kept != local else { return false }
-            try chats.save(kept)
+            do { try chats.save(kept) } catch is ChatStore.MovingCall { return false }
         case Self.commitmentsType:
             let remote = try await decoded(CommitmentBook.self)
             let local = try CommitmentBook.load(from: paths.commitments)

@@ -160,6 +160,8 @@ public enum MoveWords {
     }
 
     public static func moved(to target: String) -> String { "Moved to \(target)" }
+    /// A command that would change a meeting while its move waits.
+    public static func moving(to target: String) -> String { "This meeting is moving to \(target). Wait, or cancel the move." }
     public static let unreachable = "Mossad cannot reach the other profile now. Try again when it is there."
     public static func tooLate(_ target: String) -> String { "“\(target)” has the meeting already." }
 

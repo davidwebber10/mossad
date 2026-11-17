@@ -154,7 +154,7 @@ public enum NextTimeRules {
         guard let first = book.visible.filter(\.isOpen).map(\.created).min() else { return [] }
         let since = max(first, now.addingTimeInterval(-pendingDays * 86_400))
         // By its end: a point added during a meeting is checked against it.
-        return records.filter { $0.status == .written && $0.end > since && !book.checked.contains($0.id) }.sorted { $0.start < $1.start }
+        return records.filter { $0.status == .written && $0.moveTo == nil && $0.end > since && !book.checked.contains($0.id) }.sorted { $0.start < $1.start }
     }
 }
 

@@ -297,7 +297,8 @@ public actor CommitmentRunner {
         // A book that was set aside starts empty, with no list of the calls already read. Reading them all again is
         // paid work, so it waits until the other device's copy is merged in.
         guard !StoredFile.awaitsMerge(paths.commitments.appendingPathComponent(CommitmentBook.fileName)) else { return 0 }
-        let records = ProcessingQueue(paths: paths).allRecords()
+        // A meeting whose move waits is not read here: its tasks would outlive its removal.
+        let records = ProcessingQueue(paths: paths).allRecords().filter { $0.moveTo == nil }
         guard var book = try? CommitmentBook.load(from: paths.commitments) else { return 0 }
         // The owner under each name they have or had: the records keep the name of the time of the call.
         var finder = finder

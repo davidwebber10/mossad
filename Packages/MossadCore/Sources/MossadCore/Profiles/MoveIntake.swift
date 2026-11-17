@@ -261,18 +261,20 @@ public struct MoveIntake: Sendable {
             try stop("learn the voices")
             try MovedVoices.learn(naming, from: r, callID: f, library: library)
         }
-        try writeChats(m, callID, as: f)
-        try stop("remove the copies of the chats")
-        try? FileManager.default.removeItem(at: folder(callID).appendingPathComponent(MoveMarker.chatsFolder))
-        try? FileManager.default.removeItem(at: saved)
         try stop("sync the meeting")
         try sync(dir)
+        // The mark goes before the chats: they are new chats of this meeting here.
         if var r = try? CallRecord.load(from: dir), r.moveTo != nil {
             try stop("take the mark off")
             r.moveTo = nil
             try r.save(to: dir)
             try sync(dir.appendingPathComponent(CallRecord.fileName))
         }
+        try writeChats(m, callID, as: f)
+        if FileManager.default.fileExists(atPath: paths.chats.path) { try sync(paths.chats) }
+        try stop("remove the copies of the chats")
+        try? FileManager.default.removeItem(at: folder(callID).appendingPathComponent(MoveMarker.chatsFolder))
+        try? FileManager.default.removeItem(at: saved)
         try stop("write taken")
         m.intake = .taken
         m.count = m.files.count

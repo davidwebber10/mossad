@@ -1790,6 +1790,8 @@ final class AppController: ObservableObject {
     func deleteMeeting(_ callID: String) {
         guard !isSecondCopy else { return }
         Task {
+            // A meeting whose move waits: the move is cancelled first when it still can be; else nothing changes.
+            guard await cancelMoveBeforeDelete(callID) else { return }
             // The pipeline first: it refuses a call that is still processing, and then the cloud copy must stay.
             // It gives back the record from disk, which has the archive key even when the list here is older.
             if let removed = await pipeline.remove(callID: callID) {

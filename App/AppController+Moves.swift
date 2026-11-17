@@ -63,6 +63,20 @@ extension AppController {
         }
     }
 
+    /// The owner's delete of a meeting whose move waits: the move is cancelled first, when the other profile has not
+    /// claimed the copy yet. True when the delete may go on. A refusal is logged with its sentence; the row shows it
+    /// once the moves have their line on the page.
+    func cancelMoveBeforeDelete(_ callID: String) async -> Bool {
+        guard let pipeline, let r = try? CallRecord.load(from: paths.callDirectory(callID)), let target = r.moveTo else { return true }
+        let name = profiles.registry.profile(target)?.name ?? target
+        let answer = await moveHalves(pipeline).source.cancelMove(callID)
+        guard answer == .cancelled, (try? CallRecord.load(from: paths.callDirectory(callID)))?.moveTo == nil else {
+            Log.info("Moves: a delete was refused: \(answer == .unreachable ? MoveWords.unreachable : MoveWords.moving(to: name))")
+            return false
+        }
+        return true
+    }
+
     /// The look every 15 s, made only when the look runs at all.
     func startMoveLook() {
         guard moveLook.timer == nil, MoveRules.looks(mode: mode, liveProfiles: profiles.registry.live.count) else { return }
