@@ -61,7 +61,10 @@ private struct PairingCard: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Connect Mossad on your iPhone").font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.ink)
             Group {
-                if let c = controller.serverConnection, let image = QRCode.image(ServerPairing.code(for: c)) {
+                // The first profile's code is today's, so an old iPhone still pairs; another profile's is a profile
+                // code, so a phone's first profile never gets this profile's server.
+                if let c = controller.serverConnection,
+                   let image = QRCode.image(ProfileCode.pairingText(profile: controller.activeProfile, connection: c)) {
                     Image(nsImage: image).interpolation(.none).resizable()
                 } else {
                     Color.clear

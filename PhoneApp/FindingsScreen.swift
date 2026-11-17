@@ -11,7 +11,6 @@ struct FindingsScreen: View {
     /// The page does not scroll, and the sheet does not close, while a card moves to the side.
     @State private var dragging = false
     /// The cards the owner saw in the deck: the row above the meetings shows again only for a new card.
-    @AppStorage("findingsSeen") private var seen = ""
 
     /// Development hooks for screenshots: `MOSSAD_DECK_DRAG=<points>` holds the top card mid-drag,
     /// `MOSSAD_DECK_WHY=line|open|never` answers no (or never again) to the first card and shows the line about it.
@@ -48,9 +47,11 @@ struct FindingsScreen: View {
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
             store.refreshFindings()
-            seen = store.findings.map(\.id).joined(separator: "\n")
+            store.findingsSeen = store.findings.map(\.id).joined(separator: "\n")
         }
-        .onChange(of: store.findings.map(\.id)) { _, ids in seen = (seen.split(separator: "\n").map(String.init) + ids).suffix(60).joined(separator: "\n") }
+        .onChange(of: store.findings.map(\.id)) { _, ids in
+            store.findingsSeen = (store.findingsSeen.split(separator: "\n").map(String.init) + ids).suffix(60).joined(separator: "\n")
+        }
     }
 
     private func open(_ finding: CoachFinding) {

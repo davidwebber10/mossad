@@ -14,7 +14,7 @@ final class WorkerSourceTests: XCTestCase {
 
     private let forbidden = ["import AppKit", "UserNotifications", "ServiceManagement", "Sparkle", "requestAccess", "requestFullAccess",
                              "requestAuthorization", "NSApplication", "WeeklyEmail", "Retention.sweep", "GeminiRunner",
-                             "CalendarSnapshot.write", "UsageReportPlan", "SharedAIKey", "ServerPairing.share"]
+                             "CalendarSnapshot.write", "UsageReportPlan", "SharedAIKey", "ServerPairing.share", "ProfilesItem", "notingSync"]
 
     func testTheWorkersCodeCannotAskPostOrShow() throws {
         let worker = try files(in: root.appendingPathComponent("Sources/MossadCore/Worker"))

@@ -8,6 +8,18 @@ public enum ProfileSettingsWords {
     public static let addExplanation = "A profile has its own keys, settings, people, voices, coach, sync, and MCP. Nothing is copied from another profile. Mossad restarts and takes you through setup for the new profile."
     public static let renameNote = "The folder keeps its name."
 
+    // The profile code for the iPhone.
+    public static let codeButton = "Show code for iPhone…"
+    public static func codeTitle(_ name: String) -> String { "Add “\(name)” to your iPhone" }
+    public static let codeSteps = ["Open Mossad on your iPhone.", "Tap the gear on the Meetings screen.",
+                                   "Tap Profile, then Add a profile. With no Profile row, tap Your server, then Scan code."]
+    public static func codeSecretNote(seconds: Int) -> String {
+        "The code holds this profile's server secret, so it hides again in 0:\(String(format: "%02d", max(0, min(seconds, 59))))."
+    }
+    public static let codeICloudNote = "This profile syncs through iCloud. Your iPhone needs the same iCloud account as this Mac."
+    public static let codeNoSync = "This profile does not sync. Choose iCloud or your server in Settings › Storage & Sync first."
+    public static let codeNoServer = "Finish this profile's server in Settings › Storage & Sync first."
+
     public struct Row: Equatable, Sendable, Identifiable {
         public let id: String
         public let name: String

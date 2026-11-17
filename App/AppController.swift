@@ -720,6 +720,7 @@ final class AppController: ObservableObject {
         } else {
             updateSharedAIKey()
             updateSharedServer()
+            noteSync()
         }
         // Reading the calendar records nothing. A preview lists made-up calendars, and its invites come from MOSSAD_UPCOMING.
         if inert { refreshUpcoming() }

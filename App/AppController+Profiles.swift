@@ -201,6 +201,7 @@ extension AppController {
         }
         // The first file of the Mac: this profile's server is named in it from the start.
         if let address = serverConnection?.address { next.registry.setServer(ProfileRules.serverHash(address), for: activeProfile.id) }
+        next.registry.setSync(syncWith.rawValue, for: activeProfile.id)
         do { try next.save(to: Self.registryFile) } catch {
             Log.error("Profiles: the list could not be saved: \(error)")
             profileProblem = Self.unreadableProfiles
@@ -210,6 +211,7 @@ extension AppController {
         }
         profiles = readProfiles()
         refreshOtherNoRecord()
+        updateSharedProfiles()
         Log.info("Profiles: added one")
         // The first file of the Mac: this copy started with no Mac-wide lock. It takes it now, so the new instance
         // waits for it to quit, as after every later switch.
@@ -234,6 +236,7 @@ extension AppController {
         }
         profiles = readProfiles()
         refreshOtherNoRecord()
+        updateSharedProfiles()
     }
 
     /// Another profile of this Mac that already uses this server, or nil.
@@ -254,6 +257,34 @@ extension AppController {
         next.registry.setServer(hash, for: activeProfile.id)
         do { try next.save(to: Self.registryFile) } catch { Log.error("Profiles: the server could not be noted: \(error)") }
         profiles = readProfiles()
+    }
+
+    /// This profile's sync in the registry, for the iPhone's list. As `noteServer`: only with a registry file that
+    /// can be saved, and only when the word changed. Then the item follows.
+    func noteSync() {
+        guard changesProfiles else { return }
+        // `notingSync` is nil with no file: a Mac with one profile never gets one from here.
+        if let next = readProfiles().notingSync(syncWith.rawValue, for: activeProfile.id) {
+            do { try next.save(to: Self.registryFile) } catch { Log.error("Profiles: the sync could not be noted: \(error)") }
+            profiles = readProfiles()
+        }
+        updateSharedProfiles()
+    }
+
+    /// The registry as it is now, for the item: with two or more live profiles, this Mac's writer id is made once
+    /// and saved first, so the item names its writer. Read on the main actor when the item's turn comes.
+    func profilesForTheItem() -> ProfileRegistry.Loaded {
+        var read = readProfiles()
+        if changesProfiles, read.state == .read, read.registry.live.count >= 2, read.registry.ensureWriter() {
+            do {
+                try read.save(to: Self.registryFile)
+                read = readProfiles()
+            } catch {
+                Log.error("Profiles: the list's writer could not be saved: \(error)")
+                return .none
+            }
+        }
+        return read
     }
 
     // MARK: Delete
@@ -302,6 +333,7 @@ extension AppController {
             workers.forget(id)
             profiles = readProfiles()
             refreshOtherNoRecord()
+            updateSharedProfiles()
             Log.info("Profiles: deleting one")
             finishRemovals(holding: [id: lock])
         }
@@ -372,6 +404,7 @@ extension AppController {
         do { try read.save(to: file) } catch { Log.error("Profiles: the end of a delete could not be saved: \(error)") }
         profiles = readProfiles()
         refreshOtherNoRecord()
+        updateSharedProfiles()
         Log.info("Profiles: a profile was deleted")
     }
 }

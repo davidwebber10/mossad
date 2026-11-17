@@ -17,9 +17,6 @@ struct AnalyticsScreen: View {
     @AppStorage("analyticsTrendSplit") private var splitRaw = CommunicationTrends.Split.all.rawValue
     @State private var customizing = false
 
-    /// Each meeting's numbers, kept while the app runs: only a new or changed meeting is read again.
-    /// Shared with Coach › Goals, so a meeting is read for its facts one time.
-    static let facts = MeetingFactsCache()
 
     private var choice: PeriodChoice {
         PeriodChoice(preset: PeriodChoice.Preset(rawValue: presetRaw) ?? .last30Days,
@@ -158,7 +155,7 @@ struct AnalyticsScreen: View {
             stats = result.3
         }
 
-        let facts = Self.facts, interval = result.0.interval
+        let facts = store.facts, interval = result.0.interval
         let made = await Task.detached(priority: .userInitiated) {
             CommunicationTrends(facts: facts.facts(for: records, owner: owner), interval: interval)
         }.value

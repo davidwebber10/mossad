@@ -2,9 +2,14 @@ import CryptoKit
 import Foundation
 
 /// The owner's own server (the Worker in `server/`): its address and the secret that proves the owner.
-public struct ServerConnection: Codable, Equatable, Sendable {
+public struct ServerConnection: Codable, Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public var address: URL
     public var secret: String
+
+    /// The address and never the secret, in a string, a log line, `dump`, or a debugger.
+    public var description: String { "ServerConnection(\(address.absoluteString))" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: ["address": address], displayStyle: .struct) }
 
     public init(address: URL, secret: String) {
         self.address = address

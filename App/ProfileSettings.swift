@@ -3,11 +3,12 @@ import SwiftUI
 
 /// The sheet of Settings > General > Profiles that is open.
 enum ProfileSheet: Equatable, Identifiable {
-    case add, rename(String), delete(String)
+    case add, rename(String), delete(String), code
 
     var id: String {
         switch self {
         case .add: "add"
+        case .code: "code"
         case .rename(let id): "rename-" + id
         case .delete(let id): "delete-" + id
         }
@@ -33,6 +34,8 @@ struct ProfileSettingsGroup: View {
                 }
                 HStack {
                     Spacer(minLength: 0)
+                    Button(ProfileSettingsWords.codeButton) { controller.profileSheet = .code }
+                        .buttonStyle(.settings)
                     addButton
                 }
                 .padding(.vertical, style.padding)
@@ -43,6 +46,7 @@ struct ProfileSettingsGroup: View {
             case .add: AddProfileSheet()
             case .rename(let id): RenameProfileSheet(id: id)
             case .delete(let id): DeleteProfileSheet(id: id)
+            case .code: ProfileCodeSheet()
             }
         }
     }
