@@ -301,6 +301,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// The meeting's "Notes by Gemini" document: the source of a notes-only meeting, or a second source of a recorded
     /// one. Nil when there is none.
     public var gemini: GeminiNotesRef?
+    /// The other person of a phone call, as the owner said on the iPhone. Nil for every other meeting.
+    public var personHint: PersonHint?
     /// The file names of screens the owner deleted. The text step drops them from `frames.json` if they are still
     /// there (a failed save, a run that was reading at that moment), so a deleted screen never comes back.
     public var deletedScreens: [String]?
@@ -435,6 +437,19 @@ extension CallRecord {
         deletedScreens = try c.decodeIfPresent([String].self, forKey: .deletedScreens)
         source = try c.decodeIfPresent(String.self, forKey: .source)
         gemini = try c.decodeIfPresent(GeminiNotesRef.self, forKey: .gemini)
+        personHint = try c.decodeIfPresent(PersonHint.self, forKey: .personHint)
+    }
+}
+
+/// The one other person of a phone call, as the owner said on the iPhone.
+public struct PersonHint: Codable, Equatable, Sendable {
+    public var name: String
+    /// The saved person the owner picked; nil for a name the owner typed.
+    public var personID: String?
+
+    public init(name: String, personID: String? = nil) {
+        self.name = name
+        self.personID = personID
     }
 }
 

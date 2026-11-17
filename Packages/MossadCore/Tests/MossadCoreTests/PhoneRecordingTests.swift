@@ -121,4 +121,23 @@ final class PhoneRecordingTests: XCTestCase {
         XCTAssertNil(untitled.customTitle)
         XCTAssertEqual(untitled.title, "Phone call")
     }
+
+    func testThePhoneCallsPersonIsKeptOnTheRecord() throws {
+        let paths = Paths(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        let r = try PhoneRecording.importAudio(try phoneAudio(), recording: PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 3, title: nil,
+                                               kind: .phoneCall, person: "Sam Carter", personID: "p1"), into: paths)
+        XCTAssertEqual(r.personHint, PersonHint(name: "Sam Carter", personID: "p1"))
+        XCTAssertEqual(r.attendees, ["Sam Carter"])
+        XCTAssertEqual(r.invitees, [Invitee(name: "Sam Carter", email: nil, personID: "p1")])
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(r.id)).personHint, r.personHint, "it survives a restart between steps")
+
+        let blank = try PhoneRecording.importAudio(try phoneAudio(), recording: PhoneRecording(id: "20270115-100000", start: t0, end: t0 + 3, title: nil,
+                                                   kind: .phoneCall, person: "  "), into: paths)
+        XCTAssertNil(blank.personHint)
+        XCTAssertEqual(blank.attendees, [])
+        let room = try PhoneRecording.importAudio(try phoneAudio(), recording: PhoneRecording(id: "20270115-110000", start: t0, end: t0 + 3, title: nil,
+                                                  person: "Sam Carter"), into: paths)
+        XCTAssertNil(room.personHint, "a room recording names nobody, whatever a store sent")
+        XCTAssertEqual(room.attendees, [])
+    }
 }

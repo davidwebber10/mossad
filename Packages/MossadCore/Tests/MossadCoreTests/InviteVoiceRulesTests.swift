@@ -357,4 +357,74 @@ final class InviteVoiceRulesTests: XCTestCase {
         let roster = InviteRoster(invite: CallInvite(guests: [Guest(personID: "p-x")]), profiles: [], people: [saved])
         XCTAssertNil(roster.voiceless.first?.label)
     }
+
+    // A phone call: one track with every voice, and the person the owner named on the iPhone as an invite of one.
+    let sam = CallInvite(hint: PersonHint(name: "Sam Carter"))
+
+    func testThePhoneCallsPersonIsTheOneVoiceLeftBesideTheOwner() {
+        let d = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", [("Dale Fenwick", 0.3)])], sam)
+        XCTAssertEqual(d.verdicts["me:B"], .inferred("Sam Carter", learn: true))
+        XCTAssertEqual(d.inferred?.source, .owner)
+        XCTAssertEqual(d.fromInvite, ["me:B"])
+    }
+
+    func testTwoVoicesLeftOnAPhoneCallNameNobody() {
+        let d = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", []), voice("me:C", [])], sam)
+        XCTAssertNil(d.inferred)
+        XCTAssertEqual(d.verdicts["me:B"], .unknown)
+        XCTAssertEqual(d.verdicts["me:C"], .unknown)
+    }
+
+    func testNothingIsInferredWhenTheOwnersVoiceIsNotFound() {
+        XCTAssertNil(decide([voice("me:B", [("Dale Fenwick", 0.3)])], sam).inferred)
+        XCTAssertNil(decide([voice("me:A", [(owner, 0.5)]), voice("me:B", [])], sam).inferred, "a weak owner score is no owner")
+    }
+
+    func testAProvisionalVoiceOfThePersonIsNamedOnTheNextCallWithTheHint() {
+        let all = profiles + [profile("Sam Carter")], made = ["Sam Carter": "call-1"]
+        let voices = [voice("me:A", [(owner, 0.95)]), voice("me:B", [("Sam Carter", 0.7)])]
+        XCTAssertEqual(decide(voices, sam, profiles: all, provisional: made).verdicts["me:B"], .named("Sam Carter", score: 0.7, learn: false))
+        XCTAssertEqual(decide(voices, nil, profiles: all, provisional: made).verdicts["me:B"],
+                       .withheld(suggestion: VoiceScore(name: "Sam Carter", score: 0.7)))
+    }
+
+    func testTheProvisionalVoiceIsNamedOnceOnTheCallThatMadeIt() {
+        let all = profiles + [profile("Sam Carter")], made = ["Sam Carter": "call-2"]
+        let d = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", [("Sam Carter", 0.7)]), voice("me:C", [("Sam Carter", 0.66)])], sam,
+                       profiles: all, provisional: made)
+        XCTAssertEqual(d.verdicts["me:B"], .inferred("Sam Carter", learn: true))
+        XCTAssertEqual(d.verdicts["me:C"], .named("Sam Carter", score: 0.66, learn: false))
+    }
+
+    func testAnotherSavedVoiceOnAPhoneCallNeedsTheStrongScoreAndTheLead() {
+        let weak = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", [("Dale Fenwick", 0.79), ("Mira Stone", 0.2)]), voice("me:C", [])], sam)
+        XCTAssertEqual(weak.verdicts["me:B"], .withheld(suggestion: VoiceScore(name: "Dale Fenwick", score: 0.79)))
+        let strong = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", [("Dale Fenwick", 0.85), ("Mira Stone", 0.2)])], sam)
+        XCTAssertEqual(strong.verdicts["me:B"], .named("Dale Fenwick", score: 0.85, learn: false))
+        XCTAssertNil(strong.inferred)
+    }
+
+    func testAPickedPersonGivesTheVoiceThatSavedPersonsName() {
+        let p = Person(id: PersonID(rawValue: "p1"), displayName: "Sam Carter", origin: .voiceNaming, at: .distantPast)
+        let d = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", [])], CallInvite(hint: PersonHint(name: "Sam", personID: "p1")), people: [p])
+        XCTAssertEqual(d.verdicts["me:B"], .inferred("Sam Carter", learn: true))
+        XCTAssertEqual(d.inferred?.source, .voiceNaming)
+    }
+
+    func testANameAsTypedIsUsedAsTypedAndAGuessJoinsNobody() {
+        let mom = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", [])], CallInvite(hint: PersonHint(name: " Mom ")))
+        XCTAssertEqual(mom.verdicts["me:B"], .inferred("Mom", learn: true))
+        let mira = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", [("Mira Stone", 0.7)])], CallInvite(hint: PersonHint(name: "Mira")))
+        XCTAssertEqual(mira.verdicts["me:B"], .named("Mira Stone", score: 0.7, learn: false))
+        XCTAssertNil(mira.inferred)
+    }
+
+    func testTheHintIsASureInviteOfOneOnOneTrack() {
+        let invite = CallInvite(hint: PersonHint(name: "Sam Carter", personID: "p1"))
+        XCTAssertTrue(invite.sure)
+        XCTAssertTrue(invite.oneTrack)
+        XCTAssertEqual(invite.guests, [CallInvite.Guest(name: "Sam Carter", personID: "p1", byOwner: true)])
+        XCTAssertTrue(InviteRoster(invite: invite, profiles: profiles, people: []).oneTrack)
+        XCTAssertFalse(InviteRoster(invite: CallInvite(guests: []), profiles: profiles, people: []).oneTrack)
+    }
 }

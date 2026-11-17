@@ -458,4 +458,21 @@ final class SyncSafetyTests: XCTestCase {
         XCTAssertEqual(p?.fields["kind"], .string("phoneCall"))
         XCTAssertEqual(p?.fields["personID"], .string("p1"))
     }
+
+    func testAPhoneCallThatFailedToImportIsStillAPhoneCallOnTheRetry() async throws {
+        let store = MemoryStore()
+        let mac = temp()
+        let clock = TestClock(t0)
+        try await CloudSync(paths: temp(), store: store).upload(call, audio: try phoneAudio())
+        let macSync = CloudSync(paths: mac, store: store, now: { clock.now })
+        await store.fail("rec-20270115-090000", with: URLError(.timedOut))
+        try await macSync.pull(includeMeetings: false)
+        await store.fail("rec-20270115-090000", with: nil)
+        clock.advance(301)
+        try await macSync.pull(includeMeetings: false)
+        let r = try CallRecord.load(from: mac.callDirectory("20270115-090000"))
+        XCTAssertEqual(r.platform, .phoneCall)
+        XCTAssertEqual(r.customTitle, "Offsite")
+        XCTAssertEqual(r.personHint, PersonHint(name: "Sam Carter", personID: "p1"))
+    }
 }

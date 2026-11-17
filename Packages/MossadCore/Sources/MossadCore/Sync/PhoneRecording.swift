@@ -146,6 +146,12 @@ public struct PhoneRecording: Codable, Equatable, Sendable {
                                status: .recorded)
             // The owner typed a phone call's title, so no calendar event replaces it; a room's is the invite's.
             if p.isPhoneCall { r.customTitle = p.title?.nonBlank } else { r.calendarTitle = p.title?.nonBlank }
+            // The person the owner named is the call's one guest: the note, the filter, and the voices read it.
+            if p.isPhoneCall, let name = p.person?.nonBlank {
+                r.personHint = PersonHint(name: name, personID: p.personID)
+                r.attendees = [name]
+                r.invitees = [Invitee(name: name, email: nil, personID: p.personID)]
+            }
             try r.save(to: dir)
             return r
         } catch {

@@ -537,6 +537,42 @@ final class PipelineTests: XCTestCase {
         XCTAssertNil(transcriber.speakers[.them])
     }
 
+    /// A phone call as the iPhone sends it: one track with the owner (200 Hz) and one other voice (400 Hz).
+    private func makePhoneCall(hint: PersonHint?) throws -> String {
+        try library.add([1, 0, 0, 0], to: "Avery Lane", isOwner: true)
+        transcriber.result = [.me: [Utterance(track: .me, speakerLabel: "A", start: 0, end: 10, text: "Hello."),
+                                    Utterance(track: .me, speakerLabel: "B", start: 11, end: 35, text: "Hello, it is me.")], .them: []]
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        try writeSegments(dir.appendingPathComponent("me.caf"), total: 40, [(0, 10, 200), (11, 35, 400)])
+        try writeSegments(dir.appendingPathComponent("them.caf"), total: 40, [])
+        var r = try load(id)
+        r.platform = .phoneCall
+        r.bundleID = PhoneRecording.bundleID
+        r.personHint = hint
+        if let hint { r.attendees = [hint.name] }
+        try r.save(to: dir)
+        return id
+    }
+
+    func testAPhoneCallWithAPersonNamesTheOneOtherVoice() async throws {
+        let id = try makePhoneCall(hint: PersonHint(name: "Sam Carter"))
+        await pipeline().process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.speakerNames, ["me:A": "Avery Lane", "me:B": "Sam Carter"])
+        XCTAssertEqual(r.fromInvite, ["me:B"])
+        XCTAssertEqual(library.provisional["Sam Carter"], id)
+    }
+
+    func testAPhoneCallWithNoPersonKeepsTheRulesOfBefore() async throws {
+        let id = try makePhoneCall(hint: nil)
+        await pipeline().process(id)
+        let r = try load(id)
+        XCTAssertNil(r.speakerNames["me:B"])
+        XCTAssertEqual(r.unknownSpeakers, ["me:B"])
+        XCTAssertNil(r.fromInvite)
+    }
+
     func testRestorePreviousTranscriptBringsBackTheOldOne() async throws {
         let id = try makeRecord()
         let p = pipeline()

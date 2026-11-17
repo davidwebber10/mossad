@@ -11,13 +11,17 @@ public struct CallInvite: Sendable, Equatable {
         public var declined: Bool
         /// False for a room, a resource, or a group.
         public var person: Bool
+        /// The owner named this person for the call: with no saved person, the name is used as it was typed.
+        public var byOwner: Bool
 
-        public init(name: String? = nil, email: String? = nil, personID: String? = nil, declined: Bool = false, person: Bool = true) {
+        public init(name: String? = nil, email: String? = nil, personID: String? = nil, declined: Bool = false, person: Bool = true,
+                    byOwner: Bool = false) {
             self.name = name
             self.email = email.map(EmailIdentity.normalized)
             self.personID = personID
             self.declined = declined
             self.person = person
+            self.byOwner = byOwner
         }
     }
 
@@ -25,10 +29,19 @@ public struct CallInvite: Sendable, Equatable {
     /// The invite is surely the call's: the call's meeting id is in it, or no other event could be the call. Only a
     /// sure invite gives a voice the name of an invited person with no voice.
     public var sure: Bool
+    /// Every voice is on one track, as on a phone call: the other people are on the mic keys too.
+    public var oneTrack = false
 
     public init(guests: [Guest], sure: Bool = true) {
         self.guests = guests
         self.sure = sure
+    }
+
+    /// A phone call's person: a sure invite of one, by the owner's word, on one track.
+    public init(hint: PersonHint) {
+        let name = hint.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.init(guests: [Guest(name: name, personID: hint.personID, byOwner: true)], sure: true)
+        oneTrack = true
     }
 
     /// Nil when the call has no invite: an ad-hoc call keeps the rules of before.
@@ -97,6 +110,8 @@ public struct InviteRoster: Sendable, Equatable {
     /// A guest may be the owner under an address or a name that is not surely theirs.
     public var ownerDoubt: Bool
     public var sure: Bool
+    /// Every voice is on one track (`CallInvite.oneTrack`).
+    public var oneTrack: Bool
 
     public init(invite: CallInvite, profiles: [VoiceProfile], people: [Person]) {
         let live = people.filter(\.isLive)
@@ -163,6 +178,7 @@ public struct InviteRoster: Sendable, Equatable {
         self.guests = guests
         self.ownerDoubt = ownerDoubt
         sure = invite.sure
+        oneTrack = invite.oneTrack
     }
 
     /// The addresses that are this person's own: not one the owner rejected, and not one shared with others.
@@ -218,6 +234,8 @@ public struct InviteRoster: Sendable, Equatable {
         if let hit = PersonDirectory.existing(name: g.name ?? "", email: g.email, among: directory) {
             return hit.contains("@") ? nil : (hit, .voiceNaming)
         }
+        // The owner's own word for the person: "Mom" is a name here, though it is no name of an invite.
+        if g.byOwner, let name = g.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty { return (name, .owner) }
         if let name = g.name.flatMap(natural) { return (name, .calendar) }
         return g.email.flatMap(name(fromAddress:)).map { ($0, .address) }
     }
@@ -341,16 +359,20 @@ public enum InviteVoiceRules {
         let again = voices.filter { v in
             if case .inferred? = verdicts[v.key] { return true } else { return false }
         }
-        let first = again.filter { $0.key.hasPrefix("them:") }.max { ($0.scores.first?.score ?? 0) < ($1.scores.first?.score ?? 0) }
+        // On one track the other people are on the mic keys too.
+        func otherSide(_ key: String) -> Bool { roster?.oneTrack == true || key.hasPrefix("them:") }
+        let first = again.filter { otherSide($0.key) }.max { ($0.scores.first?.score ?? 0) < ($1.scores.first?.score ?? 0) }
         for v in again where v.key != first?.key {
             if let best = v.scores.first { verdicts[v.key] = .named(best.name, score: best.score, learn: false) }
         }
 
         var inferred: InviteRoster.Voiceless?
-        if let roster, roster.sure, !roster.ownerDoubt, roster.voiceless.count == 1 {
+        // On one track the owner's own voice must be found first: else the voice left may be the owner's.
+        let ownerFound = owner.map { o in verdicts.values.contains { if case .named(o, _, _) = $0 { true } else { false } } } ?? false
+        if let roster, roster.sure, !roster.ownerDoubt, roster.voiceless.count == 1, !roster.oneTrack || ownerFound {
             let guest = roster.voiceless[0]
             let left = voices.filter { v in
-                guard v.key.hasPrefix("them:") else { return false }
+                guard otherSide(v.key) else { return false }
                 switch verdicts[v.key] {
                 case .named, .inferred: return false
                 default: return true

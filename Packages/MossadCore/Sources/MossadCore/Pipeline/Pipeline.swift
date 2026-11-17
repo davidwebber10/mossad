@@ -775,10 +775,11 @@ public actor Pipeline {
         }
         // Who was invited decides whose voice may be named on a call. The invite found when the call started was
         // matched to a guessed end, and can have changed since: it is matched again with the call's real times. A
-        // room recording keeps the rules of before.
-        let onCall = r.platform != .inPerson && !r.isNotesOnly
+        // room recording keeps the rules of before; a phone call has the person the owner named as its invite.
+        let onCall = !r.platform.isOneTrack && !r.isNotesOnly
         let sure = onCall ? await matchInvite(&r) : false
-        let invite = onCall ? CallInvite(record: r, sure: sure) : nil
+        let invite = onCall ? CallInvite(record: r, sure: sure)
+            : r.platform == .phoneCall ? r.personHint.map(CallInvite.init(hint:)) : nil
         detail(r.id, "Identifying speakers")
         // Short pieces of each voice, at most a minute per speaker, through the one copy of the voice models that the
         // live transcript's namer also uses; so it runs behind a call.
