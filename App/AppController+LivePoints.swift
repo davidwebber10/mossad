@@ -21,9 +21,10 @@ final class LivePointsModel: ObservableObject {
     var hearing: Task<Void, Never>?
 
     /// The call's points: the series' first, then each person's, with the ones this call closed.
-    func points(_ book: NextTimeBook, refs: PersonReferences) -> [NextTimePoint] {
+    func points(_ book: NextTimeBook, refs: PersonReferences, record: CallRecord?) -> [NextTimePoint] {
         guard let callID else { return [] }
-        return LivePoints.list(book, series: series, people: people, callID: callID, canonical: { refs.canonical($0) })
+        return LivePoints.list(book, series: series, people: people, callID: callID, record: record?.id == callID ? record : nil,
+                               canonical: { refs.canonical($0) })
     }
 
     /// Reads the call's marks once when the page or the hearing starts on a new call.
@@ -112,7 +113,9 @@ extension AppController {
         return false
     }
 
-    func livePointList() -> [NextTimePoint] { livePoints.points(series.book, refs: series.people) }
+    func livePointList() -> [NextTimePoint] {
+        livePoints.points(series.book, refs: series.people, record: livePoints.callID.flatMap { id in meetings.first { $0.id == id } })
+    }
 
     /// The owner's tick: raised now, at this second of the recording, or at the moment Mossad heard it when the
     /// tick confirms a mark. A second tick takes it back.

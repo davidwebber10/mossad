@@ -901,6 +901,7 @@ public actor Pipeline {
         }
         r.setInvite(found.event)
         r.inviteUnknown = nil
+        r.inviteNotSure = found.sure ? nil : true
         return found.sure
     }
 
@@ -932,7 +933,10 @@ public actor Pipeline {
             if found == nil, !read.known || read.google == .failed { continue }
             guard var saved = edit(r.id, { record in
                 record.inviteUnknown = nil
-                if let found { record.setInvite(found.event) }
+                if let found {
+                    record.setInvite(found.event)
+                    record.inviteNotSure = found.sure ? nil : true
+                }
                 return true
             }) else { continue }
             save(&saved, dir: paths.callDirectory(r.id))

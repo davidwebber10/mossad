@@ -13,6 +13,8 @@ struct PhoneMeetingPoints: View {
         let discussed = book.discussed(in: callID)
         let carried = book.visible.filter { $0.isOpen && ($0.carried ?? []).contains(callID) }
         let mentioned = book.mentioned(in: callID)
+        // The points of this one meeting that it did not raise: the owner moves them on the Mac.
+        let leftOpen = book.leftOpen(in: callID, record: store.meetings.first { $0.id == callID })
         VStack(spacing: 0) {
             if !mentioned.isEmpty {
                 LabelColumn(label: "Your open points in these notes") {
@@ -35,7 +37,7 @@ struct PhoneMeetingPoints: View {
                     }
                 }
             }
-            if !discussed.isEmpty || !carried.isEmpty {
+            if !discussed.isEmpty || !carried.isEmpty || !leftOpen.isEmpty {
                 LabelColumn(label: "Your points") {
                     VStack(alignment: .leading, spacing: Space.s) {
                         ForEach(discussed) { p in
@@ -51,12 +53,23 @@ struct PhoneMeetingPoints: View {
                             }
                             .buttonStyle(.plain)
                         }
+                        ForEach(leftOpen) { p in
+                            HStack(alignment: .firstTextBaseline, spacing: Space.s) {
+                                Image(systemName: "circle").font(.caption).foregroundStyle(Palette.tertiary)
+                                VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                                    Text(p.text).textRole(.body).foregroundStyle(Palette.ink)
+                                    Text("Still open").textRole(.secondary).foregroundStyle(Palette.secondary)
+                                }
+                            }
+                        }
                         ForEach(carried) { p in
                             HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                                 Image(systemName: "circle").font(.caption).foregroundStyle(Palette.tertiary)
                                 VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                                     Text(p.text).textRole(.body).foregroundStyle(Palette.ink)
-                                    Text("Not discussed: carried to next time").textRole(.secondary).foregroundStyle(Palette.secondary)
+                                    Text(p.isForPerson && p.meeting?.calls?.contains(callID) == true
+                                         ? "Not raised: for the next time you see \(p.personName ?? "them")"
+                                         : "Not discussed: carried to next time").textRole(.secondary).foregroundStyle(Palette.secondary)
                                 }
                             }
                         }

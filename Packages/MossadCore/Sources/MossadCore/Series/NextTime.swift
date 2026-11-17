@@ -1,7 +1,9 @@
 import Foundation
 
-/// Something the owner wants to raise the next time: at the next meeting of a series, or the next time they see a
-/// person. The owner's own list; the coach's suggestions stay apart (`SeriesSuggestion`) until the owner keeps one.
+/// Something the owner wants to raise the next time: at the next meeting of a series, at one meeting that is not part
+/// of a series, or the next time they see a person. The owner's own list; the coach's suggestions stay apart
+/// (`SeriesSuggestion`) until the owner keeps one. A point is in one list only: its series when it has one, else its
+/// person, else its meeting (`isForMeeting`).
 public struct NextTimePoint: Codable, Equatable, Sendable, Identifiable, Hashable {
     /// Where a point was marked done.
     public struct Discussed: Codable, Equatable, Sendable, Hashable {
@@ -60,6 +62,11 @@ public struct NextTimePoint: Codable, Equatable, Sendable, Identifiable, Hashabl
     /// The meetings the owner missed in which it came up, oldest first. Added to and never rewritten: an older
     /// build that saves the point leaves this out, and the next merge brings it back from the copy that has it.
     public var mentions: [Mention]?
+    /// The one meeting it was saved for, when that meeting had no series. Kept when the point moves to a person or a
+    /// series, as where it came from. The book holds only its recordings; this Mac's detail of it is in
+    /// `MeetingPointsLocal`. An older build that saves the point leaves this out, and the next merge brings it back
+    /// from the copy that has it; until then the older build shows the point in no list, never in a wrong one.
+    public var meeting: NextTimeMeeting?
     /// The suggestion it came from, when the owner kept one.
     public var suggestion: String?
     public var deleted = false
@@ -83,6 +90,8 @@ public struct NextTimePoint: Codable, Equatable, Sendable, Identifiable, Hashabl
     /// The newest meeting the owner missed in which it came up.
     public var lastMention: Mention? { mentions?.max { $0.date < $1.date } }
     public var isForPerson: Bool { personID != nil && seriesID == nil }
+    /// For one meeting with no series, and not moved to a person or a series since.
+    public var isForMeeting: Bool { meeting != nil && seriesID == nil && personID == nil }
 
     public func belongs(to s: MeetingSeries) -> Bool { s.matches(id: seriesID, keys: seriesKeys) }
 }
@@ -125,6 +134,8 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
     /// Calls that left this profile: no point names one, and a merge with an older copy does not bring one back. Nil
     /// when there are none, and then the file is written as before.
     public var movedCalls: [String]?
+    /// True when this Mac's detail file (`MeetingPointsLocal`) comes from a newer build: it is read and never saved.
+    var localFrozen = false
 
     public init() {}
 
@@ -178,10 +189,10 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         }
     }
 
-    /// The open points for an upcoming meeting: its series' first, then the ones for each invited person.
-    /// `people` are the saved ids of the invited people.
-    public func points(for series: MeetingSeries?, people: [String], canonical: (String) -> String = { $0 }) -> [NextTimePoint] {
-        let own = series.map { points(of: $0).open } ?? []
+    /// The open points for an upcoming meeting: its series' first, then its own when it is one meeting (`meeting`),
+    /// then the ones for each invited person. `people` are the saved ids of the invited people.
+    public func points(for series: MeetingSeries?, meeting: UpcomingMeeting? = nil, people: [String], canonical: (String) -> String = { $0 }) -> [NextTimePoint] {
+        let own = (series.map { points(of: $0).open } ?? []) + (meeting.map { points(forMeeting: $0) } ?? [])
         var seen = Set(own.map(\.id))
         var theirs: [NextTimePoint] = []
         for id in people { for p in points(forPerson: id, canonical: canonical) where seen.insert(p.id).inserted { theirs.append(p) } }
@@ -210,11 +221,12 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
     /// Adds a point at the end of its list.
     @discardableResult
     public mutating func add(_ text: String, series: MeetingSeries? = nil, personID: String? = nil, personName: String? = nil,
-                             suggestion: String? = nil, at date: Date = Date()) -> NextTimePoint? {
-        guard let text = text.nonBlank, series != nil || personID != nil else { return nil }
-        let list = series.map { points(of: $0).open } ?? personID.map { points(forPerson: $0) } ?? []
+                             meeting: NextTimeMeeting? = nil, suggestion: String? = nil, at date: Date = Date()) -> NextTimePoint? {
+        guard let text = text.nonBlank, series != nil || personID != nil || meeting != nil else { return nil }
+        let list = series.map { points(of: $0).open } ?? personID.map { points(forPerson: $0) } ?? meeting.map { points(forMeeting: $0) } ?? []
         var p = NextTimePoint(text: text, series: series, personID: series == nil ? personID : nil, personName: series == nil ? personName : nil,
                               rank: (list.map(\.rank).max() ?? 0) + 1, created: date)
+        if series == nil, personID == nil { p.meeting = meeting }
         p.suggestion = suggestion
         points.append(p)
         return p
@@ -256,10 +268,21 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
 
     /// A meeting that left this profile: a point it closed is open again, and no point names it (carried, reopened,
     /// mentioned, or checked). The id is kept in `movedCalls`, so a merge with a copy that still names it cleans that
-    /// copy too.
+    /// copy too. A point of that one meeting goes with it: by its recordings, or by `record`'s invite (a call marked
+    /// for another profile during the call was never checked), and so does a point that the meeting moved to a person
+    /// in `gone` (the people who go with it). Each becomes the empty marker, with this Mac's detail gone.
     @discardableResult
-    public mutating func forget(callID: String, at date: Date = Date()) -> Bool {
-        var changed = reopen(doneIn: callID, at: date)
+    public mutating func forget(callID: String, record: CallRecord? = nil, gone: Set<String> = [], at date: Date = Date()) -> Bool {
+        var changed = false
+        for i in points.indices where !Self.forgotten(points[i]) {
+            guard let m = points[i].meeting else { continue }
+            let own = m.calls?.contains(callID) == true || record.map(m.matches) == true
+            guard points[i].isForMeeting ? own : (own && points[i].isForPerson && points[i].personID.map(gone.contains) == true) else { continue }
+            Self.empty(&points[i])
+            points[i].updated = date
+            changed = true
+        }
+        if reopen(doneIn: callID, at: date) { changed = true }
         for i in points.indices where Self.clean(&points[i], of: [callID]) {
             points[i].updated = date
             changed = true
@@ -302,20 +325,27 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         return incoming.cleaned(of: Set(moved)) != incoming
     }
 
+    /// The empty deleted marker that a merge never brings back.
+    static func empty(_ p: inout NextTimePoint) {
+        p.deleted = true
+        p.text = ""
+        p.suggestion = nil
+        p.done = nil
+        p.personName = nil
+        p.meeting?.detail = nil
+    }
+
     /// Takes the calls out of a point: a point kept from a suggestion of one of them is an empty deleted marker. True
     /// when it changed.
     static func clean(_ p: inout NextTimePoint, of calls: Set<String>) -> Bool {
         let before = p
-        if let key = p.suggestion, names(key, calls) {
-            p.deleted = true
-            p.text = ""
-            p.suggestion = nil
-            p.done = nil
-        }
+        if let key = p.suggestion, names(key, calls) { empty(&p) }
         if let call = p.done?.callID, calls.contains(call) { p.done = nil }
         p.carried = p.carried.map { $0.filter { !calls.contains($0) } }.flatMap { $0.isEmpty ? nil : $0 }
         p.reopened = p.reopened.map { $0.filter { !calls.contains($0) } }.flatMap { $0.isEmpty ? nil : $0 }
         p.mentions = p.mentions.map { $0.filter { !calls.contains($0.callID) } }.flatMap { $0.isEmpty ? nil : $0 }
+        let kept = p.meeting?.calls.map { $0.filter { !calls.contains($0) } }.flatMap { $0.isEmpty ? nil : $0 }
+        p.meeting?.calls = kept
         return p != before
     }
 
@@ -349,7 +379,7 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
     }
 
     /// Both devices' changes: the newer copy of each point with the mentions of both copies, every answer, and
-    /// every checked call. A copy saved by an older build has no mentions; the other copy's stay.
+    /// every checked call. A copy saved by an older build has no mentions and no meeting; the other copy's stay.
     public func merged(with other: NextTimeBook) -> NextTimeBook {
         var out = NextTimeBook()
         var byID: [UUID: NextTimePoint] = [:]
@@ -360,8 +390,10 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
                 // heard of the move.
                 if Self.forgotten(old) { continue }
                 if Self.forgotten(p) { byID[p.id] = p; continue }
-                var newer = p.updated > old.updated ? p : old
+                let incomingWins = p.updated > old.updated
+                var newer = incomingWins ? p : old
                 newer.mentions = Self.union(old.mentions, p.mentions)
+                newer.meeting = NextTimeMeeting.merged(newer.meeting, incomingWins ? old.meeting : p.meeting)
                 byID[p.id] = newer
             } else {
                 byID[p.id] = p
@@ -374,6 +406,7 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         for a in self.answers + other.answers where answers[a.key].map({ a.changed > $0.changed }) ?? true { answers[a.key] = a }
         out.answers = answers.values.sorted { ($0.date, $0.key) < ($1.date, $1.key) }
         out.version = max(version, other.version)
+        out.localFrozen = localFrozen || other.localFrozen
         out.checked = checked.union(other.checked)
         // A call that left this profile on either copy is cleaned out of the joined points, without a new time: no
         // device changed them.
@@ -393,21 +426,37 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
 
     // MARK: File
 
-    /// For a page that only shows it: a missing file is an empty book, a file that cannot be read is nil.
+    /// For a page that only shows it: a missing file is an empty book, a file that cannot be read is nil. With this
+    /// Mac's detail of each meeting point.
     public static func peek(in dir: URL) -> NextTimeBook? {
         let file = dir.appendingPathComponent(fileName)
         guard !StoredFile.awaitsMerge(file) else { return nil }
-        guard FileManager.default.fileExists(atPath: file.path) else { return NextTimeBook() }
-        return (try? Data(contentsOf: file)).flatMap { try? JSONDecoder.coach.decode(NextTimeBook.self, from: $0) }
+        var book: NextTimeBook
+        if FileManager.default.fileExists(atPath: file.path) {
+            guard let read = (try? Data(contentsOf: file)).flatMap({ try? JSONDecoder.coach.decode(NextTimeBook.self, from: $0) }) else { return nil }
+            book = read
+        } else {
+            book = NextTimeBook()
+        }
+        book.attach(MeetingPointsLocal.peek(in: dir))
+        return book
     }
 
+    /// The book with this Mac's detail of each meeting point. A detail file that does not decode is set aside; one of a
+    /// newer build is read and never saved.
     public static func load(from dir: URL) throws -> NextTimeBook {
-        try StoredFile.load(NextTimeBook.self, from: dir.appendingPathComponent(fileName), decoder: .coach, recovery: .synced) ?? NextTimeBook()
+        var book = try StoredFile.load(NextTimeBook.self, from: dir.appendingPathComponent(fileName), decoder: .coach, recovery: .synced) ?? NextTimeBook()
+        let local = MeetingPointsLocal.load(in: dir)
+        book.attach(local)
+        book.localFrozen = (local?.version ?? 0) > MeetingPointsLocal.currentVersion
+        return book
     }
 
+    /// The book, which holds nothing of a meeting but its recordings, and this Mac's detail file beside it.
     public func save(to dir: URL) throws {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try JSONEncoder.coach.encode(self).write(to: dir.appendingPathComponent(Self.fileName), options: .atomic)
+        if !localFrozen { try MeetingPointsLocal.of(self).save(in: dir) }
     }
 
     /// Loads, changes, and saves in one step. A book that cannot be read is never replaced by an empty one.

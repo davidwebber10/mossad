@@ -227,6 +227,9 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// next launch of the profile's window app looks again. Never written as false. An older build drops this when it
     /// saves the record; then the invite is not looked for again.
     public var inviteUnknown: Bool?
+    /// True when the invite the pipeline matched was not surely the call's (another event could be it). Nil when it was
+    /// sure, during the call, and in records from before it. Never written as false.
+    public var inviteNotSure: Bool?
     /// Speaker key (`me:A`, `them:B`) → person name. The name is a label: `speakerPeople` says who it is.
     public var speakerNames: [String: String] = [:]
     /// Speaker key → the id of the person in `people.json`, on a sure match only. Nil in records from before ids,
@@ -409,6 +412,7 @@ extension CallRecord {
         failedStep = try c.decodeIfPresent(CallStatus.self, forKey: .failedStep)
         failureReason = try c.decodeIfPresent(String.self, forKey: .failureReason)
         inviteUnknown = try c.decodeIfPresent(Bool.self, forKey: .inviteUnknown)
+        inviteNotSure = try c.decodeIfPresent(Bool.self, forKey: .inviteNotSure)
         speakerNames = try c.decodeIfPresent([String: String].self, forKey: .speakerNames) ?? [:]
         speakerPeople = try c.decodeIfPresent([String: String].self, forKey: .speakerPeople)
         unknownSpeakers = try c.decodeIfPresent([String].self, forKey: .unknownSpeakers) ?? []

@@ -218,27 +218,50 @@ enum DevHooks {
         return try? JSONDecoder().decode([CoachFinding].self, from: data)
     }
 
+    private struct Invite: Decodable {
+        let title: String
+        let inMinutes: Double
+        let minutes: Double
+        let attendees: [String]
+        let link: String
+        /// A made-up calendar series id, for a recurring invite.
+        let seriesID: String?
+        /// A made-up iCalendar UID.
+        let uid: String?
+        /// The owner's points for this one meeting, saved at launch when it has none.
+        let points: [String]?
+    }
+
+    private static var invites: [Invite]? {
+        guard preview, let path = env["MOSSAD_UPCOMING"], let data = FileManager.default.contents(atPath: path) else { return nil }
+        return try? JSONDecoder().decode([Invite].self, from: data)
+    }
+
     /// `MOSSAD_UPCOMING=<file>` in a preview: a JSON list of made-up invites (`title`, `inMinutes` from the launch,
-    /// `minutes`, `attendees`, `link`) to show in place of the calendar's, so a picture never holds a real invite.
+    /// `minutes`, `attendees`, `link`, and optionally `seriesID`, `uid`, `points`) to show in place of the calendar's, so
+    /// a picture never holds a real invite.
     static func sampleInvites() -> [CalendarEventInfo]? {
-        struct Invite: Decodable {
-            let title: String
-            let inMinutes: Double
-            let minutes: Double
-            let attendees: [String]
-            let link: String
-            /// A made-up calendar series id, for a recurring invite.
-            let seriesID: String?
-        }
-        guard preview, let path = env["MOSSAD_UPCOMING"], let data = FileManager.default.contents(atPath: path),
-              let invites = try? JSONDecoder().decode([Invite].self, from: data) else { return nil }
-        return invites.map { i in
+        invites?.map { i in
             let start = launch.addingTimeInterval(i.inMinutes * 60)
             var e = CalendarEventInfo(title: i.title, start: start, end: start.addingTimeInterval(i.minutes * 60), attendees: i.attendees,
                                       text: i.link, isAllDay: false)
             e.seriesID = i.seriesID
             e.isRecurring = i.seriesID != nil
+            e.iCalUID = i.uid
             return e
+        }
+    }
+
+    /// The `points` of the made-up invites, as the owner's points for each one meeting, once: a meeting that has
+    /// points already gets none.
+    static func samplePoints(_ c: AppController, events: [CalendarEventInfo]) {
+        guard let invites, invites.contains(where: { $0.points?.isEmpty == false }) else { return }
+        let upcoming = UpcomingMeeting.from(events, now: launch, limit: .max)
+        c.changeNextTime { book in
+            for i in invites {
+                guard let words = i.points, let u = upcoming.first(where: { $0.title == i.title }), book.points(forMeeting: u).isEmpty else { continue }
+                for w in words { book.add(w, meeting: NextTimeMeeting(u), at: launch) }
+            }
         }
     }
 

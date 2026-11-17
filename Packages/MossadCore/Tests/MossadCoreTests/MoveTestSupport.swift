@@ -63,6 +63,7 @@ func fullRecord(id: String = "20261101-100000") -> CallRecord {
     r.deletedScreens = ["000020000.heic"]
     r.moveTo = "5e6f7a8b"
     r.inviteUnknown = true
+    r.inviteNotSure = true
     return r
 }
 

@@ -44,10 +44,14 @@ struct RecurringView: View {
         Group {
             if all.isEmpty {
                 DetailColumn { PageToolbar(title: "Recurring") {} } content: {
-                    if model.loaded {
-                        EmptyState(symbol: "repeat", title: "No recurring meetings yet",
-                                   message: "A meeting that repeats in your calendar, or that Mossad recorded twice with the same title and nearly the same people, shows here. Each one gets a list of points for next time.")
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    VStack(spacing: 0) {
+                        // The points of meetings that were not recorded wait here, also with no recurring meeting yet.
+                        WaitingPointsRow().pageColumn(Rhythm.readingWidth, bottom: 0)
+                        if model.loaded {
+                            EmptyState(symbol: "repeat", title: "No recurring meetings yet",
+                                       message: "A meeting that repeats in your calendar, or that Mossad recorded twice with the same title and nearly the same people, shows here. Each one gets a list of points for next time.")
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
                     }
                 }
             } else {
@@ -68,6 +72,9 @@ struct RecurringView: View {
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.leading, Chrome.toolbarInsets.leading).padding(.trailing, Chrome.toolbarInsets.trailing)
                                     .padding(.bottom, Space.s)
+                                WaitingPointsRow().frame(maxWidth: Rhythm.readingWidth, alignment: .leading)
+                                    .padding(.leading, Chrome.toolbarInsets.leading).padding(.trailing, Chrome.toolbarInsets.trailing)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                                 if visible.isEmpty {
                                     nothing.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top).padding(.top, Space.l)
                                 } else {
@@ -241,6 +248,8 @@ private struct SeriesList: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                    // The points of meetings that were not recorded: one quiet row, inside the list's scroll.
+                    WaitingPointsRow()
                     ForEach(Array(days.enumerated()), id: \.element.id) { i, day in
                         GroupHeader(title: day.title, first: i == 0)
                         ForEach(day.ids, id: \.self) { id in

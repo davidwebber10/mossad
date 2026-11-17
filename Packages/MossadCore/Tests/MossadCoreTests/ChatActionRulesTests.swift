@@ -42,12 +42,43 @@ final class ChatActionRulesTests: XCTestCase {
         XCTAssertEqual(meeting?.title, "Jeff / Avery", "the group meeting the day before is not the two of them")
     }
 
-    func testAOneOffMeetingWithThemBecomesTheirPointShownBeforeIt() {
+    func testAOneOffMeetingWithThemGetsThePointItself() {
         let oneOff = invite("Coffee", days: 3, ["Jeffrey Moore"])
-        guard case .person(let id, let name, let meeting) = resolve("Jeffrey Moore", people: [owner, jeff], upcoming: [oneOff]) else { return XCTFail() }
-        XCTAssertEqual(id, "id-jeff")
-        XCTAssertEqual(name, "Jeffrey Moore")
-        XCTAssertEqual(meeting?.title, "Coffee")
+        guard case .meeting(let meeting) = resolve("Jeffrey Moore", people: [owner, jeff], upcoming: [oneOff]) else { return XCTFail() }
+        XCTAssertEqual(meeting.title, "Coffee")
+    }
+
+    func testADayNamesTheOneMeetingOfThatDayThePersonIsInvitedTo() {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let group = invite("Planning", days: 2, ["jeff@example.com", "sam@example.com", "avery@example.com"])
+        let coffee = invite("Coffee", days: 1, ["jeff@example.com"])
+        func on(_ days: Double, _ upcoming: [UpcomingMeeting]) -> PointTarget.Outcome {
+            PointTarget.resolve(with: "Jeff", on: now.addingTimeInterval(days * 86_400), people: [owner, jeff], upcoming: upcoming, series: [], now: now, calendar: utc)
+        }
+        // A group meeting that day, though the next meeting of the two of them is earlier.
+        guard case .meeting(let m) = on(2, [coffee, group]) else { return XCTFail() }
+        XCTAssertEqual(m.title, "Planning")
+        guard case .notFound = on(3, [coffee, group]) else { return XCTFail("no meeting with Jeff that day") }
+        let second = invite("Review", days: 2.1, ["jeff@example.com"])
+        guard case .choose(let options) = on(2, [group, second]) else { return XCTFail("two that day are a question") }
+        XCTAssertEqual(options.count, 2)
+        XCTAssertTrue(options[0].contains("upcoming_id: \(group.id)"))
+    }
+
+    func testAChatPointForOneMeetingIsThatMeetingsPoint() {
+        let u = invite("Coffee", days: 3, ["jeff@example.com"])
+        var r = ChatActionRequest(.addPoint)
+        r.text = "Ask about the offsite"
+        r.meeting = MeetingDetail(u, people: ["id-jeff"])
+        var book = NextTimeBook()
+        let change = ChatActionApply.run(r, on: &book, now: now)
+        XCTAssertNotNil(change)
+        XCTAssertEqual(book.points(forMeeting: u).map(\.text), ["Ask about the offsite"])
+        XCTAssertTrue(book.points(forPerson: "id-jeff").isEmpty)
+        // Its Undo removes it.
+        _ = ChatActionApply.run(change!.undo, on: &book, now: now)
+        XCTAssertTrue(book.points(forMeeting: u).isEmpty)
     }
 
     func testOnePersonInTwoSeriesWithNoMeetingOfTheTwoIsAQuestion() {

@@ -2310,7 +2310,11 @@ final class AppController: ObservableObject {
             }
             // Development hook for screenshots: MOSSAD_UPCOMING=<file> shows only the made-up invites of that file.
             var sampled = CommandLine.arguments.contains("--sample-upcoming")
-            if let sample = DevHooks.sampleInvites() { events = sample; sampled = true }
+            if let sample = DevHooks.sampleInvites() {
+                events = sample
+                sampled = true
+                DevHooks.samplePoints(self, events: sample)
+            }
             calendarEvents = events
             calendarRead = true
             // For Chat's and other AI apps' tools, which cannot read the calendar: the events as read, without their

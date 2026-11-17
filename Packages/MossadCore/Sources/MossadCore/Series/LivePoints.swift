@@ -28,13 +28,16 @@ public enum LivePoints {
         return out
     }
 
-    /// The series' points, then each person's, in their order: the open ones and the ones that this call closed,
-    /// so a tick can be taken back.
-    public static func list(_ book: NextTimeBook, series: MeetingSeries?, people: [String], callID: String,
+    /// The series' points, then the points of this one meeting (`record`, by its invite), then each person's, in
+    /// their order: the open ones and the ones that this call closed, so a tick can be taken back.
+    public static func list(_ book: NextTimeBook, series: MeetingSeries?, people: [String], callID: String, record: CallRecord? = nil,
                             canonical: (String) -> String = { $0 }) -> [NextTimePoint] {
         func shown(_ p: NextTimePoint) -> Bool { !p.deleted && (p.done == nil || p.done?.callID == callID) }
         let order: (NextTimePoint, NextTimePoint) -> Bool = { ($0.rank, $0.created) < ($1.rank, $1.created) }
         var out = series.map { s in book.points.filter { shown($0) && $0.seriesID != nil && $0.belongs(to: s) }.sorted(by: order) } ?? []
+        if let record {
+            out += book.points.filter { shown($0) && $0.isForMeeting && $0.meeting?.matches(record) == true }.sorted(by: order)
+        }
         var seen = Set(out.map(\.id))
         for id in people {
             let wanted = canonical(id)

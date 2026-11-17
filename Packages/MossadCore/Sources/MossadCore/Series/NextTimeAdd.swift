@@ -53,14 +53,32 @@ public enum NextTimeAdd {
         }
         return .notFound("Say the recurring meeting or the person.")
     }
+
+    /// Adds the point where `PointTarget` put it: a series, one meeting with no series, or a person.
+    /// `invited` counts everyone invited besides the owner (`MeetingPrep.invited`), for this Mac's detail.
+    public static func add(_ text: String, to target: PointTarget.Outcome, people: PersonReferences, invited: (UpcomingMeeting) -> Int? = { _ in nil },
+                           book: inout NextTimeBook, at date: Date = Date()) -> Outcome {
+        switch target {
+        case .series(let s, _):
+            return book.add(text, series: s, at: date).map(Outcome.added) ?? .notFound("The point has no words.")
+        case .meeting(let u):
+            let m = NextTimeMeeting(u, people: NextTimeInvite.personIDs(u.attendees, people: people), invited: invited(u))
+            return book.add(text, meeting: m, at: date).map(Outcome.added) ?? .notFound("The point has no words.")
+        case .person(let id, let name, _):
+            return book.add(text, personID: id, personName: name, at: date).map(Outcome.added) ?? .notFound("The point has no words.")
+        case .choose(let options): return .choose(options)
+        case .notFound(let why): return .notFound(why)
+        }
+    }
 }
 
 extension ChatTools {
     static var nextTimeDefinition: ToolSpec {
         ToolSpec(name: "add_next_time_point",
-                 description: "Saves a point the owner wants to raise later, not now: at the next meeting of a recurring meeting (series: words of its title, such as \"TB\" or \"Weekly sync\") or the next time they see a person (person: their name). Give series, person, or both (a person narrows several series). text is the point in the owner's words, short. Tell the owner where you saved it.",
+                 description: "Saves a point the owner wants to raise later, not now: at the next meeting of a recurring meeting (series: words of its title, such as \"TB\" or \"Weekly sync\"), at one upcoming meeting (upcoming_id from upcoming_meetings; or with: a person, for the next meeting of the two of them, and on: YYYY-MM-DD for \"my meeting with Sam on Thursday\"), or the next time they see a person (person: their name). Give series, person, or both (a person narrows several series), or with, or upcoming_id. text is the point in the owner's words, short. Tell the owner where you saved it.",
                  schema: ["type": "object", "properties": [
-                    "text": ["type": "string"], "series": ["type": "string"], "person": ["type": "string"],
+                    "text": ["type": "string"], "series": ["type": "string"], "person": ["type": "string"], "with": ["type": "string"], "on": ["type": "string"],
+                    "upcoming_id": ["type": "string"],
                  ] as [String: Any], "required": ["text"]])
     }
 
@@ -74,19 +92,47 @@ extension ChatTools {
     func addNextTimePoint(_ input: [String: Any]) -> String {
         guard let paths else { return "Not available here." }
         guard let text = (input["text"] as? String)?.nonBlank else { return "The point has no words." }
+        var target: PointTarget.Outcome?
+        let upcomingID = (input["upcoming_id"] as? String)?.nonBlank, with = (input["with"] as? String)?.nonBlank
+        if upcomingID != nil || with != nil {
+            let catalog = catalog(now: now)
+            if let upcomingID {
+                guard let u = catalog.upcoming.first(where: { $0.id == upcomingID }) else { return "No upcoming meeting has that upcoming_id." }
+                target = PointTarget.place(u, in: catalog.all)
+            } else if let with {
+                var on: Date?
+                if let day = (input["on"] as? String)?.nonBlank {
+                    guard let d = Self.date(day) else { return "on is a date as YYYY-MM-DD." }
+                    on = d
+                }
+                target = PointTarget.resolve(with: with, on: on, people: savedPeople, upcoming: catalog.upcoming, series: catalog.all, now: now)
+            }
+        }
         var outcome = NextTimeAdd.Outcome.notFound("")
         do {
             try NextTimeBook.change(in: paths.nextTime) { book in
-                outcome = NextTimeAdd.add(text, series: input["series"] as? String, person: input["person"] as? String, series: series, people: saved, book: &book)
+                if let target {
+                    outcome = NextTimeAdd.add(text, to: target, people: saved, invited: invitedCount, book: &book)
+                } else {
+                    outcome = NextTimeAdd.add(text, series: input["series"] as? String, person: input["person"] as? String, series: series, people: saved, book: &book)
+                }
             }
         } catch {
             return "Could not save: the list of points cannot be read."
         }
         switch outcome {
         case .added(let p):
+            if let d = p.meeting?.detail, p.isForMeeting { return "Saved for your \(d.title) on \(shortDay(d.start)): \(p.text)" }
             return p.seriesTitle.map { "Saved for the next \($0): \(p.text)" } ?? "Saved for the next time you see \(p.personName ?? "them"): \(p.text)"
         case .choose(let titles): return "Several recurring meetings match; ask which one: \(titles.joined(separator: "; "))."
         case .notFound(let why): return why
         }
+    }
+}
+
+extension ChatTools {
+    /// Everyone invited besides the owner, by the prep page's rule.
+    func invitedCount(_ u: UpcomingMeeting) -> Int {
+        MeetingPrep.invited(u.attendees, owner: owner, directory: fullDirectory, ownerEmails: [settings.ownerEmail]).count
     }
 }

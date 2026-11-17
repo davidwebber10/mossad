@@ -13,7 +13,13 @@ final class SeriesModel: ObservableObject {
     private(set) var version = 0
     /// A series that a link asked to open: Calendar mode opens its page full-pane (`SeriesShown.fullPane`).
     @Published var toOpen: String?
-    @Published private(set) var book = NextTimeBook() { willSet { owner?.objectWillChange.send() } }
+    @Published private(set) var book = NextTimeBook() {
+        willSet { owner?.objectWillChange.send() }
+        didSet { bookVersion += 1 }
+    }
+    private var bookVersion = 0
+    private var waitingKey: Int?
+    private var waitingMemo: [NextTimePoint] = []
     /// False when the file is there and cannot be read: then nothing is saved over it.
     @Published private(set) var bookReadable = true { willSet { owner?.objectWillChange.send() } }
     /// The views that read the controller redraw when the points or the series change.
@@ -51,6 +57,7 @@ final class SeriesModel: ObservableObject {
     }
 
     private struct Made: Sendable {
+        let upcoming: [UpcomingMeeting]
         let all: [MeetingSeries]
         let invited: [String: [String]]
         let usual: [String: [UsualPerson]]
@@ -104,7 +111,7 @@ final class SeriesModel: ObservableObject {
                         return UsualPerson(id: id, name: refs.name(of: id) ?? name)
                     }
                 }
-                return Made(all: all, invited: invited, usual: usual, people: refs)
+                return Made(upcoming: upcoming, all: all, invited: invited, usual: usual, people: refs)
             }.value
             guard !Task.isCancelled else { return }
             invitedIDs = made.invited
@@ -117,13 +124,37 @@ final class SeriesModel: ObservableObject {
                 var copy = book
                 if copy.refreshKeys(made.all) { owner.changeNextTime { $0.refreshKeys(made.all) } }
             }
+            // A point of one meeting follows its invite's times, joins its series once the invite has one, and goes to
+            // the person of a sure 1:1 that was not recorded.
+            if let owner, book.points.contains(where: { $0.isOpen && $0.isForMeeting }) {
+                var copy = book
+                let records = inputs.records, refs = made.people
+                if copy.followMeetings(upcoming: made.upcoming, series: made.all, records: records, name: { refs.name(of: $0) }) {
+                    owner.changeNextTime { $0.followMeetings(upcoming: made.upcoming, series: made.all, records: records, name: { refs.name(of: $0) }) }
+                }
+            }
         }
+    }
+
+    /// The points of meetings that were not recorded, made again only when the book or the meetings change, or every
+    /// five minutes as meetings end.
+    func waiting(_ records: [CallRecord], version: Int, now: Date = Date()) -> [NextTimePoint] {
+        var h = Hasher()
+        h.combine(bookVersion)
+        h.combine(version)
+        h.combine(Int(now.timeIntervalSince1970 / 300))
+        let key = h.finalize()
+        if key != waitingKey {
+            waitingKey = key
+            waitingMemo = book.unrecorded(records: records, now: now)
+        }
+        return waitingMemo
     }
 
     /// The owner's open points for an upcoming meeting: its series' and its invited people's.
     func points(for meeting: UpcomingMeeting) -> [NextTimePoint] {
         let refs = people
-        return book.points(for: SeriesCatalog.series(of: meeting, in: all), people: invitedIDs[meeting.id] ?? [], canonical: { refs.canonical($0) })
+        return book.points(for: SeriesCatalog.series(of: meeting, in: all), meeting: meeting, people: invitedIDs[meeting.id] ?? [], canonical: { refs.canonical($0) })
     }
 
     /// Reads the book again when its file changed.
@@ -187,6 +218,15 @@ extension AppController {
     /// The owner's open points for an upcoming meeting: its series' and its people's. Reads no file.
     func nextTimePoints(for meeting: UpcomingMeeting) -> [NextTimePoint] { series.points(for: meeting) }
 
+    /// The points of meetings that were not recorded, kept until the book or the meetings change.
+    var waitingPoints: [NextTimePoint] { series.waiting(meetings, version: meetingsVersion) }
+
+    /// Everyone invited besides the owner, by the prep page's rule.
+    func invitedCount(_ u: UpcomingMeeting) -> Int {
+        MeetingPrep.invited(u.attendees, owner: ownerName, directory: PersonDirectory(profiles: library.profiles, people: library.identity?.people.people),
+                            ownerEmails: [UserDefaults.standard.string(forKey: "ownerEmail") ?? ""]).count
+    }
+
     /// Adds a point from words, for the search command: "TB" or "Sam Carter". Returns what happened, in words.
     @discardableResult
     func addNextTimePoint(_ text: String, series query: String?, person: String?) -> String {
@@ -194,7 +234,9 @@ extension AppController {
         var outcome = NextTimeAdd.Outcome.notFound("")
         changeNextTime { outcome = NextTimeAdd.add(text, series: query, person: person, series: series.all, people: refs, book: &$0) }
         switch outcome {
-        case .added(let p): return p.seriesTitle.map { "Saved for the next \($0)" } ?? "Saved for the next time you see \(p.personName ?? "them")"
+        case .added(let p):
+            if p.isForMeeting, let d = p.meeting?.detail { return "Saved for your \(d.title)" }
+            return p.seriesTitle.map { "Saved for the next \($0)" } ?? "Saved for the next time you see \(p.personName ?? "them")"
         case .choose(let titles): return "Choose one: \(titles.joined(separator: ", "))"
         case .notFound(let why): return why
         }
