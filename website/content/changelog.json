@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "2.27.0",
+      "date": "2026-11-17",
+      "notes": [
+        "Profiles: keep work calls and personal calls apart on your Mac and your iPhone, each with its own meetings, people, keys, sync, and connection for AI apps. The profile that you are not in still finishes its meetings. A meeting that went to the wrong profile moves to the right one, and during a call you can say which profile it is for. A phone call that you record on your iPhone becomes a meeting: share the recording to Mossad. Undo after Transcribe again restores the whole meeting. Update the Mac and the iPhone app together."
+      ]
+    },
+    {
       "version": "2.26.0",
       "date": "2026-11-14",
       "notes": [
