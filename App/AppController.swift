@@ -1019,11 +1019,12 @@ final class AppController: ObservableObject {
     /// The local server's address as typed, or Ollama's when it does not read as an address.
     var localServerBase: URL { LocalServer.url(from: localServerURL) ?? LocalServer.ollama }
 
+    /// The settings the services are built from, read now: the same keys as the `@AppStorage` lines above.
+    var services: ServiceSettings { .read(.standard, fullUserName: NSFullUserName()) }
+
     /// The chosen AI model, or nil without its key (or without a picked OpenRouter or local server model).
     var languageModel: (any LanguageModel)? {
-        let key = aiProvider.key.flatMap { keychain.get($0) }
-        guard key != nil || !aiProvider.requiresKey, !(aiModel.isEmpty && aiProvider.defaultModel.isEmpty) else { return nil }
-        return aiProvider.model(aiModel, apiKey: key, usage: usage, serverURL: localServerBase)
+        services.languageModel(key: { keychain.get($0) }, usage: usage)
     }
 
     var mailSettings: MailSettings {
@@ -1086,14 +1087,9 @@ final class AppController: ObservableObject {
                 do { try people.setOwnerName(owner) } catch { Log.error("People: the owner's new name was not saved: \(error)") }
             }
         }
-        let organization = organization.trimmingCharacters(in: .whitespaces)
-        let provider = transcriptionProvider
-        let transcriber: Transcribing = if let key = provider.key {
-            keychain.get(key).map { provider.transcriber(model: transcriptionModel, apiKey: $0, usage: usage) } ?? MissingKeyTranscriber(service: provider.displayName)
-        } else {
-            provider.transcriber(model: transcriptionModel, apiKey: "", usage: usage)
-        }
-        let summarizer: Summarizing? = languageModel.map { LLMSummarizer(llm: $0, ownerName: owner, organization: organization) }
+        let services = services
+        let transcriber = services.transcriber(key: { keychain.get($0) }, usage: usage)
+        let summarizer = services.summarizer(key: { keychain.get($0) }, usage: usage)
         let notifier = notifier
         if let pipeline {
             pipeline.configure(Pipeline.Configuration(transcriber: transcriber, summarizer: summarizer, ownerName: owner,
@@ -2253,15 +2249,6 @@ final class AppController: ObservableObject {
     }
 }
 
-
-/// Used when no AssemblyAI key is stored: the call stays queued until a key exists.
-struct MissingKeyTranscriber: Transcribing {
-    let service: String
-
-    func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
-        throw MissingAPIKey(service: service)
-    }
-}
 
 /// The live transcript, published at most four times a second: AssemblyAI sends several partial results a second.
 @MainActor

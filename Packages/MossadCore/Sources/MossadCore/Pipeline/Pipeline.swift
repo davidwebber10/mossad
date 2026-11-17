@@ -1424,6 +1424,17 @@ public struct MissingAPIKey: Error, CustomStringConvertible {
     public var description: String { "No \(service) API key. Run scripts/import-keys.sh, then reopen Mossad." }
 }
 
+/// Used when no key is stored for the chosen transcription: the call stays queued until a key exists.
+public struct MissingKeyTranscriber: Transcribing {
+    public let service: String
+
+    public init(service: String) { self.service = service }
+
+    public func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
+        throw MissingAPIKey(service: service)
+    }
+}
+
 private extension CallRecord {
     func mentions(_ name: String) -> Bool {
         speakerNames.values.contains(name) || actionItems.contains { $0.owner == name }

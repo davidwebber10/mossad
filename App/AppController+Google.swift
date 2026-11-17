@@ -219,8 +219,7 @@ extension AppController {
 
     /// The org chart's "Name, Title" lines for the AI provider, then the directory's titles for the names it lacks.
     nonisolated static func titleLines(for names: [String], paths: Paths, library: VoiceLibrary) -> [String] {
-        let org = OrgChart.contextLines(for: names, paths: paths)
-        return org + DirectoryMerge.contextLines(for: names, people: library.identity?.people.people ?? [], except: org)
+        OrgChart.titleLines(for: names, paths: paths, library: library)
     }
 
     /// Reads the directory and the contacts, at most once a day unless forced, and fills the saved people by their

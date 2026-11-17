@@ -18,15 +18,7 @@ extension AppController {
     /// Every place that is set up, with the chosen one for new recordings. A place stays readable after the owner
     /// chooses another, so the recordings in it can be played, moved, and deleted.
     var cloudArchive: CloudArchive? {
-        let settings = backupSettings
-        var places: [any ArchiveBackend] = []
-        if settings.hasBucket, let config = settings.bucketConfig(secret: keychain.get(.cloudSecret)) { places.append(BucketArchive(config: config)) }
-        if let c = serverConnection {
-            places.append(ServerArchive(c, id: serverID.isEmpty ? nil : serverID, maxBytes: serverRecordingLimit > 0 ? Int64(serverRecordingLimit) : nil))
-        }
-        guard !places.isEmpty else { return nil }
-        let target = settings.choice == .server && !serverKeepsRecordings ? nil : settings.choice.target
-        return CloudArchive(target: target, places: places, paths: paths)
+        services.archive(key: { keychain.get($0) }, paths: paths, server: serverConnection)
     }
 
     func chooseBackup(_ choice: BackupChoice) {
