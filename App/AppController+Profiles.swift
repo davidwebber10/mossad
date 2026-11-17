@@ -16,11 +16,11 @@ extension AppController {
     }
 
     /// The switcher's menu; nil with one profile.
-    var profileMenu: ProfileMenu? { ProfileMenu(profiles.registry, active: activeProfile.id, recording: isRecording) }
+    var profileMenu: ProfileMenu? { ProfileMenu(profiles.registry, active: activeProfile.id, recording: isRecording, status: workerLines) }
 
     /// Only the real app changes the real registry: never a preview, an inert copy, or a run on a made-up registry.
     private var changesProfiles: Bool {
-        ProfileSwitch.mayChange(inert: isInert, mayChangeRegistry: AppIdentity.current.mayChangeRegistry, switching: switching)
+        ProfileSwitch.mayChange(inert: !mode.does(.registry), mayChangeRegistry: AppIdentity.current.mayChangeRegistry, switching: switching)
     }
 
     /// The problem as the switcher and Settings show it: for a while, and a refusal for a call only during one.
@@ -49,6 +49,8 @@ extension AppController {
     /// `MOSSAD_PROFILE_SWITCH=<id>` on a made-up registry: the real mechanics of a switch once, for the proof that a
     /// switch ends with one copy of the other profile. The new instance starts with `--background` and no hook;
     /// `MOSSAD_PROFILE_SWITCH_FAIL=1` gives it an unknown profile, so its start fails.
+    static var proofLateRefusal = false
+
     func proofSwitch(to id: String, file: URL, failing: Bool) {
         guard AppIdentity.current.madeUpRegistry, !AppIdentity.current.isPreview else { return }
         var environment = ProcessInfo.processInfo.environment
@@ -58,6 +60,15 @@ extension AppController {
         runSwitch(to: id, file: file, home: nil, extra: ["--background"] + (failing ? ["--profile", "ffffffff"] : []), environment: environment)
     }
     #endif
+
+    /// A debug proof's refusal at the quit (`MOSSAD_PROFILE_SWITCH_FAIL=late`); never in a release build.
+    private var proofRefusesAtQuit: Bool {
+        #if DEBUG
+        Self.proofLateRefusal
+        #else
+        false
+        #endif
+    }
 
     /// The mechanics of a switch: decide, save `active`, start the new instance, then quit or put `active` back.
     private func runSwitch(to id: String, file: URL, home: URL?, extra: [String], environment: [String: String]) {
@@ -69,16 +80,31 @@ extension AppController {
         case .refused(let why): profileProblem = why
         case .go(let save, let arguments):
             let was = read.registry.active
-            if save {
-                var next = read
-                next.registry.setActive(id)
-                do { try next.save(to: file) } catch {
-                    Log.error("Profiles: the switch could not save the list: \(error)")
-                    profileProblem = Self.unreadableProfiles
+            let name = read.registry.profile(id)?.name ?? id
+            // `WorkerSwitch.order`: the workers stop and the target's folder is free before anything is saved or
+            // started, so the new instance never meets its own worker. No second switch starts meanwhile.
+            switching = true
+            Task { @MainActor in
+                guard await workers.stopAll(waitingFor: id, seconds: WorkerSwitch.waitSeconds) else {
+                    Log.error("Profiles: the background work of the other profile did not stop; no switch")
+                    switching = false
+                    workers.resume(recording: isRecording)
+                    profileProblem = WorkerSwitch.refusal(name)
                     return
                 }
+                if save {
+                    var next = read
+                    next.registry.setActive(id)
+                    do { try next.save(to: file) } catch {
+                        Log.error("Profiles: the switch could not save the list: \(error)")
+                        switching = false
+                        workers.resume(recording: isRecording)
+                        profileProblem = Self.unreadableProfiles
+                        return
+                    }
+                }
+                startInstance(arguments: arguments + extra, environment: environment, saved: save, was: was, file: file, home: home)
             }
-            startInstance(arguments: arguments + extra, environment: environment, saved: save, was: was, file: file, home: home)
         }
     }
 
@@ -122,14 +148,19 @@ extension AppController {
                 self.switching = false
                 self.hotKeys.resumeAll()
                 self.retakeMacWideLock()
+                self.workers.resume(recording: self.isRecording)
                 self.profileProblem = problem
                 Log.info("Profiles: the switch did not happen; this copy goes on")
             }
             switch ProfileSwitch.afterStart(started: newInstance != nil, saved: saved, was: was) {
             case .quit:
                 // A call that started after the decision: the new instance goes, `active` comes back, no quit.
-                if case .refused(let why) = ProfileSwitch.atQuit(recording: isRecording) {
+                if case .refused(let why) = ProfileSwitch.atQuit(recording: isRecording || proofRefusesAtQuit) {
                     newInstance?.terminate()
+                    // The new instance writes `stopping` in the file as it quits: this app takes the file back after it.
+                    if let app = newInstance {
+                        for _ in 0..<100 where !app.isTerminated { try? await Task.sleep(for: .milliseconds(100)) }
+                    }
                     back(why)
                     return
                 }
@@ -277,19 +308,44 @@ extension AppController {
     func deleteProfile(_ id: String, typed: String) {
         guard changesProfiles else { return }
         profileProblem = nil
+        let first = readProfiles()
+        guard first.canSave else { profileProblem = refusal(first); return }
+        if let problem = ProfileRules.deleteProblem(id, in: first.registry, active: activeProfile.id, typed: typed) {
+            profileProblem = problem
+            return
+        }
+        let name = first.registry.profile(id)?.name ?? id
+        // The profile's worker stops and its folder is free before the delete takes the folder's lock.
+        switching = true
+        Task { @MainActor in
+            let stopped = await workers.stop(id, seconds: WorkerSwitch.waitSeconds)
+            switching = false
+            guard stopped else {
+                workers.resume(recording: isRecording)
+                profileProblem = WorkerSwitch.refusal(name)
+                return
+            }
+            removeProfile(id, typed: typed)
+        }
+    }
+
+    private func removeProfile(_ id: String, typed: String) {
         let read = readProfiles()
-        guard read.canSave else { profileProblem = refusal(read); return }
+        guard read.canSave else { profileProblem = refusal(read); workers.resume(recording: isRecording); return }
         switch ProfileRemoval.start(id, in: read.registry, active: activeProfile.id, typed: typed, home: Self.home) {
         case .refused(let why):
             profileProblem = why
+            workers.resume(recording: isRecording)
         case .go(let lock):
             var next = read
             next.registry.markRemoving(id)
             do { try next.save(to: Self.registryFile) } catch {
                 Log.error("Profiles: the delete could not be saved: \(error)")
                 profileProblem = Self.unreadableProfiles
+                workers.resume(recording: isRecording)
                 return
             }
+            workers.forget(id)
             profiles = readProfiles()
             refreshOtherNoRecord()
             updateSharedProfiles()

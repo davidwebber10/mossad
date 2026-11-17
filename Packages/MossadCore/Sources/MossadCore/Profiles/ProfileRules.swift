@@ -159,12 +159,15 @@ public struct ProfileMenu: Equatable, Sendable {
         public let name: String
         public let color: ProfileColor
         public let active: Bool
+        /// The worker's line of another profile ("2 meetings in work"); never on the active row.
+        public let status: String?
 
-        public init(id: String, name: String, color: ProfileColor, active: Bool) {
+        public init(id: String, name: String, color: ProfileColor, active: Bool, status: String? = nil) {
             self.id = id
             self.name = name
             self.color = color
             self.active = active
+            self.status = status
         }
     }
 
@@ -175,11 +178,13 @@ public struct ProfileMenu: Equatable, Sendable {
     public let color: ProfileColor
     public let note: String?
 
-    public init?(_ registry: ProfileRegistry, active: String, recording: Bool) {
+    public init?(_ registry: ProfileRegistry, active: String, recording: Bool, status: [String: String] = [:]) {
         let live = registry.live
         guard live.count >= 2 else { return nil }
         let current = registry.profile(active) ?? .default
-        rows = live.map { Row(id: $0.id, name: $0.name, color: $0.color, active: $0.id == current.id) }
+        rows = live.map {
+            Row(id: $0.id, name: $0.name, color: $0.color, active: $0.id == current.id, status: $0.id == current.id ? nil : status[$0.id])
+        }
         title = current.name
         color = current.color
         note = recording ? ProfileSwitch.refusal : nil

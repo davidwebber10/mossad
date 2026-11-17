@@ -258,6 +258,12 @@ public struct OrgChart: Sendable {
         return chart
     }
 
+    /// The org chart's "Name, Title" lines for the AI provider, then the directory's titles for the names it lacks.
+    public static func titleLines(for names: [String], paths: Paths, library: VoiceLibrary) -> [String] {
+        let org = contextLines(for: names, paths: paths)
+        return org + DirectoryMerge.contextLines(for: names, people: library.identity?.people.people ?? [], except: org)
+    }
+
     /// The lines the summary and the coach get for the people in a call; empty with no org file.
     public static func contextLines(for names: [String], paths: Paths) -> [String] {
         guard let chart = load(paths: paths) else { return [] }

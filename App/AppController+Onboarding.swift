@@ -76,10 +76,7 @@ final class OnboardingWindow {
 
 extension AppController {
     /// Whether setup is finished: the old welcome's flag counts too.
-    var onboardingFinished: Bool {
-        UserDefaults.standard.bool(forKey: "welcomeDone")
-            || OnboardingProgress.resume(from: UserDefaults.standard.data(forKey: "onboardingProgress")).completed
-    }
+    var onboardingFinished: Bool { services.setupDone }
 
     func openOnboarding() {
         keysChanged()

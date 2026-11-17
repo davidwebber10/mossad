@@ -24,14 +24,10 @@ extension SyncActivity {
 
 extension AppController {
     /// Whether this build may use iCloud: CloudKit stops the app when the entitlement is missing.
-    static let hasICloud: Bool = {
-        guard !Rehearsal.isOn, let task = SecTaskCreateFromSelf(nil),
-              let value = SecTaskCopyValueForEntitlement(task, "com.apple.developer.icloud-services" as CFString, nil) else { return false }
-        return (value as? [String])?.contains("CloudKit") == true
-    }()
+    static var hasICloud: Bool { CloudEntitlement.hasCloudKit }
 
     /// Whether this copy may write or delete the iCloud Keychain items: only once the launch decided, and never inert.
-    var writesSharedItems: Bool { SharedItemsGate.appMayWrite(iCloud: Self.hasICloud, launchDecided: launchDecided, inert: isInert) }
+    var writesSharedItems: Bool { SharedItemsGate.appMayWrite(iCloud: Self.hasICloud, launchDecided: launchDecided, inert: !mode.does(.sharedItems)) }
 
     /// Puts the chosen AI provider, model, and key in iCloud Keychain for the iPhone, or removes them.
     func updateSharedAIKey() {
@@ -51,8 +47,7 @@ extension AppController {
     /// The owner's server, when an address and a secret are both set.
     var serverConnection: ServerConnection? {
         if ServerSample.isOn { return ServerSample.connection }
-        guard let address = ServerConnection.address(from: serverAddress), let secret = keychain.get(.serverSecret) else { return nil }
-        return ServerConnection(address: address, secret: secret)
+        return services.serverConnection(key: { keychain.get($0) })
     }
 
     /// Saves a checked server and makes it the sync store.
@@ -150,21 +145,10 @@ extension AppController {
     // MARK: Sync
 
     private var currentSync: CloudSync? {
-        let key: String
-        let store: (any RecordStore)?
-        switch syncWith {
-        case .icloud:
-            key = "icloud"
-            store = Self.hasICloud ? CloudKitStore() : nil
-        case .server:
-            let c = serverConnection
-            key = "server:\(c?.address.absoluteString ?? "")"
-            store = c.map { ServerStore($0) }
-        case .off:
-            return nil
-        }
+        let stores = services.syncStores(server: serverConnection, hasICloud: Self.hasICloud)
+        guard let key = stores.mainKey else { return nil }
         if let engine = syncEngine, engine.key == key { return engine.sync }
-        guard let store else { return nil }
+        guard let store = stores.main?.store else { return nil }
         let sync = CloudSync(paths: paths, store: store)
         syncEngine = (key, sync)
         return sync
@@ -172,11 +156,11 @@ extension AppController {
 
     /// The server's copy of the meetings while iCloud syncs: only pushes, so the MCP has the meetings.
     private var mirrorSync: CloudSync? {
-        guard syncWith == .icloud, let c = serverConnection else { return nil }
-        let key = c.address.absoluteString
-        if let m = mirrorEngine, m.key == key { return m.sync }
-        let sync = CloudSync(paths: paths, store: ServerStore(c))
-        mirrorEngine = (key, sync)
+        // The mirror does not depend on iCloud: asked without it, so no iCloud store is made here, as before.
+        guard let mirror = services.syncStores(server: serverConnection, hasICloud: false).mirror else { return nil }
+        if let m = mirrorEngine, m.key == mirror.key { return m.sync }
+        let sync = CloudSync(paths: paths, store: mirror.store)
+        mirrorEngine = (mirror.key, sync)
         return sync
     }
 
@@ -194,7 +178,7 @@ extension AppController {
     /// Uploads new and changed meetings and pulls what the iPhone changed. One sync at a time; a sync asked for
     /// during one runs again after it.
     func syncNow() {
-        guard !isInert, !AppIdentity.current.isPreview else { return }
+        guard mode.does(.sync), !AppIdentity.current.isPreview else { return }
         let mirror = mirrorSync
         let main = currentSync
         // No store to pull from: a file that was set aside has no other copy to wait for.
@@ -244,57 +228,22 @@ extension AppController {
         let digestRecords = digestStep == .make ? meetings : nil
         let digestKept = digestStep == .resend ? Self.digestPending?.parts : nil
         let digestDir = paths.sync, digestPaths = paths, facts = MeetingAnalyticsStore.shared.facts
-        Task.detached(priority: .utility) {
-            var digest: [SharedPayload]? = digestKept
-            var digestMade = digestKept != nil
-            // From the app's own rules; a month is made again only when its meetings changed, and a call stops it.
-            func makeDigest() -> [SharedPayload]? {
-                guard let records = digestRecords, !digestMade else { return digest }
-                digestMade = true
+        // From the app's own rules; a month is made again only when its meetings changed, and a call stops it.
+        var makeDigest: (@Sendable () -> [SharedPayload]?)?
+        if let records = digestRecords {
+            makeDigest = { @Sendable () -> [SharedPayload]? in
                 let tools = ChatTools(records: records, owner: owner, paths: digestPaths, personaTraits: personasHere)
-                digest = ServerDigest.parts(tools, personasInMCP: personasHere, cache: DigestCache(directory: digestDir), facts: facts, stop: callStarted)
-                return digest
+                return ServerDigest.parts(tools, personasInMCP: personasHere, cache: DigestCache(directory: digestDir), facts: facts, stop: callStarted)
             }
-            var received = 0
-            var failure: FriendlyError?
-            var waiting: [PendingRecording] = []
-            if cloud !== mirror {
-                do {
-                    let changed = try await cloud.push()
-                    received = try await cloud.pull(includeMeetings: false)
-                    let shared = try await cloud.pushShared(people: true, personas: personas, stop: callStarted, digest: serverIsMain ? makeDigest() : nil)
-                    if changed + shared > 0 { Log.info("Sync: \(changed + shared) changes sent to \(place)") }
-                    // The server's tools read what time the Mac last sent everything: never the age of one record.
-                    if serverIsMain, let connection { try? await ServerClient(connection).putConfig(owner: owner, personasInMCP: personasHere, syncedAt: Date()) }
-                    if received > 0 { Log.info("Sync: \(received) changes from your other devices") }
-                } catch {
-                    failure = FriendlyError(error, context: .syncing, service: place)
-                    Log.error("Sync with \(place) failed: \(error)")
-                }
-                waiting = (try? await cloud.recordingNotices()) ?? []
-            }
-            if let mirror {
-                do {
-                    let copied = try await mirror.push()
-                    if copied > 0 { Log.info("Server: \(copied) meetings copied for ChatGPT and share links") }
-                    // What the server's MCP reads besides the meetings, one way, by the same allowed-field lists:
-                    // never during a call, when the disk and the network belong to the recording.
-                    if !calling {
-                        let shared = try await mirror.pushShared(people: true, personas: personas, mirror: true, stop: callStarted, digest: makeDigest())
-                        if shared > 0 { Log.info("Server: \(shared) people, tasks, points, coach, and chat records copied") }
-                        if !callStarted(), let connection {
-                            try? await ServerClient(connection).putConfig(owner: owner, personasInMCP: personasHere, syncedAt: Date())
-                        }
-                    }
-                } catch {
-                    Log.error("Copying meetings to your server failed: \(error)")
-                }
-            }
-            // The digest counts as sent only when every part arrived; else the same copy goes again at the next sync,
-            // not made again, while nothing it stands on changed.
-            let server = serverIsMain ? cloud : mirror
-            var digestArrived = false
-            if let digest, let server { digestArrived = (try? await server.holds(digest)) == true }
+        }
+        // The pass itself (`SyncPass`): the main store unless only the server's copy runs, then the server's copy.
+        let inputs = SyncPass.Inputs(main: cloud !== mirror ? cloud : nil, mirror: mirror, serverIsMain: serverIsMain, place: place,
+                                     connection: connection, owner: owner, personasInMCP: personasHere, personas: personas,
+                                     calling: calling, callStarted: callStarted, keptDigest: digestKept, makeDigest: makeDigest)
+        Task.detached(priority: .utility) {
+            let result = await SyncPass.run(inputs)
+            let received = result.received, failure = result.failure, waiting = result.waiting
+            let digest = result.digest, digestArrived = result.digestArrived
             await MainActor.run {
                 if digestArrived {
                     Self.digestSent = digestKey
