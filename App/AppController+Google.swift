@@ -279,7 +279,8 @@ extension AppController {
                 return GeminiPeople.link(notes, library: library, people: people, directory: cache.profiles, paths: paths, stop: { flag.recording })
             }.value
             guard let out else { return }
-            if out.stopped { geminiPeopleAfterCall = true }
+            // A call stopped the run: after that call, or at once when it already ended.
+            if out.stopped { if isRecording { geminiPeopleAfterCall = true } else { geminiPeopleAgain = true } }
             // Counts only: never a name or an address.
             if out.made + out.joined + out.failed > 0 {
                 Log.info("Gemini people: \(out.made) made, \(out.joined) given an address, \(out.left) held back, \(out.failed) not saved")
