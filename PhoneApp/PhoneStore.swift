@@ -560,10 +560,10 @@ final class PhoneStore {
         syncStatus.keepUploads(for: Set(outbox.entries.filter { !$0.isSent }.map(\.id)))
     }
 
-    /// Removes recordings whose meeting has arrived from the Mac, with their audio. Only an in-person meeting
-    /// counts: ids are start times, and a call on the Mac can start in the same second as a room recording.
+    /// Removes recordings whose meeting has arrived from the Mac, with their audio. Only an in-person meeting or a
+    /// phone call counts: ids are start times, and a call on the Mac can start in the same second as a recording.
     private func settleOutbox() {
-        let done = outbox.settle(arrived: Set(meetings.lazy.filter { $0.platform == .inPerson }.map(\.id)))
+        let done = outbox.settle(arrived: Outbox.arrived(meetings))
         guard !done.isEmpty else { return }
         let dir = recordingsFolder
         for id in done { RoomAudio.delete(id, in: dir) }

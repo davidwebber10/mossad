@@ -195,4 +195,25 @@ final class OutboxTests: XCTestCase {
         XCTAssertFalse(o.canRemove("a", active: "a", busy: []))
         XCTAssertTrue(o.canRemove("b", active: "a", busy: []))
     }
+
+    private func meeting(_ id: String, _ platform: Platform) -> CallRecord {
+        CallRecord(id: id, platform: platform, bundleID: "iphone", start: t0, end: t0 + 600, status: .written)
+    }
+
+    func testAPhoneCallThatCameBackSettlesItsEntry() {
+        let call = PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 600, title: nil, kind: .phoneCall, person: "Sam Carter", personID: "p1")
+        var o = Outbox()
+        o.addFinished(call)
+        XCTAssertEqual(o.settle(arrived: Outbox.arrived([meeting("20270115-090000", .zoom)])), [], "a Mac call of the same second is another meeting")
+        XCTAssertEqual(o.settle(arrived: Outbox.arrived([meeting("20270115-090000", .unknown)])), [], "a platform this build does not know is no proof")
+        XCTAssertEqual(o.settle(arrived: Outbox.arrived([meeting("20270115-090000", .phoneCall)])), ["20270115-090000"])
+        XCTAssertEqual(o.entries, [])
+    }
+
+    func testAPhoneCallThatAnOlderMacMadeInPersonStillSettles() {
+        let call = PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 600, title: nil, kind: .phoneCall, person: "Sam Carter", personID: "p1")
+        var o = Outbox()
+        o.addFinished(call)
+        XCTAssertEqual(o.settle(arrived: Outbox.arrived([meeting("20270115-090000-iphone", .inPerson)])), ["20270115-090000"])
+    }
 }
