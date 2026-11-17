@@ -153,6 +153,10 @@ private struct Sidebar: View {
             }
             Spacer(minLength: Space.m)
             SidebarStatus()
+            // With two profiles or more: the active one, and the menu that changes it.
+            if let menu = controller.profileMenu {
+                ProfileSwitcher(menu: menu).padding(.top, Space.s)
+            }
         }
         .padding(Chrome.sidebarPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

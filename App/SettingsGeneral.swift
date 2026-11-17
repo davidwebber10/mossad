@@ -56,6 +56,7 @@ struct GeneralSettings: View {
                     Button("Edit…") { editingDomains = true }.buttonStyle(.settings)
                 }
             }
+            ProfileSettingsGroup()
             ShortcutSettings()
             LabelColumn(label: "Permissions", note: permissions.allGood ? nil : "\(permissions.problemCount) need\(permissions.problemCount == 1 ? "s" : "") attention",
                         labelTopPadding: 10) {

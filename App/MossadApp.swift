@@ -132,6 +132,9 @@ struct MenuBarIcon: View {
             RecordingMenuBarIcon(since: since)
         } else if Rehearsal.isOn {
             Image(nsImage: Self.rehearsal)
+        } else if let menu = controller.profileMenu {
+            // With two profiles or more, the bars carry the active profile's color as a small mark.
+            Image(nsImage: Self.marked(on: controller.isOn, color: menu.color.nsColor, name: menu.title))
         } else {
             Image(nsImage: controller.isOn ? Self.idle : Self.off)
         }
@@ -191,6 +194,20 @@ struct MenuBarIcon: View {
         return image
     }()
 
+    /// The bars with a 5 pt dot of the profile's color at the bottom trailing corner. Drawn when the menu bar
+    /// draws it, so the bars follow its light or dark look.
+    static func marked(on: Bool, color: NSColor, name: String) -> NSImage {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
+            drawBars(NSColor.labelColor.withAlphaComponent(on ? 1 : 0.35), in: rect)
+            color.setFill()
+            NSBezierPath(ovalIn: NSRect(x: rect.width - 5, y: 0, width: 5, height: 5)).fill()
+            return true
+        }
+        image.isTemplate = false
+        image.accessibilityDescription = on ? "Mossad, profile \(name)" : "Mossad is off, profile \(name)"
+        return image
+    }
+
     /// Drawn when the menu bar draws it, so the time follows its light or dark look.
     static func recording(_ time: String) -> NSImage {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
@@ -245,7 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-        source.setEventHandler { MainActor.assumeIsolated { NSApp.terminate(nil) } }
+        source.setEventHandler { MainActor.assumeIsolated { Self.quit() } }
         source.resume()
         terminateSignal = source
         let event = NSAppleEventManager.shared().currentAppleEvent
@@ -268,6 +285,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Quit, logout, or a restart during a call ends the recording cleanly first, with no question. After 3 s the
     /// app quits anyway; the next launch recovers what reached the disk.
+    /// Quits also with a sheet open: a window with a sheet attached keeps `terminate` from going on, so a quit
+    /// from the system or a switch of profile would wait for a click on the sheet.
+    @MainActor
+    static func quit() {
+        AppController.current?.profileSheet = nil
+        for window in NSApp.windows { if let sheet = window.attachedSheet { window.endSheet(sheet) } }
+        NSApp.terminate(nil)
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // An answer to a card that is on its way to the disk gets there.
         AppController.answerWriter.sync {}

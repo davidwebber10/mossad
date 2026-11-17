@@ -393,6 +393,8 @@ final class AppController: ObservableObject {
     @Published var profiles: ProfileRegistry.Loaded = AppIdentity.current.registry
     /// Why the last change of profiles did not happen, in words for the owner.
     @Published var profileProblem: String?
+    /// The sheet of Settings > General > Profiles that is open.
+    @Published var profileSheet: ProfileSheet?
     /// A preview, Rehearsal, or a second copy on the same folder: it shows the meetings and records, processes,
     /// and syncs nothing.
     private(set) var isInert = false

@@ -120,7 +120,7 @@ extension AppController {
                     return
                 }
                 Log.info("Profiles: quitting after \(Self.seconds(since: start)) s")
-                NSApp.terminate(nil)
+                AppDelegate.quit()
             case .restore, .stay:
                 back("Could not switch. Mossad stays in \(activeProfile.name).")
             }
