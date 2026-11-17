@@ -24,8 +24,10 @@ public actor CloudKitStore: RecordStore {
     }
 
     /// A record in this store's own zone: the profile's, never another's.
-    func record(_ r: StoredRecord) -> CKRecord {
-        let record = CKRecord(recordType: r.type, recordID: id(r.name))
+    func record(_ r: StoredRecord) -> CKRecord { Self.record(r, in: zone) }
+
+    static func record(_ r: StoredRecord, in zone: CKRecordZone.ID) -> CKRecord {
+        let record = CKRecord(recordType: r.type, recordID: CKRecord.ID(recordName: r.name, zoneID: zone))
         for (key, value) in r.fields {
             switch value {
             case .string(let s): record[key] = s
