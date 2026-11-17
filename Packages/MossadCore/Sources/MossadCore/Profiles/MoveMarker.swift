@@ -3,14 +3,15 @@ import Foundation
 /// The one file of a move in the target's `Incoming/<id>`. The first profile writes it as `move.json`, last, into a
 /// whole copy; the target takes it over with one rename to `claimed.json` and then writes its own half into it. The
 /// owner's Cancel takes it back with a rename to `cancelled.json`. Only one of the two renames can succeed, so a claim
-/// and a cancel never both win. It holds ids, speaker keys, sizes, hashes, and file names: never a title, a name, or
-/// an address.
+/// and a cancel never both win. It holds ids, a token, speaker keys, sizes, hashes, and file names: never a title, a
+/// name, or an address. The token is made once for each move and is also in the first profile's ledger: a marker of
+/// another move (another profile's meeting with the same id, or an older move of this id) is never acted on.
 public struct MoveMarker: Codable, Equatable, Sendable {
     public static let fileName = "move.json", claimedName = "claimed.json", cancelledName = "cancelled.json"
     public static let partSuffix = ".part", callFolder = "call", chatsFolder = "chats", arrivalName = "arrival.json"
     public static let currentVersion = 1
-    public static let allowedKeys: Set<String> = ["version", "callID", "from", "to", "made", "files", "path", "size", "sha256",
-                                                  "ownerKeys", "intake", "finalID", "refusal", "chatIDs"]
+    public static let allowedKeys: Set<String> = ["version", "callID", "from", "to", "made", "token", "files", "path", "size", "sha256",
+                                                  "ownerKeys", "intake", "finalID", "refusal", "count", "chatIDs"]
 
     public struct File: Codable, Equatable, Sendable {
         public var path: String
@@ -32,6 +33,8 @@ public struct MoveMarker: Codable, Equatable, Sendable {
     public var from: String
     public var to: String
     public var made: Date
+    /// Made once for each move, and kept in the first profile's ledger.
+    public var token: String
     /// Paths under `Incoming/<id>`: "call/call.json", "chats/<uuid>.json".
     public var files: [File]
     /// The speaker keys that were the owner in the first profile.
@@ -40,36 +43,56 @@ public struct MoveMarker: Codable, Equatable, Sendable {
     public var intake: Intake?
     public var finalID: String?
     public var refusal: Refusal?
+    /// The files the target checked in its `Audio` against `files` (count, sizes, hashes) before it wrote `taken`.
+    public var count: Int?
     /// The chat id of the first profile to the id it gets here.
     public var chatIDs: [String: String]?
 
-    public init(callID: String, from: String, to: String, made: Date, files: [File], ownerKeys: [String]) {
+    public init(callID: String, from: String, to: String, made: Date, token: String, files: [File], ownerKeys: [String]) {
         version = Self.currentVersion
         self.callID = callID
         self.from = from
         self.to = to
         self.made = made
+        self.token = token
         self.files = files
         self.ownerKeys = ownerKeys
     }
 
     /// What a side sees. A file that does not decode, or of a newer version, is not known: never acted on.
-    public enum Look: Equatable, Sendable { case missing, incoming(MoveMarker), claimed(MoveMarker), unknown }
+    /// `cancelled`: the owner took it back (`cancelled.json`); nil when that file does not read.
+    public enum Look: Equatable, Sendable { case missing, incoming(MoveMarker), claimed(MoveMarker), cancelled(MoveMarker?), unknown }
+
+    /// The marker of this ledger's move: its token, its call, and its target.
+    public func isMine(of out: MoveOut) -> Bool { token == out.token && callID == out.callID && to == out.to }
+
+    /// The target took the meeting in and checked every file of `files` in its `Audio`.
+    public var heldWhole: Bool { intake == .taken && !files.isEmpty && count == files.count }
 
     public static func folder(_ callID: String, in target: Paths) -> URL {
         target.incoming.appendingPathComponent(callID)
     }
 
-    /// Reads `claimed.json`, else `move.json`, and nothing else. No folder, or neither file, is `.missing`.
-    public static func look(_ folder: URL) -> Look {
-        let fm = FileManager.default
-        for (name, claimed) in [(claimedName, true), (fileName, false)] {
-            let url = folder.appendingPathComponent(name)
-            guard fm.fileExists(atPath: url.path) else { continue }
-            guard let data = try? Data(contentsOf: url), let marker = decode(data) else { return .unknown }
-            return claimed ? .claimed(marker) : .incoming(marker)
+    /// Reads `claimed.json`, else `move.json`, else `cancelled.json`. The target's claim can come between the first two
+    /// tests, so `claimed.json` is tested again when `move.json` is not there. No folder, or no file, is `.missing`.
+    /// `afterFirstTest` is for a test: it runs between the first two tests.
+    public static func look(_ folder: URL, afterFirstTest: (() -> Void)? = nil) -> Look {
+        if let seen = read(folder.appendingPathComponent(claimedName), claimed: true) { return seen }
+        afterFirstTest?()
+        if let seen = read(folder.appendingPathComponent(fileName), claimed: false) { return seen }
+        if let seen = read(folder.appendingPathComponent(claimedName), claimed: true) { return seen }
+        let cancelled = folder.appendingPathComponent(cancelledName)
+        if FileManager.default.fileExists(atPath: cancelled.path) {
+            return .cancelled((try? Data(contentsOf: cancelled)).flatMap(decode))
         }
         return .missing
+    }
+
+    /// Nil when the file is not there.
+    private static func read(_ url: URL, claimed: Bool) -> Look? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        guard let data = try? Data(contentsOf: url), let marker = decode(data) else { return .unknown }
+        return claimed ? .claimed(marker) : .incoming(marker)
     }
 
     private struct Versioned: Decodable { var version: Int }
@@ -114,21 +137,27 @@ public struct MoveOut: Codable, Equatable, Sendable {
     public var to: String
     public var state: State
     public var started: Date
+    /// Made once for this move; the marker carries it.
+    public var token: String
     public var afterCall: Bool
     /// The removal steps that ended, by their raw names (a newer build's step is kept as text).
     public var removed: [String]
     /// Why, saved with the state `.cancelling`.
     public var cancel: MovePlan.Cancel?
 
-    public init(callID: String, to: String, started: Date, afterCall: Bool = false) {
+    public init(callID: String, to: String, started: Date, afterCall: Bool = false, token: String = MoveOut.newToken()) {
         version = Self.currentVersion
         self.callID = callID
         self.to = to
         state = .copying
         self.started = started
+        self.token = token
         self.afterCall = afterCall
         removed = []
     }
+
+    /// A random token: two UUIDs, no id of the Mac or the owner.
+    public static func newToken() -> String { (UUID().uuidString + UUID().uuidString).replacingOccurrences(of: "-", with: "").lowercased() }
 
     /// The first removal step that has not ended; nil when all have.
     public var nextStep: Step? { Step.allCases.first { !removed.contains($0.rawValue) } }

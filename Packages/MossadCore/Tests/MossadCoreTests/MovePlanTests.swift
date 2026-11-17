@@ -3,7 +3,9 @@ import XCTest
 
 final class MovePlanTests: XCTestCase {
     private let id = "20261101-100000"
+    private let work = "1a2b3c4d"
     private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+    private let mine = "token-a", theirs = "token-c"
 
     private func temp() -> Paths {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("MovePlanTests-\(UUID().uuidString)")
@@ -11,20 +13,43 @@ final class MovePlanTests: XCTestCase {
         return Paths(root: url)
     }
 
-    private func marker(intake: MoveMarker.Intake? = nil, finalID: String? = nil, refusal: MoveMarker.Refusal? = nil) -> MoveMarker {
-        var m = MoveMarker(callID: id, from: "default", to: "1a2b3c4d", made: t0,
+    private func ledger(_ state: MoveOut.State, token: String? = nil) -> MoveOut {
+        var out = MoveOut(callID: id, to: work, started: t0, token: token ?? mine)
+        out.state = state
+        return out
+    }
+
+    private func marker(token: String? = nil, intake: MoveMarker.Intake? = nil, finalID: String? = nil, refusal: MoveMarker.Refusal? = nil,
+                        count: Int? = nil) -> MoveMarker {
+        var m = MoveMarker(callID: id, from: "default", to: work, made: t0, token: token ?? mine,
                            files: [.init(path: "call/call.json", size: 120, sha256: String(repeating: "a", count: 64))], ownerKeys: ["me:A"])
         m.intake = intake
         m.finalID = finalID
         m.refusal = refusal
+        m.count = count
         return m
     }
 
-    /// Every look of the marker that a side can see.
+    private var held: MoveMarker { marker(intake: .taken, finalID: id, count: 1) }
+
+    /// Every look of the marker that a side can see, mine and another move's.
     private var looks: [MoveMarker.Look] {
-        [.missing, .incoming(marker()), .claimed(marker()), .claimed(marker(intake: .takingIn, finalID: id)),
-         .claimed(marker(intake: .taken, finalID: id)), .claimed(marker(intake: .refused, refusal: .idTaken)),
-         .claimed(marker(intake: .refused, refusal: .unreadable)), .claimed(marker(intake: .refused, refusal: .notWhole)), .unknown]
+        var out: [MoveMarker.Look] = [.missing, .unknown, .cancelled(marker()), .cancelled(marker(token: theirs)), .cancelled(nil)]
+        for t in [mine, theirs] {
+            out += [.incoming(marker(token: t)), .claimed(marker(token: t)), .claimed(marker(token: t, intake: .takingIn, finalID: id)),
+                    .claimed(marker(token: t, intake: .taken, finalID: id, count: 1)), .claimed(marker(token: t, intake: .taken, finalID: id)),
+                    .claimed(marker(token: t, intake: .refused, refusal: .idTaken)), .claimed(marker(token: t, intake: .refused, refusal: .unreadable)),
+                    .claimed(marker(token: t, intake: .refused, refusal: .notWhole))]
+        }
+        return out
+    }
+
+    private func isMine(_ look: MoveMarker.Look) -> Bool {
+        switch look {
+        case .incoming(let m), .claimed(let m): m.token == mine
+        case .cancelled(let m): m?.token == mine
+        default: false
+        }
     }
 
     private func keys(of json: Any) -> Set<String> {
@@ -39,12 +64,8 @@ final class MovePlanTests: XCTestCase {
     // MARK: The files
 
     func testTheMarkerHoldsIDsSizesAndHashesOnly() throws {
-        var m = MoveMarker(callID: id, from: "default", to: "1a2b3c4d", made: t0,
-                           files: [.init(path: "call/call.json", size: 120, sha256: String(repeating: "a", count: 64)),
-                                   .init(path: "chats/\(UUID().uuidString).json", size: 300, sha256: String(repeating: "b", count: 64))],
-                           ownerKeys: ["me:A"])
-        m.intake = .taken
-        m.finalID = id + "-moved"
+        var m = marker(intake: .taken, finalID: id + "-moved", count: 1)
+        m.files.append(.init(path: "chats/\(UUID().uuidString).json", size: 300, sha256: String(repeating: "b", count: 64)))
         m.chatIDs = [UUID().uuidString: UUID().uuidString]
         let folder = temp().root
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -59,14 +80,29 @@ final class MovePlanTests: XCTestCase {
         XCTAssertEqual(MoveMarker.look(folder), .claimed(m))
     }
 
+    func testEachMoveHasItsOwnToken() {
+        let a = MoveOut(callID: id, to: work, started: t0), b = MoveOut(callID: id, to: work, started: t0)
+        XCTAssertNotEqual(a.token, b.token)
+        XCTAssertGreaterThanOrEqual(a.token.count, 32)
+        XCTAssertTrue(marker().isMine(of: ledger(.waiting)))
+        XCTAssertFalse(marker(token: theirs).isMine(of: ledger(.waiting)))
+        var other = marker()
+        other.to = "5e6f7a8b"
+        XCTAssertFalse(other.isMine(of: ledger(.waiting)), "another target")
+        other = marker()
+        other.callID = id + "-moved"
+        XCTAssertFalse(other.isMine(of: ledger(.waiting)), "another call")
+    }
+
     func testANewerFileIsReadAndNeverActedOn() throws {
         let paths = temp()
         let folder = MoveMarker.folder(id, in: paths)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try Data(#"{"version":2,"callID":"20261101-100000","new":true}"#.utf8).write(to: folder.appendingPathComponent(MoveMarker.fileName))
         XCTAssertEqual(MoveMarker.look(folder), .unknown)
-        XCTAssertEqual(MovePlan.target(.unknown, callFolder: true, audio: [], ownRemoval: false), .nothing)
-        XCTAssertEqual(MovePlan.source(.waiting, marker: .unknown, part: false, target: .live), .wait)
+        XCTAssertEqual(MovePlan.target(.unknown, folder: id, me: work, callFolder: true, audio: [], ownRemoval: false, held: nil), .nothing)
+        XCTAssertEqual(MovePlan.source(ledger(.waiting), marker: .unknown, part: false, target: .live), .wait)
+        XCTAssertEqual(MovePlan.source(ledger(.done), marker: .unknown, part: false, target: .live), .nothing, "never cleans up a newer marker")
 
         try FileManager.default.createDirectory(at: paths.moves, withIntermediateDirectories: true)
         try Data(#"{"version":2,"callID":"20261101-100000"}"#.utf8).write(to: MoveOut.url(id, paths: paths))
@@ -75,7 +111,6 @@ final class MovePlanTests: XCTestCase {
         XCTAssertTrue(MoveOut.all(paths).moves.isEmpty)
         XCTAssertEqual(MoveOut.leftIDs(paths), [id])
 
-        // A file that does not decode is not known either: not "missing", so nothing is decided from it.
         try Data("not json".utf8).write(to: folder.appendingPathComponent(MoveMarker.fileName))
         XCTAssertEqual(MoveMarker.look(folder), .unknown)
     }
@@ -93,12 +128,21 @@ final class MovePlanTests: XCTestCase {
 
         XCTAssertTrue(MoveMarker.takeBack(second))
         XCTAssertFalse(MoveMarker.claim(second))
-        XCTAssertEqual(MoveMarker.look(second), .missing)
+        XCTAssertEqual(MoveMarker.look(second), .cancelled(marker()), "taken back is its own look")
+    }
+
+    /// I1: B's claim can come between the two tests of `look`. The look tests `claimed.json` again.
+    func testAClaimBetweenTheTwoTestsOfTheLookIsSeen() throws {
+        let folder = MoveMarker.folder(id, in: temp())
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try marker().save(in: folder, claimed: false)
+        let seen = MoveMarker.look(folder, afterFirstTest: { XCTAssertTrue(MoveMarker.claim(folder)) })
+        XCTAssertEqual(seen, .claimed(marker()))
     }
 
     func testTheLedgerKeepsItsStepsAndTheIDsThatLeft() throws {
         let paths = temp()
-        var out = MoveOut(callID: id, to: "1a2b3c4d", started: t0)
+        var out = MoveOut(callID: id, to: work, started: t0)
         XCTAssertEqual(out.state, .copying)
         out.state = .removing
         out.removed = ["voices", "people"]
@@ -108,10 +152,10 @@ final class MovePlanTests: XCTestCase {
         out.removed = MoveOut.Step.allCases.map(\.rawValue)
         XCTAssertNil(out.nextStep)
 
-        var done = MoveOut(callID: "20261102-090000", to: "1a2b3c4d", started: t0)
+        var done = MoveOut(callID: "20261102-090000", to: work, started: t0)
         done.state = .done
         try done.save(paths)
-        var waiting = MoveOut(callID: id, to: "1a2b3c4d", started: t0)
+        var waiting = MoveOut(callID: id, to: work, started: t0)
         waiting.state = .waiting
         try waiting.save(paths)
         XCTAssertEqual(MoveOut.leftIDs(paths), [id, "20261102-090000"])
@@ -131,65 +175,137 @@ final class MovePlanTests: XCTestCase {
         XCTAssertTrue(MoveOut.leftIDs(paths).isEmpty)
         XCTAssertFalse(MoveOut.hasWork(paths))
         XCTAssertEqual(MoveMarker.look(MoveMarker.folder(id, in: paths)), .missing)
-        XCTAssertEqual(paths.incoming.lastPathComponent, "Incoming")
-        XCTAssertEqual(paths.moves.lastPathComponent, "Moves")
     }
 
-    // MARK: The tables
+    // MARK: The first profile
 
-    func testTheSourcesNextStepForEachStateMarkerAndTarget() {
-        typealias S = MovePlan.SourceStep
-        for look in looks {
-            for part in [false, true] {
-                XCTAssertEqual(MovePlan.source(.copying, marker: look, part: part, target: .live), .copy)
-                XCTAssertEqual(MovePlan.source(.copying, marker: look, part: part, target: .gone), .cancel(.targetGone))
-                XCTAssertEqual(MovePlan.source(.copied, marker: look, part: part, target: .gone), .cancel(.targetGone))
-                XCTAssertEqual(MovePlan.source(.removing, marker: look, part: part, target: .live), .remove)
-                XCTAssertEqual(MovePlan.source(.removing, marker: look, part: part, target: .gone), .remove)
-                XCTAssertEqual(MovePlan.source(.cancelling, marker: look, part: part, target: .live), .finishCancel)
-                XCTAssertEqual(MovePlan.source(.cancelling, marker: look, part: part, target: .gone), .finishCancel)
-                let done: S = look == .missing ? .nothing : .cleanUp
-                XCTAssertEqual(MovePlan.source(.done, marker: look, part: part, target: .live), done)
-                XCTAssertEqual(MovePlan.source(.done, marker: look, part: part, target: .gone), done)
+    /// C1: a profile that is gone or `removing` holds nothing, whatever its marker says.
+    func testAGoneTargetIsNotHeldEvenWhenItsMarkerSaysTaken() {
+        XCTAssertEqual(MovePlan.source(ledger(.waiting), marker: .claimed(held), part: false, target: .gone), .cancel(.targetGone))
+        XCTAssertEqual(MovePlan.source(ledger(.waiting), marker: .claimed(held), part: false, target: .unknown), .wait)
+        XCTAssertEqual(MovePlan.source(ledger(.waiting), marker: .claimed(held), part: false, target: .live), .remove)
+    }
+
+    /// C2: only a marker of this move (its token, call, and target) lets the first profile remove or clean up.
+    func testAMarkerOfAnotherMoveIsNeverActedOn() {
+        let other = marker(token: theirs, intake: .taken, finalID: id, count: 1)
+        for state in MoveOut.State.allCases {
+            for target in [MovePlan.Target.live, .gone, .unknown] {
+                let step = MovePlan.source(ledger(state), marker: .claimed(other), part: false, target: target)
+                if state == .removing { XCTAssertEqual(step, .remove); continue }
+                XCTAssertNotEqual(step, .cleanUp(removeIncoming: true), "\(state) \(target)")
+                XCTAssertNotEqual(step, .finishCancel(removeIncoming: true), "\(state) \(target)")
+                XCTAssertNotEqual(step, .takeBack, "\(state) \(target)")
+                if state != .removing { XCTAssertNotEqual(step, .remove, "\(state) \(target)") }
             }
         }
-        XCTAssertEqual(MovePlan.source(.copied, marker: .missing, part: true, target: .live), .publish)
-        XCTAssertEqual(MovePlan.source(.copied, marker: .missing, part: false, target: .live), .copy)
-        for look in looks where look != .missing {
-            XCTAssertEqual(MovePlan.source(.copied, marker: look, part: false, target: .live), .wait)
-            XCTAssertEqual(MovePlan.source(.copied, marker: look, part: true, target: .live), .wait)
-        }
-        for target in [MovePlan.Target.live, .gone] {
-            XCTAssertEqual(MovePlan.source(.waiting, marker: .claimed(marker(intake: .taken, finalID: id)), part: false, target: target), .remove)
-            XCTAssertEqual(MovePlan.source(.waiting, marker: .claimed(marker(intake: .refused, refusal: .idTaken)), part: false, target: target),
-                           .cancel(.refusedIDTaken))
-            XCTAssertEqual(MovePlan.source(.waiting, marker: .claimed(marker(intake: .refused, refusal: .unreadable)), part: false, target: target),
-                           .cancel(.refusedUnreadable))
-            XCTAssertEqual(MovePlan.source(.waiting, marker: .claimed(marker(intake: .refused, refusal: .notWhole)), part: false, target: target),
-                           .cancel(.refusedNotWhole))
-        }
-        for look in [MoveMarker.Look.incoming(marker()), .claimed(marker()), .claimed(marker(intake: .takingIn, finalID: id)), .unknown] {
-            XCTAssertEqual(MovePlan.source(.waiting, marker: look, part: false, target: .live), .wait)
-            XCTAssertEqual(MovePlan.source(.waiting, marker: look, part: false, target: .gone), .cancel(.targetGone))
-        }
-        XCTAssertEqual(MovePlan.source(.waiting, marker: .missing, part: false, target: .live), .cancel(.lost))
-        XCTAssertEqual(MovePlan.source(.waiting, marker: .missing, part: false, target: .gone), .cancel(.targetGone))
+        XCTAssertEqual(MovePlan.source(ledger(.done), marker: .claimed(other), part: false, target: .live), .nothing)
+        XCTAssertEqual(MovePlan.source(ledger(.waiting), marker: .claimed(other), part: false, target: .live), .wait)
+        XCTAssertEqual(MovePlan.source(ledger(.copied), marker: .incoming(marker(token: theirs)), part: true, target: .live), .wait)
     }
 
-    func testOnlyATakenMarkerLetsTheSourceRemove() {
-        for state in [MoveOut.State.copying, .copied, .waiting] {
+    func testATakenMarkerWithoutTheCountOfTheFilesIsNotHeld() {
+        XCTAssertEqual(MovePlan.source(ledger(.waiting), marker: .claimed(marker(intake: .taken, finalID: id)), part: false, target: .live), .wait)
+        XCTAssertEqual(MovePlan.source(ledger(.waiting), marker: .claimed(marker(intake: .taken, finalID: id, count: 0)), part: false, target: .live),
+                       .wait)
+    }
+
+    func testTheSourcesNextStepForEachStateMarkerAndTarget() {
+        let l = ledger(.copying)
+        for look in looks {
+            for part in [false, true] {
+                XCTAssertEqual(MovePlan.source(l, marker: look, part: part, target: .live), .copy)
+                XCTAssertEqual(MovePlan.source(l, marker: look, part: part, target: .gone), .cancel(.targetGone))
+                XCTAssertEqual(MovePlan.source(l, marker: look, part: part, target: .unknown), .wait)
+                XCTAssertEqual(MovePlan.source(ledger(.copied), marker: look, part: part, target: .gone), .cancel(.targetGone))
+                XCTAssertEqual(MovePlan.source(ledger(.copied), marker: look, part: part, target: .unknown), .wait)
+            }
+        }
+        // copied, live
+        XCTAssertEqual(MovePlan.source(ledger(.copied), marker: .missing, part: true, target: .live), .publish)
+        XCTAssertEqual(MovePlan.source(ledger(.copied), marker: .missing, part: false, target: .live), .copy)
+        XCTAssertEqual(MovePlan.source(ledger(.copied), marker: .incoming(marker()), part: false, target: .live), .markWaiting)
+        XCTAssertEqual(MovePlan.source(ledger(.copied), marker: .claimed(marker()), part: false, target: .live), .markWaiting)
+        XCTAssertEqual(MovePlan.source(ledger(.copied), marker: .cancelled(marker()), part: false, target: .live), .cancel(.byOwner))
+        for look in [MoveMarker.Look.unknown, .cancelled(nil), .incoming(marker(token: theirs)), .claimed(marker(token: theirs))] {
+            XCTAssertEqual(MovePlan.source(ledger(.copied), marker: look, part: true, target: .live), .wait)
+        }
+        // waiting
+        for target in [MovePlan.Target.live, .gone, .unknown] {
+            XCTAssertEqual(MovePlan.source(ledger(.waiting), marker: .claimed(marker(intake: .refused, refusal: .idTaken)), part: false, target: target),
+                           .cancel(.refusedIDTaken))
+            XCTAssertEqual(MovePlan.source(ledger(.waiting), marker: .claimed(marker(intake: .refused, refusal: .unreadable)), part: false, target: target),
+                           .cancel(.refusedUnreadable))
+            XCTAssertEqual(MovePlan.source(ledger(.waiting), marker: .claimed(marker(intake: .refused, refusal: .notWhole)), part: false, target: target),
+                           .cancel(.refusedNotWhole))
+            XCTAssertEqual(MovePlan.source(ledger(.waiting), marker: .cancelled(marker()), part: false, target: target), .cancel(.byOwner))
+        }
+        for look in [MoveMarker.Look.incoming(marker()), .claimed(marker()), .claimed(marker(intake: .takingIn, finalID: id)), .unknown,
+                     .claimed(marker(token: theirs)), .missing] {
+            XCTAssertEqual(MovePlan.source(ledger(.waiting), marker: look, part: false, target: .gone), .cancel(.targetGone))
+            XCTAssertEqual(MovePlan.source(ledger(.waiting), marker: look, part: false, target: .unknown), .wait)
+        }
+        for look in [MoveMarker.Look.incoming(marker()), .claimed(marker()), .claimed(marker(intake: .takingIn, finalID: id)), .unknown,
+                     .claimed(marker(token: theirs)), .cancelled(nil)] {
+            XCTAssertEqual(MovePlan.source(ledger(.waiting), marker: look, part: false, target: .live), .wait)
+        }
+        XCTAssertEqual(MovePlan.source(ledger(.waiting), marker: .missing, part: false, target: .live), .cancel(.lost))
+        // removing: each step, then the clean-up of its own marker only
+        for look in looks {
+            for target in [MovePlan.Target.live, .gone, .unknown] {
+                XCTAssertEqual(MovePlan.source(ledger(.removing), marker: look, part: false, target: target), .remove)
+                var last = ledger(.removing)
+                last.removed = MoveOut.Step.allCases.map(\.rawValue)
+                let takenMine: Bool = if case .claimed(let m) = look { m.token == mine && m.intake == .taken } else { false }
+                XCTAssertEqual(MovePlan.source(last, marker: look, part: false, target: target), .cleanUp(removeIncoming: takenMine))
+            }
+        }
+        // cancelling
+        XCTAssertEqual(MovePlan.source(ledger(.cancelling), marker: .incoming(marker()), part: false, target: .live), .takeBack)
+        XCTAssertEqual(MovePlan.source(ledger(.cancelling), marker: .claimed(marker()), part: false, target: .live), .wait)
+        XCTAssertEqual(MovePlan.source(ledger(.cancelling), marker: .claimed(marker(intake: .takingIn, finalID: id)), part: false, target: .gone), .wait)
+        XCTAssertEqual(MovePlan.source(ledger(.cancelling), marker: .claimed(held), part: false, target: .live), .finishCancel(removeIncoming: false))
+        XCTAssertEqual(MovePlan.source(ledger(.cancelling), marker: .claimed(marker(intake: .refused, refusal: .idTaken)), part: false, target: .live),
+                       .finishCancel(removeIncoming: true))
+        XCTAssertEqual(MovePlan.source(ledger(.cancelling), marker: .cancelled(marker()), part: false, target: .live), .finishCancel(removeIncoming: true))
+        for look in [MoveMarker.Look.missing, .unknown, .cancelled(nil), .incoming(marker(token: theirs)), .claimed(marker(token: theirs))] {
+            XCTAssertEqual(MovePlan.source(ledger(.cancelling), marker: look, part: true, target: .live), .finishCancel(removeIncoming: false))
+        }
+        // done
+        for look in looks {
+            let takenMine: Bool = if case .claimed(let m) = look { m.token == mine && m.intake == .taken } else { false }
+            XCTAssertEqual(MovePlan.source(ledger(.done), marker: look, part: false, target: .live), takenMine ? .cleanUp(removeIncoming: true) : .nothing)
+        }
+    }
+
+    func testOnlyAWholeTakenMarkerOfThisMoveLetsTheSourceRemove() {
+        for state in [MoveOut.State.copying, .copied, .waiting, .cancelling, .done] {
             for look in looks {
                 for part in [false, true] {
-                    for target in [MovePlan.Target.live, .gone] {
-                        let step = MovePlan.source(state, marker: look, part: part, target: target)
-                        let taken: Bool = if case .claimed(let m) = look { m.intake == .taken } else { false }
-                        if state == .waiting, taken {
+                    for target in [MovePlan.Target.live, .gone, .unknown] {
+                        let step = MovePlan.source(ledger(state), marker: look, part: part, target: target)
+                        let held: Bool = if case .claimed(let m) = look { m.token == mine && m.intake == .taken && m.count == 1 } else { false }
+                        if state == .waiting, held, target == .live {
                             XCTAssertEqual(step, .remove)
                         } else {
                             XCTAssertNotEqual(step, .remove, "\(state) \(look) \(part) \(target)")
                         }
-                        XCTAssertNotEqual(step, .cleanUp, "\(state) \(look) \(part) \(target)")
                     }
+                }
+            }
+        }
+    }
+
+    /// A finished cancel never removes an `Incoming/<id>` that B may still be taking in.
+    func testACancelNeverRemovesAFolderTheTargetIsTakingIn() {
+        for look in looks {
+            for target in [MovePlan.Target.live, .gone, .unknown] {
+                let step = MovePlan.source(ledger(.cancelling), marker: look, part: false, target: target)
+                guard case .finishCancel(true) = step else { continue }
+                switch look {
+                case .cancelled(let m?): XCTAssertEqual(m.token, mine)
+                case .claimed(let m): XCTAssertTrue(m.token == mine && m.intake == .refused, "\(look)")
+                default: XCTFail("removes \(look)")
                 }
             }
         }
@@ -197,32 +313,59 @@ final class MovePlanTests: XCTestCase {
 
     func testARemovalGoesOnWithoutTheTarget() {
         for look in looks {
-            for part in [false, true] {
-                for target in [MovePlan.Target.live, .gone] {
-                    XCTAssertEqual(MovePlan.source(.removing, marker: look, part: part, target: target), .remove)
-                }
+            for target in [MovePlan.Target.live, .gone, .unknown] {
+                XCTAssertEqual(MovePlan.source(ledger(.removing), marker: look, part: false, target: target), .remove)
             }
         }
     }
 
+    // MARK: The target
+
     func testTheTargetsNextStep() {
         let f = id
+        func target(_ look: MoveMarker.Look, callFolder: Bool = true, audio: Set<String> = [], own: Bool = false, held: Bool? = nil) -> MovePlan.TargetStep {
+            MovePlan.target(look, folder: id, me: work, callFolder: callFolder, audio: audio, ownRemoval: own, held: held)
+        }
         for callFolder in [false, true] {
             for audio in [Set<String>(), [f]] {
-                XCTAssertEqual(MovePlan.target(.missing, callFolder: callFolder, audio: audio, ownRemoval: false), .nothing)
-                XCTAssertEqual(MovePlan.target(.unknown, callFolder: callFolder, audio: audio, ownRemoval: false), .nothing)
-                XCTAssertEqual(MovePlan.target(.incoming(marker()), callFolder: callFolder, audio: audio, ownRemoval: true), .wait)
-                XCTAssertEqual(MovePlan.target(.incoming(marker()), callFolder: callFolder, audio: audio, ownRemoval: false), .claim)
-                XCTAssertEqual(MovePlan.target(.claimed(marker()), callFolder: callFolder, audio: audio, ownRemoval: false), .decide)
-                XCTAssertEqual(MovePlan.target(.claimed(marker(intake: .taken, finalID: f)), callFolder: callFolder, audio: audio, ownRemoval: false), .nothing)
-                XCTAssertEqual(MovePlan.target(.claimed(marker(intake: .refused, refusal: .idTaken)), callFolder: callFolder, audio: audio, ownRemoval: false), .nothing)
+                XCTAssertEqual(target(.missing, callFolder: callFolder, audio: audio), .nothing)
+                XCTAssertEqual(target(.unknown, callFolder: callFolder, audio: audio), .nothing)
+                XCTAssertEqual(target(.cancelled(marker()), callFolder: callFolder, audio: audio), .nothing)
+                XCTAssertEqual(target(.incoming(marker()), callFolder: callFolder, audio: audio, own: true), .wait)
+                XCTAssertEqual(target(.incoming(marker()), callFolder: callFolder, audio: audio), .claim)
+                XCTAssertEqual(target(.claimed(marker()), callFolder: callFolder, audio: audio), .decide)
+                XCTAssertEqual(target(.claimed(held), callFolder: callFolder, audio: audio), .nothing)
+                XCTAssertEqual(target(.claimed(marker(intake: .refused, refusal: .idTaken)), callFolder: callFolder, audio: audio), .nothing)
             }
         }
         let takingIn = MoveMarker.Look.claimed(marker(intake: .takingIn, finalID: f))
-        XCTAssertEqual(MovePlan.target(takingIn, callFolder: true, audio: [], ownRemoval: false), .takeIn(as: f))
-        XCTAssertEqual(MovePlan.target(takingIn, callFolder: false, audio: [f], ownRemoval: false), .markTaken)
-        XCTAssertEqual(MovePlan.target(takingIn, callFolder: true, audio: [f], ownRemoval: false), .decide)
-        XCTAssertEqual(MovePlan.target(takingIn, callFolder: false, audio: [], ownRemoval: false), .refuse(.notWhole))
+        XCTAssertEqual(target(takingIn, callFolder: true, audio: []), .takeIn(as: f))
+        XCTAssertEqual(target(takingIn, callFolder: false, audio: [f], held: true), .markTaken)
+        XCTAssertEqual(target(takingIn, callFolder: false, audio: [f], held: false), .refuse(.notWhole))
+        XCTAssertEqual(target(takingIn, callFolder: false, audio: [f], held: nil), .wait, "the files are checked before taken")
+        XCTAssertEqual(target(takingIn, callFolder: true, audio: [f]), .decide)
+        XCTAssertEqual(target(takingIn, callFolder: false, audio: []), .refuse(.notWhole))
+        XCTAssertEqual(target(.claimed(marker(intake: .takingIn))), .decide)
+    }
+
+    func testTheTargetTakesOnlyAMarkerAddressedToIt() {
+        var other = marker()
+        other.to = "5e6f7a8b"
+        XCTAssertEqual(MovePlan.target(.incoming(other), folder: id, me: work, callFolder: true, audio: [], ownRemoval: false, held: nil), .nothing)
+        var named = marker()
+        named.callID = "20261102-090000"
+        XCTAssertEqual(MovePlan.target(.incoming(named), folder: id, me: work, callFolder: true, audio: [], ownRemoval: false, held: nil), .nothing)
+        XCTAssertEqual(MovePlan.target(.claimed(other), folder: id, me: work, callFolder: true, audio: [], ownRemoval: false, held: nil), .nothing)
+    }
+
+    /// I3: a take-in of an id waits while this profile still has a move of that id that is not done.
+    func testATakeInWaitsForTheProfilesOwnMoveOfThatID() {
+        XCTAssertFalse(MovePlan.ownRemoval(nil))
+        for state in MoveOut.State.allCases {
+            XCTAssertEqual(MovePlan.ownRemoval(ledger(state)), state != .done, "\(state)")
+        }
+        XCTAssertEqual(MovePlan.target(.incoming(marker(token: theirs)), folder: id, me: work, callFolder: true, audio: [],
+                                       ownRemoval: MovePlan.ownRemoval(ledger(.waiting)), held: nil), .wait)
     }
 
     func testTheIDThatIsTaken() {
@@ -244,186 +387,13 @@ final class MovePlanTests: XCTestCase {
         XCTAssertTrue(MovePlan.decide(record: r, sizesMatch: true, id: id, taken: []) == (.takingIn, id, nil))
     }
 
-    // MARK: Never in neither
-
-    /// A model of both sides that acts only by `MovePlan.source` and `MovePlan.target`. Every reachable state is a place
-    /// where the Mac can stop; the next launch then takes the step the table gives. A stop inside a copy, the owner's
-    /// Cancel, a target that goes, and each refusal are steps too.
-    private struct World: Hashable {
-        enum Incoming: Hashable { case none, halfPart, wholePart, published(Marker) }
-        enum Marker: Hashable { case move, cancelled, claimed(MoveMarker.Intake?, String?, MoveMarker.Refusal?) }
-        /// nil: no move (never started, or a cancel that ended).
-        var state: MoveOut.State?
-        var removed = 0
-        var incoming = Incoming.none
-        /// The prepared call folder in `Incoming/<id>`.
-        var callFolder = false
-        var targetHas = false
-        var targetLive = true
-        /// What the target holds in `Audio` besides this meeting, and whether the copy reads.
-        var taken: Set<String>
-        var readable: Bool
-        var whole: Bool
-
-        var sourceHas: Bool { removed < MoveOut.Step.allCases.count }
-    }
-
-    private func look(_ w: World) -> MoveMarker.Look {
-        guard case .published(let m) = w.incoming else { return .missing }
-        switch m {
-        case .move: return .incoming(marker())
-        case .cancelled: return .missing
-        case .claimed(let intake, let f, let refusal): return .claimed(marker(intake: intake, finalID: f, refusal: refusal))
-        }
-    }
-
-    private func next(_ w: World) -> [World] {
-        var out: [World] = []
-        let r = CallRecord(id: id, platform: .zoom, bundleID: "us.zoom.xos", start: t0, end: t0 + 60, status: .written)
-        // The first profile.
-        if let state = w.state {
-            let part: Bool = if case .wholePart = w.incoming { true } else if case .halfPart = w.incoming { true } else { false }
-            let step = MovePlan.source(state, marker: look(w), part: part, target: w.targetLive ? .live : .gone)
-            var n = w
-            switch step {
-            case .copy:
-                // A stop inside the copy leaves a half part; a failed copy cancels; a whole one is saved as copied.
-                n.incoming = .halfPart
-                out.append(n)
-                n = w
-                n.state = .cancelling
-                out.append(n)
-                n = w
-                n.incoming = .wholePart
-                n.callFolder = true
-                n.state = .copied
-                out.append(n)
-            case .publish:
-                n.incoming = .published(.move)
-                out.append(n)
-            case .wait:
-                if state == .copied {
-                    n.state = .waiting
-                    out.append(n)
-                }
-            case .remove:
-                if state != .removing {
-                    n.state = .removing
-                } else if w.removed < MoveOut.Step.allCases.count {
-                    n.removed += 1
-                } else {
-                    n.incoming = .none
-                    n.callFolder = false
-                    n.state = .done
-                }
-                out.append(n)
-            case .cleanUp:
-                n.incoming = .none
-                n.callFolder = false
-                out.append(n)
-            case .cancel:
-                n.state = .cancelling
-                out.append(n)
-            case .finishCancel:
-                n.incoming = .none
-                n.callFolder = false
-                n.state = nil
-                out.append(n)
-            case .nothing:
-                break
-            }
-            // The owner's Cancel, while the move is not past its point of no return.
-            if [.copying, .copied, .waiting].contains(state) {
-                var c = w
-                switch w.incoming {
-                case .published(.move):
-                    c.incoming = .published(.cancelled)
-                    c.state = .cancelling
-                    out.append(c)
-                case .published(.claimed):
-                    break
-                default:
-                    c.state = .cancelling
-                    out.append(c)
-                }
-            }
-        }
-        // The target, while it is a profile.
-        if w.targetLive {
-            var n = w
-            switch MovePlan.target(look(w), callFolder: w.callFolder, audio: w.taken.union(w.targetHas ? [id] : []), ownRemoval: false) {
-            case .claim:
-                n.incoming = .published(.claimed(nil, nil, nil))
-                out.append(n)
-            case .decide:
-                let d = MovePlan.decide(record: w.readable ? r : nil, sizesMatch: w.whole, id: id,
-                                        taken: w.taken.union(w.targetHas ? [id] : []))
-                n.incoming = .published(.claimed(d.intake, d.finalID, d.refusal))
-                out.append(n)
-            case .takeIn(let f):
-                n.callFolder = false
-                n.targetHas = true
-                n.taken.insert(f)
-                out.append(n)
-            case .markTaken:
-                if case .published(.claimed(_, let f, _)) = w.incoming { n.incoming = .published(.claimed(.taken, f, nil)) }
-                out.append(n)
-            case .refuse(let why):
-                n.incoming = .published(.claimed(.refused, nil, why))
-                out.append(n)
-            case .wait, .nothing:
-                break
-            }
-            // The owner removes the target profile at any time.
-            var gone = w
-            gone.targetLive = false
-            out.append(gone)
-        }
-        return out
-    }
-
-    func testAStopAtAnyPointLeavesTheMeetingWholeInTheFirstProfileOrInBoth() {
-        var seen = Set<World>()
-        var ends: [World] = []
-        for taken in [Set<String>(), [id], [id, id + "-moved"]] {
-            for readable in [true, false] {
-                for whole in [true, false] {
-                    var queue = [World(state: .copying, taken: taken, readable: readable, whole: whole)]
-                    while let w = queue.popLast() {
-                        guard seen.insert(w).inserted else { continue }
-                        XCTAssertTrue(w.sourceHas || w.targetHas, "in neither profile: \(w)")
-                        // The first profile removes only what the target holds whole.
-                        if w.removed > 0 { XCTAssertTrue(w.targetHas, "a removal without the meeting in the target: \(w)") }
-                        let more = next(w)
-                        if more.isEmpty { ends.append(w) }
-                        queue.append(contentsOf: more)
-                    }
-                }
-            }
-        }
-        XCTAssertGreaterThan(seen.count, 100, "the model reached the states")
-        // Every end is the meeting in exactly one profile, or a cancel after the target went or took it in (both).
-        for e in ends {
-            XCTAssertTrue(e.sourceHas || e.targetHas, "\(e)")
-            if e.sourceHas, e.targetHas { XCTAssertFalse(e.targetLive, "both, with the target live: \(e)") }
-        }
-        // Each state of the ledger and each look of the marker was a stop somewhere.
-        let states = Set(seen.compactMap(\.state))
-        XCTAssertEqual(states, Set(MoveOut.State.allCases))
-        let marks = Set(seen.map { w -> String in
-            switch w.incoming {
-            case .none: "none"
-            case .halfPart: "half"
-            case .wholePart: "part"
-            case .published(.move): "move"
-            case .published(.cancelled): "cancelled"
-            case .published(.claimed(let i, _, let r)): "claimed \(i.map(\.rawValue) ?? "nil") \(r.map(\.rawValue) ?? "")"
-            }
-        })
-        for wanted in ["none", "half", "part", "move", "cancelled", "claimed nil ", "claimed takingIn ", "claimed taken ",
-                       "claimed refused idTaken", "claimed refused unreadable", "claimed refused notWhole"] {
-            XCTAssertTrue(marks.contains(wanted), "no stop with the marker \(wanted)")
-        }
+    func testTheFilesBTookAreCheckedAgainstTheMarker() {
+        let files = [MoveMarker.File(path: "call/call.json", size: 10, sha256: "aa"), .init(path: "call/me.caf", size: 20, sha256: "bb")]
+        XCTAssertTrue(MovePlan.held(files, found: ["call/call.json": (10, "aa"), "call/me.caf": (20, "bb")]))
+        XCTAssertFalse(MovePlan.held(files, found: ["call/call.json": (10, "aa")]), "one is missing")
+        XCTAssertFalse(MovePlan.held(files, found: ["call/call.json": (10, "aa"), "call/me.caf": (19, "bb")]), "another size")
+        XCTAssertFalse(MovePlan.held(files, found: ["call/call.json": (10, "aa"), "call/me.caf": (20, "cc")]), "another hash")
+        XCTAssertFalse(MovePlan.held([], found: [:]), "nothing is not a meeting")
     }
 }
 

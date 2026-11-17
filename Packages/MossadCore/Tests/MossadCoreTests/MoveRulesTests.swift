@@ -108,23 +108,52 @@ final class MoveRulesTests: XCTestCase {
         XCTAssertFalse(MoveRules.mayMove(mode: .full, identity: otherRoot, registry: read))
     }
 
+    /// I2: three answers. Only a registry read whole says "gone"; anything not known waits.
     func testTheTargetsFolder() throws {
         let h = home()
         let r = registry(home: h)
         let read = ProfileRegistry.Loaded(registry: r, state: .read)
-        XCTAssertNil(MoveRules.targetPaths(work, in: read, home: h), "no folder yet")
+        XCTAssertEqual(MoveRules.target(work, in: read, home: h), .unknown, "no folder now: not known, never gone")
         let folder = h.appendingPathComponent("Mossad Work")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        XCTAssertEqual(MoveRules.targetPaths(work, in: read, home: h)?.root.standardizedFileURL, folder.standardizedFileURL)
+        XCTAssertEqual(MoveRules.target(work, in: read, home: h), .paths(Paths(root: folder)))
+        XCTAssertEqual(MoveRules.target(work, in: read, home: h).plan, .live)
         try FileManager.default.createDirectory(at: h.appendingPathComponent("Mossad Old"), withIntermediateDirectories: true)
-        XCTAssertNil(MoveRules.targetPaths("5e6f7a8b", in: read, home: h), "removing")
-        XCTAssertNil(MoveRules.targetPaths("9c9c9c9c", in: read, home: h))
-        XCTAssertNil(MoveRules.targetPaths(work, in: ProfileRegistry.Loaded(registry: r, state: .newer), home: h))
-        XCTAssertNil(MoveRules.targetPaths(work, in: read, home: nil), "no home: not known")
+        XCTAssertEqual(MoveRules.target("5e6f7a8b", in: read, home: h), .gone, "removing")
+        XCTAssertEqual(MoveRules.target("9c9c9c9c", in: read, home: h), .gone, "not in a registry read whole")
+        for state in [ProfileRegistry.State.none, .newer, .unreadable, .partial] {
+            XCTAssertEqual(MoveRules.target(work, in: ProfileRegistry.Loaded(registry: r, state: state), home: h), .unknown, "\(state)")
+            XCTAssertEqual(MoveRules.target("9c9c9c9c", in: ProfileRegistry.Loaded(registry: r, state: state), home: h), .unknown, "\(state)")
+        }
+        XCTAssertEqual(MoveRules.target(work, in: read, home: nil), .unknown, "no home: not known")
+        XCTAssertEqual(MoveRules.target("5e6f7a8b", in: read, home: h).plan, .gone)
+        XCTAssertEqual(MoveRules.target(work, in: read, home: nil).plan, .unknown)
         // A file in the folder's place is not a folder.
         try FileManager.default.removeItem(at: folder)
         try Data().write(to: folder)
-        XCTAssertNil(MoveRules.targetPaths(work, in: read, home: h))
+        XCTAssertEqual(MoveRules.target(work, in: read, home: h), .unknown)
+    }
+
+    func testAMeetingThatFailedBeforeAnyUploadWasNotSent() {
+        var early = record(.failed)
+        early.failedStep = .recorded
+        early.attempts = 3
+        XCTAssertEqual(MoveRules.sent(early, hasLiveFile: false, usage: []), .nothing)
+        XCTAssertEqual(MoveRules.sent(early, hasLiveFile: true, usage: []), .live)
+        XCTAssertEqual(MoveRules.sent(early, hasLiveFile: false, usage: [usage(.transcription)]), .all)
+        var jobs = early
+        jobs.transcriptionJobs = ["me": "j1"]
+        XCTAssertEqual(MoveRules.sent(jobs, hasLiveFile: false, usage: []), .all)
+        var later = record(.failed)
+        later.failedStep = .summarized
+        XCTAssertEqual(MoveRules.sent(later, hasLiveFile: false, usage: []), .all)
+        XCTAssertEqual(MoveRules.offer(early, busy: false, files: ["call.json", "me.caf"], usage: [], move: nil), .offer)
+    }
+
+    /// I7: the live title, chat, and points also send words; with a row of another purpose, more went.
+    func testTheLiveSentenceSaysOnlyWhatIsKnown() {
+        XCTAssertEqual(MoveRules.sent(record(.recorded), hasLiveFile: true, usage: [usage(.live), usage(.question)]), .all)
+        XCTAssertEqual(MoveRules.sent(record(.recorded), hasLiveFile: false, usage: [usage(.summary)]), .all)
     }
 
     func testThePaces() {
@@ -146,7 +175,7 @@ final class MoveRulesTests: XCTestCase {
         XCTAssertEqual(MoveWords.sent(.all, from: "Mossad", to: "Work"),
                        "“Mossad” already sent this meeting to its transcription and notes services, and a move cannot take that back.")
         XCTAssertEqual(MoveWords.sent(.live, from: "Mossad", to: "Work"),
-                       "The live transcript of this call went to the transcription service of “Mossad”. Nothing else was sent.")
+                       "The live transcript of this call went to the transcription service of “Mossad”. As far as Mossad knows, nothing else was sent.")
         XCTAssertEqual(MoveWords.sent(.nothing, from: "Mossad", to: "Work"),
                        "As far as Mossad knows, nothing of this meeting was sent from “Mossad”. “Work” does all the work with its own keys.")
         XCTAssertEqual(MoveWords.sent(.inWork, from: "Mossad", to: "Work"), MoveWords.inWork)

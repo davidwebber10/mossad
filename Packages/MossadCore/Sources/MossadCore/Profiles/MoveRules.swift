@@ -9,15 +9,25 @@ public enum MoveRules {
     /// track, a failed try, or a usage row of a transcription; it had only the live transcript when `live.json` is in
     /// its folder or the usage log has a live row for it. Else nothing is known to be sent.
     public static func sent(_ r: CallRecord, hasLiveFile: Bool, usage: [UsageEvent]) -> Sent {
+        let mine = usage.filter { $0.callID == r.id }
+        // The live title, the live chat, and the live points send words too: a row of any purpose but the live
+        // transcript means more than the live transcript went.
+        let more = mine.contains { $0.purpose != .live }
+        let live = hasLiveFile || mine.contains { $0.purpose == .live }
+        let transcribed = r.transcriptionJobs?.isEmpty == false || r.meUtterances != nil || r.themUtterances != nil
+            || mine.contains { $0.purpose == .transcription }
         switch r.status {
-        case .written, .failed: return .all
+        case .written: return .all
+        case .failed:
+            // A meeting that failed at its first step, with no job, no track, and no row of a transcription, was not
+            // sent. With no failed step (an older record) the step is not known: "sent" is the safe word.
+            guard r.failedStep == .recorded, !transcribed, !more else { return .all }
+            return live ? .live : .nothing
         case .transcribed, .identified, .summarized: return .inWork
         case .recording, .recorded:
-            let mine = usage.filter { $0.callID == r.id }
-            if r.transcriptionJobs?.isEmpty == false || r.meUtterances != nil || r.themUtterances != nil || r.attempts > 0
-                || mine.contains(where: { $0.purpose == .transcription }) { return .inWork }
-            if hasLiveFile || mine.contains(where: { $0.purpose == .live }) { return .live }
-            return .nothing
+            if transcribed || r.attempts > 0 { return .inWork }
+            if more { return .all }
+            return live ? .live : .nothing
         }
     }
 
@@ -45,13 +55,37 @@ public enum MoveRules {
         mode == .full && identity.mayChangeRegistry && registry.state == .read
     }
 
-    /// The target's folder: nil unless the registry was read whole, the profile is live, and its folder is a folder.
-    public static func targetPaths(_ id: String, in registry: ProfileRegistry.Loaded, home: URL?) -> Paths? {
-        guard registry.state == .read, let home, let profile = registry.registry.live.first(where: { $0.id == id }) else { return nil }
+    /// Where the target is. `gone` only when the registry was read whole and the profile is not in it or is marked
+    /// `removing`. A registry that was not read whole, no home, or a folder that is not there now is `unknown`: a move
+    /// then waits, and never cancels.
+    public enum TargetPlace: Equatable, Sendable {
+        case paths(Paths), gone, unknown
+
+        public static func == (a: TargetPlace, b: TargetPlace) -> Bool {
+            switch (a, b) {
+            case let (.paths(x), .paths(y)): x.root.standardizedFileURL == y.root.standardizedFileURL
+            case (.gone, .gone), (.unknown, .unknown): true
+            default: false
+            }
+        }
+
+        public var plan: MovePlan.Target {
+            switch self {
+            case .paths: .live
+            case .gone: .gone
+            case .unknown: .unknown
+            }
+        }
+    }
+
+    public static func target(_ id: String, in registry: ProfileRegistry.Loaded, home: URL?) -> TargetPlace {
+        guard registry.state == .read else { return .unknown }
+        guard let profile = registry.registry.live.first(where: { $0.id == id }) else { return .gone }
+        guard let home else { return .unknown }
         let root = profile.rootURL(home: home)
         var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: root.path, isDirectory: &isDir), isDir.boolValue else { return nil }
-        return Paths(root: root)
+        guard FileManager.default.fileExists(atPath: root.path, isDirectory: &isDir), isDir.boolValue else { return .unknown }
+        return .paths(Paths(root: root))
     }
 
     /// The look at `Incoming` and `Moves`; the row's line after that long; how long a result and a refusal show.
@@ -70,7 +104,7 @@ public enum MoveWords {
     public static func sent(_ sent: MoveRules.Sent, from active: String, to target: String) -> String {
         switch sent {
         case .all: "“\(active)” already sent this meeting to its transcription and notes services, and a move cannot take that back."
-        case .live: "The live transcript of this call went to the transcription service of “\(active)”. Nothing else was sent."
+        case .live: "The live transcript of this call went to the transcription service of “\(active)”. As far as Mossad knows, nothing else was sent."
         case .nothing: "As far as Mossad knows, nothing of this meeting was sent from “\(active)”. “\(target)” does all the work with its own keys."
         case .inWork: inWork
         }
