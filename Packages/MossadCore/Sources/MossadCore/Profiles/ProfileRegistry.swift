@@ -87,3 +87,57 @@ public struct ProfileRegistry: Codable, Equatable, Sendable {
         id.utf8.count == 8 && id.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
     }
 }
+
+/// The changes the foreground app makes to the registry. Saved in one atomic write, never over a file it could not read.
+extension ProfileRegistry {
+    public struct ReadOnly: Error {}
+
+    /// A new profile with a new id and a folder no other has. The active profile does not change.
+    public mutating func add(name: String, color: ProfileColor, takenFolders: Set<String>, random: () -> String = ProfileRules.randomID) -> Profile {
+        let ids = Set(profiles.map(\.id)).union([Profile.defaultID])
+        let own = Set(profiles.map { ($0.root as NSString).lastPathComponent.lowercased() })
+        let folder = ProfileRules.folderName(for: name, taken: takenFolders.union(own))
+        let profile = Profile(id: ProfileRules.newID(taken: ids, random: random), name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                              color: color, root: "~/" + folder)
+        profiles.append(profile)
+        return profile
+    }
+
+    /// The name and the color; never the folder.
+    public mutating func rename(_ id: String, name: String, color: ProfileColor) {
+        guard let i = profiles.firstIndex(where: { $0.id == id }) else { return }
+        profiles[i].name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        profiles[i].color = color
+    }
+
+    public mutating func setActive(_ id: String) { active = id }
+
+    public mutating func setServer(_ hash: String?, for id: String) {
+        guard let i = profiles.firstIndex(where: { $0.id == id }) else { return }
+        profiles[i].server = hash
+    }
+
+    /// The first step of a delete: the profile cannot start and does not show. `default` is never removed.
+    public mutating func markRemoving(_ id: String) {
+        guard id != Profile.defaultID, let i = profiles.firstIndex(where: { $0.id == id }) else { return }
+        profiles[i].removing = true
+    }
+
+    public mutating func remove(_ id: String) {
+        guard id != Profile.defaultID else { return }
+        profiles.removeAll { $0.id == id }
+    }
+
+    /// The profiles whose delete has not finished.
+    public var removing: [Profile] { profiles.filter { $0.removing == true } }
+}
+
+extension ProfileRegistry.Loaded {
+    public func save(to file: URL) throws {
+        guard canSave else { throw ProfileRegistry.ReadOnly() }
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(registry).write(to: file, options: .atomic)
+    }
+}
