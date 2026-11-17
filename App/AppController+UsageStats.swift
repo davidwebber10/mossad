@@ -9,14 +9,21 @@ extension AppController {
     var usageStatsGate: UsageReportPlan.Gate {
         UsageReportPlan.Gate(enabled: usageStatsEnabled, inert: isInert, rehearsal: Rehearsal.isOn,
                              rootOverride: !(ProcessInfo.processInfo.environment["MOSSAD_ROOT"] ?? "").isEmpty,
-                             debugBuild: DevHooks.debug, debugFlag: UserDefaults.standard.bool(forKey: UsageReportPlan.debugKey))
+                             debugBuild: DevHooks.debug, debugFlag: MacDefaults.store.bool(forKey: UsageReportPlan.debugKey))
     }
 
     /// At launch: a random wait of 1 to 30 minutes, then once an hour the day is marked and a due report goes.
     func startUsageStats() {
         usageStatsTask?.cancel()
         usageStatsTask = nil
-        guard usageStatsGate.allows else { return }
+        guard usageStatsGate.allows else {
+            // The switch is the Mac's: a profile that was not active when it went off keeps nothing either.
+            if !usageStatsEnabled {
+                let counters = usageCounters
+                Task.detached(priority: .utility) { counters.delete() }
+            }
+            return
+        }
         let counters = usageCounters
         Task.detached(priority: .utility) { counters.markActive() }
         usageStatsTask = Task { [weak self] in
@@ -54,7 +61,7 @@ extension AppController {
     }
 
     private func sendUsageStatsIfDue() async {
-        let defaults = UserDefaults.standard
+        let defaults = MacDefaults.store
         let last = defaults.object(forKey: UsageReportPlan.lastAttemptKey) as? Date
         guard usageStatsGate.allows, !isRecording, UsageReportPlan.isDue(lastAttempt: last, now: Date()) else { return }
         // Not marked as tried: the next hour tries again once the meetings and the calendar are read.

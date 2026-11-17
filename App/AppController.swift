@@ -185,7 +185,8 @@ final class AppController: ObservableObject {
     /// One voice model for the pipeline and the live names, loaded once.
     private let embeddings = FluidEmbeddingProvider()
     /// 0 means on. Otherwise Mossad is off until this time (seconds since 1970; `.infinity` for "until I turn it on").
-    @AppStorage("offUntil") private var offUntil: Double = 0
+    /// Mac-wide: Off holds across a switch of profile.
+    @AppStorage("offUntil", store: MacDefaults.store) private var offUntil: Double = 0
     private var resumeTimer: Timer?
 
     var isOn: Bool { offUntil == 0 }
@@ -239,6 +240,15 @@ final class AppController: ObservableObject {
     /// The upcoming meetings the owner chose not to record.
     @Published private(set) var noRecord = NoRecordBook()
     private let noRecordGate = NoRecordGate()
+    /// The other profiles' do-not-record lists, read once at launch for the gate only: never shown, never logged.
+    var otherNoRecord: [NoRecordBook] = []
+    /// Every live profile's NoRecord folder except this process's; none for a copy that takes no profiles.
+    var otherNoRecordFolders: [URL] {
+        let identity = AppIdentity.current
+        guard identity.takesProfiles else { return [] }
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return identity.registry.registry.live.filter { $0.id != identity.profile.id }.map { Paths(root: $0.rootURL(home: home)).noRecord }
+    }
     /// Calls still to come, without the ones being recorded or already recorded.
     /// Views ask for this each time they draw. The list changes with the events, the meetings, and the clock, so it
     /// is computed once for each of those and for each minute.
@@ -497,7 +507,7 @@ final class AppController: ObservableObject {
     @Published var transcribingAgainCallID: String?
     @AppStorage("coachEnabled") var coachEnabled = false
     /// "Send anonymous usage statistics" (Settings › Storage & Sync): on by default (+UsageStats).
-    @AppStorage(UsageReportPlan.enabledKey) var usageStatsEnabled = true
+    @AppStorage(UsageReportPlan.enabledKey, store: MacDefaults.store) var usageStatsEnabled = true
     /// The wait, the daily check, and the send; cancelled when the owner turns the statistics off.
     var usageStatsTask: Task<Void, Never>?
     /// The days the app ran and the failures by kind, for the statistics only.
@@ -601,8 +611,12 @@ final class AppController: ObservableObject {
         shareBook = ShareBook.load(from: paths.shares)
         rememberBucketKind()
         noRecord = NoRecordBook.load(from: paths.noRecord)
-        noRecordGate.update(book: noRecord)
+        // Not recording is Mac-wide: another profile's refusal blocks here too, and its blocked call goes on.
+        let otherFolders = otherNoRecordFolders
+        otherNoRecord = otherFolders.map(NoRecordBook.peek)
+        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord))
         noRecordGate.persistSession(in: paths.noRecord)
+        noRecordGate.adopt(sessionsIn: otherFolders)
         // The chosen calendars apply before anything matches a call to an invite.
         macCalendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         loadGoogleNames()
@@ -1490,7 +1504,7 @@ final class AppController: ObservableObject {
     /// Settings › Recording: an empty do-not-record list. Also ends the block that a damaged list causes, at once.
     func resetNoRecordList() {
         noRecord.reset()
-        noRecordGate.update(book: noRecord)
+        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord))
         do { try noRecord.save(to: paths.noRecord) } catch { Log.error("Saving the do-not-record list failed: \(error)") }
         Log.info("The do-not-record list was reset")
     }
@@ -1508,7 +1522,7 @@ final class AppController: ObservableObject {
     func setRecording(_ choice: RecordingChoice, for meeting: UpcomingMeeting) {
         noRecord.set(choice, for: meeting)
         noRecord.removeExpired(now: Date())
-        noRecordGate.update(book: noRecord)
+        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord))
         do { try noRecord.save(to: paths.noRecord) } catch { Log.error("Saving the recording choice failed: \(error)") }
     }
 

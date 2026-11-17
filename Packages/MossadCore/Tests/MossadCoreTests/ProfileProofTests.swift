@@ -198,6 +198,11 @@ final class ProfileProofTests: XCTestCase {
                        ["SUEnableAutomaticChecks", "automationState.com.google.Chrome", "didSetLoginItem"])
     }
 
+    func testTheInstallIDIsTheMacsOwn() {
+        // With nothing held, MacDefaults.store === UserDefaults.standard, so installID() reads what it reads today.
+        XCTAssertTrue(MacDefaults.store === UserDefaults.standard)
+    }
+
     func testAMadeUpRegistryRunsInert() {
         XCTAssertEqual(RunMode.decide(preview: false, rehearsal: false, secondCopy: false, madeUpRegistry: false), .full)
         XCTAssertEqual(RunMode.decide(preview: false, rehearsal: false, secondCopy: false, madeUpRegistry: true), .inert)

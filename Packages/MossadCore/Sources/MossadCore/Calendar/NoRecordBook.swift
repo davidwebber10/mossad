@@ -162,6 +162,30 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try JSONEncoder.callRecord.encode(self).write(to: dir.appendingPathComponent(Self.fileName), options: .atomic)
     }
+
+    /// Another profile's list, read only: a file that does not decode stays where it is (its own profile moves it
+    /// aside) and the book is unknown, as `load` gives it. A missing file beside a set-aside one is unknown too.
+    public static func peek(from dir: URL) -> NoRecordBook {
+        let file = dir.appendingPathComponent(fileName)
+        var book = NoRecordBook()
+        if let data = try? Data(contentsOf: file) {
+            if let read = try? JSONDecoder.callRecord.decode(NoRecordBook.self, from: data) { return read }
+        } else if !FileManager.default.fileExists(atPath: file.path),
+                  !((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []).contains(where: StoredFile.isQuarantined) {
+            return book
+        }
+        book.unreadable = true
+        return book
+    }
+
+    /// The book the gate decides with: the active profile's rules and every other profile's, so a meeting refused in
+    /// one is refused in all. Only the active profile's ended rules keep notes out; any unknown list blocks.
+    public static func forGate(own: NoRecordBook, others: [NoRecordBook]) -> NoRecordBook {
+        var book = own
+        book.rules = own.rules + others.flatMap(\.rules)
+        book.unreadable = own.unreadable || others.contains(where: \.unreadable)
+        return book
+    }
 }
 
 /// The book and the calendar for the detection queue, which cannot wait for the main actor before a call starts.
@@ -231,6 +255,21 @@ public final class NoRecordGate: @unchecked Sendable {
         lock.withLock {
             sessionFile = file
             if session == nil { session = saved }
+        }
+    }
+
+    /// After a switch: the blocked call that another profile's gate kept goes on here. Takes the newest one that has
+    /// not ended, unless this gate's own is newer and goes on; without its title, which is that profile's. Reads only.
+    public func adopt(sessionsIn dirs: [URL]) {
+        let found = dirs.compactMap { dir -> BlockedCall? in
+            guard let data = try? Data(contentsOf: dir.appendingPathComponent(Self.sessionFileName)) else { return nil }
+            return try? JSONDecoder.callRecord.decode(BlockedCall.self, from: data)
+        }
+        guard var newest = found.filter({ !$0.ended }).max(by: { $0.lastSeen < $1.lastSeen }) else { return }
+        newest.title = nil
+        lock.withLock {
+            if let own = session, !own.ended, own.lastSeen >= newest.lastSeen { return }
+            session = newest
         }
     }
 
