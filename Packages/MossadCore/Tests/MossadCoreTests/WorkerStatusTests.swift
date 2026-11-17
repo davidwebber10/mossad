@@ -100,4 +100,13 @@ final class WorkerStatusTests: XCTestCase {
         try Paths(root: root).ensureDirectories()
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Worker").path))
     }
+
+    func testAStatusFromBeforeTheWorkerStartedIsNotShown() {
+        let started = Date(timeIntervalSince1970: 1_900_000_000)
+        let old = WorkerStatus(written: started.addingTimeInterval(-86_400), inWork: 2, failure: nil)
+        XCTAssertNil(WorkerStatusLine.text(old, running: true, gaveUp: false, since: started), "the new worker is starting")
+        let fresh = WorkerStatus(written: started.addingTimeInterval(5), inWork: 2, failure: nil)
+        XCTAssertEqual(WorkerStatusLine.text(fresh, running: true, gaveUp: false, since: started), "2 meetings in work")
+        XCTAssertEqual(WorkerStatusLine.text(old, running: false, gaveUp: true, since: started), "Not running")
+    }
 }

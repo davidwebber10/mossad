@@ -198,11 +198,12 @@ final class WorkerManager {
     /// Each other profile's status file, and nothing else of its folder, off the main actor.
     private func readLines() {
         let roots = profiles.map { ($0.id, $0.rootURL(home: home)) }
-        let running = Set(children.keys), gaveUp = gaveUp
+        let running = children.mapValues(\.started), gaveUp = gaveUp
         Task.detached(priority: .utility) {
             var next: [String: String] = [:]
             for (id, root) in roots {
-                if let line = WorkerStatusLine.text(WorkerStatus.peek(root: root), running: running.contains(id), gaveUp: gaveUp.contains(id)) {
+                if let line = WorkerStatusLine.text(WorkerStatus.peek(root: root), running: running[id] != nil, gaveUp: gaveUp.contains(id),
+                                                      since: running[id]) {
                     next[id] = line
                 }
             }
