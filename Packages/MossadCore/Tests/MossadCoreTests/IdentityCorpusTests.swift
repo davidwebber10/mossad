@@ -127,6 +127,11 @@ final class IdentityCorpusTests: XCTestCase {
             }
             XCTAssertNil(library.existingName(name: "Sam Carter-Reed", email: "nobody@example.com"))
         }
+        // The part in brackets on the saved side names another person too.
+        try library(["Sam Carter (Acme)"]) { library in
+            XCTAssertNil(library.existingName(name: "Sam Carter", email: nil))
+            XCTAssertEqual(library.existingName(name: "Sam Carter (Acme)", email: nil), "Sam Carter (Acme)")
+        }
     }
 
     /// Review scenario A: Samantha Carter is saved, and a new person, Samuel Carter, is named "Sam Carter".
