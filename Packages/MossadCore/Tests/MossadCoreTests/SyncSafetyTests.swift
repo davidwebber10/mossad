@@ -392,4 +392,70 @@ final class SyncSafetyTests: XCTestCase {
         XCTAssertThrowsError(try SyncState.load(from: dir))
         XCTAssertEqual(try SyncState.load(from: dir), SyncState())
     }
+
+    private var call: PhoneRecording {
+        PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 3, title: "Offsite", kind: .phoneCall, person: "Sam Carter", personID: "p1")
+    }
+
+    func testAPhoneCallUploadsWithItsFields() async throws {
+        let store = MemoryStore()
+        try await CloudSync(paths: temp(), store: store).upload(call, audio: try phoneAudio())
+        let f = await store.entries["rec-20270115-090000"]?.record.fields
+        XCTAssertEqual(f?["kind"], .string("phoneCall"))
+        XCTAssertEqual(f?["person"], .string("Sam Carter"))
+        XCTAssertEqual(f?["personID"], .string("p1"))
+        XCTAssertEqual(f?["title"], .string("Offsite"))
+    }
+
+    func testARefusalOfTheNewFieldsSendsTheRecordingAgainWithoutThem() async throws {
+        let store = MemoryStore()
+        await store.refuseFields(["kind", "person", "personID"])
+        try await CloudSync(paths: temp(), store: store).upload(call, audio: try phoneAudio())
+        let keys = await store.entries["rec-20270115-090000"]?.record.fields.keys
+        XCTAssertEqual(Set(try XCTUnwrap(keys)), ["start", "end", "title"])
+        let audio = await store.asset("rec-20270115-090000", "audio")
+        XCTAssertNotNil(audio)
+    }
+
+    func testARoomRecordingThatTheStoreRefusesIsNotSentAgain() async throws {
+        let store = MemoryStore()
+        await store.refuseFields(["start"])
+        let room = PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 3, title: "Offsite")
+        do {
+            try await CloudSync(paths: temp(), store: store).upload(room, audio: try phoneAudio())
+            XCTFail("must throw")
+        } catch {
+            XCTAssertEqual(error as? StoreRefusal, .unknownField)
+        }
+    }
+
+    func testAnotherUploadFailureKeepsTheFields() async throws {
+        let store = MemoryStore()
+        let sync = CloudSync(paths: temp(), store: store)
+        await store.refuse("rec-20270115-090000")
+        do {
+            try await sync.upload(call, audio: try phoneAudio())
+            XCTFail("must throw")
+        } catch {}
+        let none = await store.entries["rec-20270115-090000"]
+        XCTAssertNil(none, "nothing went without its fields")
+        await store.refuse(nil)
+        try await sync.upload(call, audio: try phoneAudio())
+        let kind = await store.entries["rec-20270115-090000"]?.record.fields["kind"]
+        XCTAssertEqual(kind, .string("phoneCall"))
+    }
+
+    func testARecordingThatFailedToImportKeepsItsNewFieldsForTheRetry() async throws {
+        let store = MemoryStore()
+        let mac = temp()
+        try await CloudSync(paths: temp(), store: store).upload(call, audio: try phoneAudio())
+        await store.fail("rec-20270115-090000", with: URLError(.timedOut))
+        try await CloudSync(paths: mac, store: store).pull(includeMeetings: false)
+        let p = try SyncState.load(from: mac.sync).recordings?.first
+        XCTAssertEqual(p?.kind, "phoneCall")
+        XCTAssertEqual(p?.person, "Sam Carter")
+        XCTAssertEqual(p?.personID, "p1")
+        XCTAssertEqual(p?.fields["kind"], .string("phoneCall"))
+        XCTAssertEqual(p?.fields["personID"], .string("p1"))
+    }
 }

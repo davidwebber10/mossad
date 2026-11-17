@@ -1,3 +1,4 @@
+import CloudKit
 import XCTest
 @testable import MossadCore
 
@@ -59,6 +60,15 @@ actor MemoryStore: RecordStore {
     func discard(_ names: [String]) async { _ = try? await delete(names) }
 
     func asset(_ name: String, _ key: String) -> Data? { entries[name]?.data[key] }
+
+    /// Fields the store does not know, as an iCloud schema without them.
+    private var refusedFields: Set<String> = []
+    func refuseFields(_ keys: Set<String>) { refusedFields = keys }
+
+    func saveOne(_ record: StoredRecord) async throws {
+        if !refusedFields.isDisjoint(with: record.fields.keys) { throw StoreRefusal.unknownField }
+        guard try await save([record]).contains(record.name) else { throw ServerError.http(0, "The recording did not upload.") }
+    }
 }
 
 final class RecordStoreTests: XCTestCase {
@@ -185,5 +195,14 @@ final class RecordStoreTests: XCTestCase {
         XCTAssertEqual(try CallRecord.load(from: phone.callDirectory(id)).summary, "We held spend.")
         let wrong = ServerConnection(address: address, secret: "nope")
         do { try await ServerStore(wrong).prepare(); XCTFail("a wrong secret must fail") } catch ServerError.wrongSecret {}
+    }
+
+    func testOnlyASchemaRefusalCountsAsAnUnknownField() {
+        XCTAssertTrue(CloudKitStore.isUnknownField(CKError(.invalidArguments)))
+        XCTAssertTrue(CloudKitStore.isUnknownField(CKError(.serverRejectedRequest)))
+        for code in [CKError.Code.networkFailure, .networkUnavailable, .quotaExceeded, .zoneBusy, .requestRateLimited] {
+            XCTAssertFalse(CloudKitStore.isUnknownField(CKError(code)), "\(code)")
+        }
+        XCTAssertFalse(CloudKitStore.isUnknownField(URLError(.timedOut)))
     }
 }

@@ -124,12 +124,19 @@ public struct PendingRecording: Codable, Equatable, Sendable {
     public var told: Bool?
     public var gaveUp: Bool?
     public var toldGaveUp: Bool?
+    /// A phone call's fields (`PhoneRecording.newFields`), so a retried import is still a phone call with its person.
+    public var kind: String?
+    public var person: String?
+    public var personID: String?
 
     var fields: [String: StoredValue] {
         var f: [String: StoredValue] = [:]
         if let start { f["start"] = .date(start) }
         if let end { f["end"] = .date(end) }
         if let title { f["title"] = .string(title) }
+        if let kind { f["kind"] = .string(kind) }
+        if let person { f["person"] = .string(person) }
+        if let personID { f["personID"] = .string(personID) }
         return f
     }
 }
