@@ -297,7 +297,7 @@ struct SyncStep: View {
 // MARK: 8. Done
 
 struct DoneStep: View {
-    @State private var launchAtLogin = Rehearsal.isOn ? true : SMAppService.mainApp.status == .enabled || !UserDefaults.standard.bool(forKey: "didSetLoginItem")
+    @State private var launchAtLogin = Rehearsal.isOn ? true : SMAppService.mainApp.status == .enabled || !MacDefaults.store.bool(forKey: "didSetLoginItem")
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.xl) {
@@ -327,7 +327,7 @@ struct DoneStep: View {
               Bundle.main.bundleURL.path.hasPrefix("/Applications/") else { return }
         do {
             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-            UserDefaults.standard.set(true, forKey: "didSetLoginItem")
+            MacDefaults.store.set(true, forKey: "didSetLoginItem")
         } catch {
             Log.error("Launch at login change failed: \(error)")
         }

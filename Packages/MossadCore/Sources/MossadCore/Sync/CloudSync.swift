@@ -27,16 +27,21 @@ public actor CloudSync {
     private let paths: Paths
     private let now: @Sendable () -> Date
     private var prepared = false
+    /// The meetings that left this profile and whose removal still runs (`MoveOut.syncHeld`): the app and the worker
+    /// give it, so the sync reads no ledger itself. Empty with no move.
+    private let leaving: @Sendable () -> Set<String>
 
-    public init(paths: Paths, store: any RecordStore, now: @escaping @Sendable () -> Date = Date.init) {
+    public init(paths: Paths, store: any RecordStore, now: @escaping @Sendable () -> Date = Date.init,
+                leaving: @escaping @Sendable () -> Set<String>) {
         self.paths = paths
         self.store = store
         self.now = now
+        self.leaving = leaving
     }
 
-    /// iCloud, as before.
+    /// iCloud, as before. Only where no meeting can leave (no profile's own `Moves`).
     public init(paths: Paths) {
-        self.init(paths: paths, store: CloudKitStore())
+        self.init(paths: paths, store: CloudKitStore(), leaving: { [] })
     }
 
     private func prepare() async throws {
@@ -118,10 +123,13 @@ public actor CloudSync {
         try await prepare()
         let withView = store.wantsMeetingView
         let scan = try ProcessingQueue(paths: paths).scan()
-        let payloads = scan.records.filter(SyncPayload.isSyncable).map {
+        // A meeting that another profile took in goes from the store now, as if its folder were gone: its removal here
+        // can wait on a step for long.
+        let leaving = leaving()
+        let payloads = scan.records.filter { SyncPayload.isSyncable($0) && !leaving.contains($0.id) }.map {
             SyncPayload(record: $0, coach: CoachReview.load(in: paths.callDirectory($0.id)), view: withView)
         }
-        let plan = try loadState().plan(payloads, present: scan.folders)
+        let plan = try loadState().plan(payloads, present: scan.folders.subtracting(leaving))
         let dir = try scratch()
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -169,8 +177,14 @@ public actor CloudSync {
                            stop: @Sendable () -> Bool = { false }, digest: [SharedPayload]? = nil) async throws -> Int {
         try await prepare()
         let chats = ChatStore(directory: paths.chats)
-        var payloads = chats.all().map(SharedPayload.chat)
-        for r in ProcessingQueue(paths: paths).allRecords() {
+        let records = ProcessingQueue(paths: paths).allRecords()
+        // The chats of a call for another profile (marked during its recording or by "Move to") and of a meeting that
+        // left: never sent from here, and not deleted either; the removal deletes the files.
+        let left = leaving()
+        let away = left.union(records.filter { $0.moveTo != nil }.map(\.id))
+        var payloads = chats.all().filter { $0.callID.map { !away.contains($0) } ?? true }.map(SharedPayload.chat)
+        // As if its folder were gone: the owner's notes on the review of a meeting that left are not sent either.
+        for r in records where !left.contains(r.id) {
             if let review = CoachReview.load(in: paths.callDirectory(r.id)), let notes = SharedPayload.notes(callID: r.id, review: review) {
                 payloads.append(notes)
             }
@@ -283,14 +297,22 @@ public actor CloudSync {
 
     // MARK: Phone
 
-    /// Sends a room recording to the Mac. Returns once the store has it, so the phone can keep its copy until then.
+    /// Sends a phone recording to the Mac. Returns once the store has it, so the phone can keep its copy until then.
+    /// A store that does not know a phone call's fields yet gets the recording without them; any other failure
+    /// throws, so the next try still has them.
     public func upload(_ p: PhoneRecording, audio: URL) async throws {
         try await prepare()
-        var fields: [String: StoredValue] = ["start": .date(p.start), "end": .date(p.end)]
-        if let t = p.title { fields["title"] = .string(t) }
         let name = PhoneRecording.recordName(p.id)
-        let saved = try await store.save([StoredRecord(name: name, type: Self.recordingType, fields: fields, files: ["audio": audio])])
-        guard saved.contains(name) else { throw ServerError.http(0, "The recording did not upload.") }
+        let fields = p.fields
+        func record(_ fields: [String: StoredValue]) -> StoredRecord {
+            StoredRecord(name: name, type: Self.recordingType, fields: fields, files: ["audio": audio])
+        }
+        do {
+            try await store.saveOne(record(fields))
+        } catch StoreRefusal.unknownField where PhoneRecording.newFields.contains(where: { fields[$0] != nil }) {
+            Log.info("The store does not know the phone call fields yet; the recording goes without them")
+            try await store.saveOne(record(fields.filter { !PhoneRecording.newFields.contains($0.key) }))
+        }
     }
 
     /// Fetches what changed since the last pull into the local folders, and returns how many records changed.
@@ -422,7 +444,9 @@ public actor CloudSync {
             var list = state.recordings ?? []
             var p = list.first { $0.name == record.name }
                 ?? PendingRecording(name: record.name, start: record.fields["start"]?.date, end: record.fields["end"]?.date,
-                                    title: record.fields["title"]?.string, firstFailure: time, attempts: 0, next: time, reason: "")
+                                    title: record.fields["title"]?.string, firstFailure: time, attempts: 0, next: time, reason: "",
+                                    kind: record.fields["kind"]?.string, person: record.fields["person"]?.string,
+                                    personID: record.fields["personID"]?.string)
             p.attempts += 1
             p.reason = String(String(describing: error).prefix(300))
             p.next = time.addingTimeInterval(Self.recordingBackoff[min(p.attempts, Self.recordingBackoff.count) - 1])
@@ -488,7 +512,7 @@ public actor CloudSync {
     /// throws when it could not be made, so the store keeps its copy and a later pull tries again.
     private func importRecording(_ record: ChangedRecord) async throws {
         var id = String(record.name.dropFirst("rec-".count))
-        guard !id.isEmpty, !id.hasPrefix("."), let start = record.fields["start"]?.date, let end = record.fields["end"]?.date else {
+        guard !id.isEmpty, !id.hasPrefix("."), var recording = PhoneRecording(id: id, fields: record.fields) else {
             throw MissingAsset(name: record.name)
         }
         func exists(_ id: String) -> Bool {
@@ -505,7 +529,8 @@ public actor CloudSync {
         let dir = try scratch()
         defer { try? FileManager.default.removeItem(at: dir) }
         let audio = try file(data, "\(id).m4a", in: dir)
-        try PhoneRecording.importAudio(audio, recording: PhoneRecording(id: id, start: start, end: end, title: record.fields["title"]?.string), into: paths)
+        recording.id = id
+        try PhoneRecording.importAudio(audio, recording: recording, into: paths)
         Log.info("Imported the iPhone recording \(id)")
     }
 
@@ -535,6 +560,8 @@ public actor CloudSync {
             // The Mac's coach writes the coaching fields; the phone takes them, the Mac keeps its own.
             // After a recovery the profile here is empty, so the Mac takes its own coaching fields back too.
             let merged = local.merged(with: remote, takeCoaching: includeMeetings || StoredFile.awaitsMerge(Self.syncedFiles(paths)[0]))
+            // A copy that still holds a moved call or person (a device of an older release): send the clean one again.
+            if merged.pushesAgain(after: remote) { try update { $0.uploaded["profile"] = nil } }
             guard merged != local else { return false }
             try merged.save(to: paths.coach)
             // The answers to the cards that came from the other device are kept with their calls too.
@@ -544,24 +571,20 @@ public actor CloudSync {
                 FindingStore.mirror(merged.answers, callID: callID, paths: paths)
             }
         case Self.chatType:
-            let remote = try await decoded(Chat.self)
-            let chats = ChatStore(directory: paths.chats)
-            // A chat deleted here stays deleted; the next push deletes it in the store.
-            guard !chats.deleted().contains(remote.id) else { return false }
-            let local = try chats.load(remote.id)
-            let kept = local.map { Chat.merged($0, remote) } ?? remote
-            guard kept != local else { return false }
-            try chats.save(kept)
+            // The phone pulls the meetings; only the Mac moves a meeting and counts what it did not keep.
+            guard try Self.takeChat(try await decoded(Chat.self), paths: paths, mac: !includeMeetings) else { return false }
         case Self.commitmentsType:
             let remote = try await decoded(CommitmentBook.self)
             let local = try CommitmentBook.load(from: paths.commitments)
             let merged = local.merged(with: remote)
+            if merged.pushesAgain(after: remote) { try update { $0.uploaded["commitments"] = nil } }
             guard merged != local else { return false }
             try merged.save(to: paths.commitments)
         case Self.nextTimeType:
             let remote = try await decoded(NextTimeBook.self)
             let local = try NextTimeBook.load(from: paths.nextTime)
             let merged = local.merged(with: remote)
+            if merged.pushesAgain(after: remote) { try update { $0.uploaded["next-time"] = nil } }
             guard merged != local else { return false }
             try merged.save(to: paths.nextTime)
         case Self.peopleType where includeMeetings:
@@ -591,6 +614,30 @@ public actor CloudSync {
             guard merged != review else { return false }
             try merged.save(in: dir)
         default:
+            return false
+        }
+        return true
+    }
+}
+
+extension CloudSync {
+    /// A chat from the other device, merged with the one here. A chat about a meeting whose move waits is not kept
+    /// (`ChatStore.MovingCall`): it is counted for the owner's sentence (`MovingChats`), and one that is new here is
+    /// deleted as a chat deleted here, so the next push takes it out of the store and it never comes back to this
+    /// profile after the meeting left. A chat that is here already stays as it is: a cancelled move keeps it.
+    static func takeChat(_ remote: Chat, paths: Paths, mac: Bool = true) throws -> Bool {
+        let chats = ChatStore(directory: paths.chats)
+        // A chat deleted here stays deleted; the next push deletes it in the store.
+        guard !chats.deleted().contains(remote.id) else { return false }
+        let local = try chats.load(remote.id)
+        let kept = local.map { Chat.merged($0, remote) } ?? remote
+        guard kept != local else { return false }
+        do {
+            try chats.save(kept)
+        } catch is ChatStore.MovingCall {
+            guard mac else { return false }
+            if let callID = remote.callID { MovingChats.refused(callID, paths: paths) }
+            if local == nil { chats.delete(remote.id) }
             return false
         }
         return true

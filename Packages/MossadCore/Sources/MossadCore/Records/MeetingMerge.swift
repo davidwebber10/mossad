@@ -5,6 +5,28 @@ public enum MeetingMerge {
     /// Recordings of the same meeting link this close together are one meeting that was interrupted.
     public static let continuationGap: TimeInterval = 120
 
+    /// What the rule of one meeting reads of a recording.
+    public struct Span: Equatable, Sendable {
+        public var meetingID: String?
+        public var start: Date
+        public var end: Date
+
+        public init(meetingID: String?, start: Date, end: Date) {
+            self.meetingID = meetingID
+            self.start = start
+            self.end = end
+        }
+
+        public init(_ r: CallRecord) { self.init(meetingID: r.meetingID, start: r.start, end: r.end) }
+    }
+
+    /// Two recordings of the same meeting link that ended or started within `continuationGap` of each other are one
+    /// meeting, split by a restart or a crash. A recording with no link is never a part of another.
+    public static func continues(_ a: Span, _ b: Span) -> Bool {
+        guard let id = a.meetingID, id == b.meetingID else { return false }
+        return abs(a.start.timeIntervalSince(b.end)) <= continuationGap || abs(b.start.timeIntervalSince(a.end)) <= continuationGap
+    }
+
     /// The earliest record absorbs the others. Times move by each part's place in the joined audio, and
     /// speaker labels of later parts get the part's number in the joined meeting ("A" becomes "A2"), so two
     /// different people who were both "A" stay apart. `durations` is each record's audio length, by record ID.
@@ -93,13 +115,7 @@ public enum MeetingMerge {
         merged.themUtterances = them
         merged.end = sorted.map(\.end).max() ?? merged.end
         // The summary and the note are written again for the whole meeting.
-        merged.summary = nil
-        merged.headline = nil
-        merged.topics = []
-        merged.kind = nil
-        merged.hasOutcomes = nil
-        merged.actionItems = []
-        merged.decisions = []
+        merged.clearSummary()
         merged.status = .identified
         merged.attempts = 0
         merged.nextAttempt = nil

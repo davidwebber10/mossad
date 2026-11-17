@@ -112,8 +112,12 @@ struct ModelPicker: View {
 /// The commands that connect other AI apps to Mossad's MCP server.
 private struct MCPSetup: View {
     private var binary: String { DevHooks.shownBinary(Bundle.main.executablePath ?? "/Applications/Mossad.app/Contents/MacOS/Mossad") }
-    private var claudeCode: String { "claude mcp add --scope user mossad -- \"\(binary)\" --mcp" }
-    private var desktop: String { "\"mossad\": { \"command\": \"\(binary)\", \"args\": [\"--mcp\"] }" }
+    /// This profile's server: today's `mossad` and `--mcp` for the first one, `--profile <id>` for another.
+    @EnvironmentObject private var controller: AppController
+    /// From the registry as it is now, so a rename shows at once.
+    private var command: MCPCommand { MCPCommand(profile: controller.activeProfile, among: controller.profiles.registry.live) }
+    private var claudeCode: String { command.claudeCode(binary: binary) }
+    private var desktop: String { command.desktop(binary: binary) }
 
     var body: some View {
         row("Claude Code", "Run this once in Terminal:", claudeCode)

@@ -119,7 +119,17 @@ public struct ChatStore: Sendable {
             .sorted { $0.updated > $1.updated }
     }
 
+    /// A chat about a meeting whose move waits, new or there already: the copy in the other profile was made before
+    /// it, and the removal deletes it with the meeting. The app turns the field off first (`MoveShow.chatOff`).
+    public struct MovingCall: Error {}
+
     public func save(_ chat: Chat) throws {
+        if let callID = chat.callID, MovePaths.isID(callID),
+           // From the cache: a save on the main thread decodes the record once, then reads only its file's dates.
+           let r = try? RecordCache.shared.record(in: directory.deletingLastPathComponent().appendingPathComponent("Audio").appendingPathComponent(callID)),
+           r.moveTo != nil {
+            throw MovingCall()
+        }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try JSONEncoder.coach.encode(chat).write(to: url(chat.id), options: .atomic)
     }

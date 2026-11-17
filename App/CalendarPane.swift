@@ -77,12 +77,16 @@ struct CalendarPane: View {
     let open: (CallRecord, String) -> Void
 
     var body: some View {
+        VStack(spacing: 0) {
+        // Day, Week, and Month: the move's line above the grid, outside its scrolling.
+        MoveLineView().frame(maxWidth: .infinity, alignment: .leading)
         Group {
             switch state.scope {
             case .week: HourGrid(state: state, days: state.weekDays, records: records, matches: matches, deleting: $deleting, upcoming: upcoming, openUpcoming: openUpcoming, open: open)
             case .day: HourGrid(state: state, days: [state.calendar.startOfDay(for: state.anchor)], records: records, matches: matches, deleting: $deleting, upcoming: upcoming, openUpcoming: openUpcoming, open: open)
             case .month: MonthGrid(state: state, records: records, matches: matches, deleting: $deleting, upcoming: upcoming, openUpcoming: openUpcoming, open: open)
             }
+        }
         }
         // The page gutter, as the canvas pads the detail column; the grid keeps 12 pt of it for the scroller.
         .padding(.leading, Detail.gutter).padding(.trailing, Detail.gutter - 12)

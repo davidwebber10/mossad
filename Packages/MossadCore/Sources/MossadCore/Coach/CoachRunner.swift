@@ -40,6 +40,8 @@ public actor CoachRunner {
             // A call where only others spoke still gets a review: whether it needed the owner is worth knowing. A meeting
             // made from Gemini's notes has no voice to review, and the owner may not have been in it.
             r.status == .written && r.start >= since && !reviewed.contains(r.id) && !r.utterances.isEmpty && !r.isNotesOnly
+                // A meeting whose move waits gets no review here: the other profile has it next.
+                && r.moveTo == nil
         }.sorted { $0.start < $1.start }
     }
 

@@ -222,6 +222,15 @@ final class UsageStatsTests: XCTestCase {
         XCTAssertNotEqual(reset, first)
         XCTAssertEqual(UsageReportPlan.installID(defaults), reset)
     }
+
+    func testAPhoneCallCountsAsInPersonAndTheKeysDoNotChange() throws {
+        let records = [record("d", daysAgo: 3, minutes: 20, platform: .inPerson), record("f", daysAgo: 3, minutes: 20, platform: .phoneCall),
+                       record("g", daysAgo: 2, minutes: 10, platform: .unknown)]
+        let s = UsageStats.make(input(records: records), now: now, calendar: calendar)
+        XCTAssertEqual(s.platforms7, .init(zoom: 0, meet: 0, teams: 0, inPerson: 2, geminiNotes: 0))
+        XCTAssertEqual(s.meetings7, 3)
+        XCTAssertEqual(Set((try json(s)["platforms7"] as? [String: Int])?.keys ?? [:].keys), ["zoom", "meet", "teams", "inPerson", "geminiNotes"])
+    }
 }
 
 final class UsageReportPlanTests: XCTestCase {

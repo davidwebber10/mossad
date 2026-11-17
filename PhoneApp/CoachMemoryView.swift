@@ -167,7 +167,7 @@ private struct PhoneGoalsScreen: View {
             progress = nil
             return
         }
-        let records = store.meetings, owner = store.owner, facts = AnalyticsScreen.facts, voices = store.paths.voices
+        let records = store.meetings, owner = store.owner, facts = store.facts, voices = store.paths.voices
         let made = await Task.detached(priority: .userInitiated) {
             // The saved people, for the size rule of a 1:1, as the Meetings filter reads it.
             let people = MeetingFilterPeople(profiles: VoiceLibrary(directory: voices).profiles, store: nil, owner: owner)

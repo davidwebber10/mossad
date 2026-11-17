@@ -8,16 +8,17 @@ struct MeetingsListView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var recording = PhoneStore.hook("MOSSAD_ROOM") != nil
     @State private var settings = PhoneStore.hook("MOSSAD_SETTINGS") != nil
+    @State private var settingsOnProfiles = Self.startsOnProfiles
+    @Environment(PhoneProfiles.self) private var profiles
     /// The room recording the owner asked to remove, until the dialog answers.
     @State private var removing: String?
     /// A meeting opens out of its row.
     @Namespace private var zoom
     /// The coach's findings deck. Development hook for screenshots: `MOSSAD_FINDINGS=1` opens it.
     @State private var findings = PhoneStore.hook("MOSSAD_FINDINGS") != nil
-    /// The cards the owner already saw in the deck. The row is for a new card only, not a standing prompt.
-    @AppStorage("findingsSeen") private var seen = ""
+    /// The row is for a new card only, not a standing prompt: the cards the owner already saw are the profile's own.
     private var hasNewFindings: Bool {
-        let known = Set(seen.split(separator: "\n").map(String.init))
+        let known = Set(store.findingsSeen.split(separator: "\n").map(String.init))
         return store.findings.contains { !known.contains($0.id) }
     }
 
@@ -41,6 +42,36 @@ struct MeetingsListView: View {
         .padding(.top, Space.s)
     }
 
+    /// A profile that left with recordings: one quiet row that opens Settings on the Profile screen.
+    /// `MOSSAD_SETTINGS=profiles` opens Settings on the Profile screen, in a debug build.
+    private static var startsOnProfiles: Bool {
+        #if DEBUG
+        PhoneStore.hook("MOSSAD_SETTINGS") == "profiles"
+        #else
+        false
+        #endif
+    }
+
+    private func leavingRow(_ name: String, _ entries: [Outbox.Entry]) -> some View {
+        let sent = entries.filter(\.isSent).count
+        return Button {
+            settingsOnProfiles = true
+            settings = true
+        } label: {
+            HStack(spacing: Space.m) {
+                Image(systemName: "tray").foregroundStyle(Palette.secondary).accessibilityHidden(true)
+                Text(PhoneProfileWords.leavingRow(name: name, unsent: entries.count - sent, sent: sent)).textRole(.secondary).foregroundStyle(Palette.secondary)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Palette.tertiaryMark).accessibilityHidden(true)
+            }
+            .padding(.horizontal, Space.l).padding(.vertical, Space.m)
+            .background(Palette.fill, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .padding(.top, Space.s)
+    }
+
     var body: some View {
         @Bindable var store = store
         NavigationStack(path: $store.path) {
@@ -52,6 +83,9 @@ struct MeetingsListView: View {
                             .padding(.vertical, Space.s)
                     }
                     if !store.outbox.entries.isEmpty { outbox }
+                    ForEach(profiles.leavingWithRecordings, id: \.profile.id) { item in
+                        leavingRow(item.profile.name, item.uploader.outbox.entries)
+                    }
                     if hasNewFindings || PhoneStore.hook("MOSSAD_FINDINGS_ROW") != nil { findingsRow }
                     ForEach(store.days, id: \.date) { day in
                         PhoneLabel(day.title).padding(.top, Space.l).padding(.bottom, 2)
@@ -78,12 +112,26 @@ struct MeetingsListView: View {
             .phonePage()
             .navigationTitle("Meetings")
             .toolbar {
+                // Which profile shows, only with two or more.
+                if profiles.book.showsProfiles {
+                    ToolbarItem(placement: .topBarLeading) {
+                        ProfileMark(profile: profiles.shownProfile) {
+                            settingsOnProfiles = true
+                            settings = true
+                        }
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Settings", systemImage: "gearshape") { settings = true }.tint(Palette.ink)
+                    Button("Settings", systemImage: "gearshape") {
+                        settingsOnProfiles = false
+                        settings = true
+                    }
+                    .tint(Palette.ink)
                 }
             }
             .fullScreenCover(isPresented: $recording) { RecordingView() }
-            .sheet(isPresented: $settings) { PhoneSettingsView() }
+            .onChange(of: recording, initial: true) { _, open in store.recorderScreenOpen = open }
+            .sheet(isPresented: $settings) { PhoneSettingsView(startsOnProfiles: settingsOnProfiles) }
             .sheet(isPresented: $findings) {
                 NavigationStack {
                     FindingsScreen(close: { findings = false })
@@ -99,6 +147,12 @@ struct MeetingsListView: View {
         }
     }
 
+    /// "3:05 PM" today; an imported call of another day also says its day: "Nov 12, 3:05 PM".
+    private func when(_ start: Date) -> String {
+        let time = start.formatted(date: .omitted, time: .shortened)
+        return Calendar.current.isDateInToday(start) ? time : "\(start.formatted(.dateTime.month(.abbreviated).day())), \(time)"
+    }
+
     /// Room recordings made here that the Mac has not written up yet.
     @ViewBuilder
     private var outbox: some View {
@@ -109,9 +163,10 @@ struct MeetingsListView: View {
                 HStack(alignment: .top, spacing: Space.m) {
                     Circle().fill(Palette.recording).frame(width: 8, height: 8).padding(.top, 6).accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: Rhythm.pairGap) {
-                        Text(item.recording.title ?? "In-person meeting").textRole(.headline).foregroundStyle(Palette.ink)
+                        Text(item.recording.title ?? (item.recording.isPhoneCall ? CallImport.placeholder : "In-person meeting"))
+                            .textRole(.headline).foregroundStyle(Palette.ink)
                         HStack(spacing: Space.s) {
-                            Text("\(item.recording.start.formatted(date: .omitted, time: .shortened)) · " + status(item))
+                            Text("\(when(item.recording.start)) · " + status(item))
                             if !item.isSent { PhoneProcessingMark() }
                         }
                         .textRole(.secondary)

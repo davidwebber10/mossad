@@ -80,7 +80,7 @@ extension AppController {
     /// fill, calls read again after a change), then the sentences. After the coach's run and at launch, never while a
     /// call is recorded, and only after the records have their people's ids.
     func runPersonas() async {
-        guard !isInert, personasOn, !personasRunning, !isRecording else { return }
+        guard mode.does(.personas), personasOn, !personasRunning, !isRecording else { return }
         let key = aiProvider.key.flatMap { keychain.get($0) }
         guard let made = PersonaExtractor.model(provider: aiProvider, chosen: aiModel, key: key, usage: usage, serverURL: localServerBase) else { return }
         if personaSince == 0 { personaSince = Date().timeIntervalSince1970 }

@@ -66,9 +66,22 @@ public protocol RecordStore: Sendable {
     func discard(_ names: [String]) async
     /// The same record, read again by name for a later try; nil when the store no longer has it.
     func refetch(_ record: ChangedRecord) async throws -> ChangedRecord?
+    /// Saves one record and throws why the store did not take it.
+    func saveOne(_ record: StoredRecord) async throws
+}
+
+/// Why a store did not take a record, where it matters to the sender.
+public enum StoreRefusal: Error, Equatable {
+    /// The store does not know a field of the record, such as an iCloud schema from before the field.
+    case unknownField
 }
 
 extension RecordStore {
+    /// A store that does not say why: a record it did not save is an upload that failed.
+    public func saveOne(_ record: StoredRecord) async throws {
+        guard try await save([record]).contains(record.name) else { throw ServerError.http(0, "The recording did not upload.") }
+    }
+
     public func refetch(_ record: ChangedRecord) async throws -> ChangedRecord? { record }
     public var stateFileName: String { SyncState.fileName }
     public var wantsMeetingView: Bool { false }

@@ -151,7 +151,7 @@ final class AskPanelController {
 
     /// Where the owner left it, while that is on a screen; else low in the middle of the screen with the pointer.
     private func startOrigin(height: CGFloat) -> NSPoint {
-        if let saved = UserDefaults.standard.string(forKey: Self.originKey)?.split(separator: ","), saved.count == 2,
+        if let saved = MacDefaults.store.string(forKey: Self.originKey)?.split(separator: ","), saved.count == 2,
            let x = Double(saved[0]), let y = Double(saved[1]) {
             let point = NSPoint(x: x, y: y)
             let field = NSRect(x: x, y: y, width: AskPanelView.width, height: 60)
@@ -172,7 +172,7 @@ final class AskPanelController {
 
     private func saveOrigin() {
         guard !adjusting, !controller.isInert, let panel, panel.isVisible else { return }
-        UserDefaults.standard.set("\(panel.frame.minX),\(panel.frame.minY)", forKey: Self.originKey)
+        MacDefaults.store.set("\(panel.frame.minX),\(panel.frame.minY)", forKey: Self.originKey)
     }
 
     // MARK: Keys

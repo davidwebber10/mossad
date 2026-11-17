@@ -649,7 +649,8 @@
             "Each person as their page shows them, with how to present to them when you keep a read",
             "Your next meetings, the prep for each, recurring meetings, and your points for next time",
             "Your tasks, the coach's cards and goal, and your analytics",
-            "It can save a point for next time; nothing else changes"
+            "It can save a point for next time; nothing else changes",
+            "Each profile has its own connection"
           ],
           "icon": "puzzlepiece.extension",
           "comingSoon": false,
@@ -684,7 +685,7 @@
     {
       "id": "iphone",
       "title": "iPhone",
-      "intro": "Your meetings on your phone, and a recorder for the meetings in a room.",
+      "intro": "Your meetings on your phone, a recorder for the meetings in a room, and your phone calls as meetings.",
       "image": "The iPhone Meetings list next to the room recorder.",
       "features": [
         {
@@ -710,6 +711,18 @@
           "icon": "record.circle",
           "comingSoon": false,
           "sources": ["PhoneApp/RoomRecorder.swift", "Packages/MossadCore/Sources/MossadCore/Room/RoomRecording.swift", "Packages/MossadCore/Sources/MossadCore/Room/Outbox.swift", "Packages/MossadCore/Sources/MossadCore/Sync/PhoneRecording.swift"]
+        },
+        {
+          "id": "phone-call-import",
+          "title": "Your phone calls, too",
+          "body": "Share a call recording from Notes to Mossad, and the call becomes a meeting with its note.",
+          "details": [
+            "Say who was on the call, and Mossad names their voice",
+            "A Shortcuts action adds a recording with no screen"
+          ],
+          "icon": "phone",
+          "comingSoon": false,
+          "sources": ["PhoneApp/CallImportScreen.swift", "PhoneApp/AddRecordingIntent.swift", "Packages/MossadCore/Sources/MossadCore/Room/CallImport.swift", "Packages/MossadCore/Sources/MossadCore/Sync/PhoneRecording.swift"]
         }
       ]
     },
@@ -818,6 +831,27 @@
           "icon": "icloud",
           "comingSoon": false,
           "sources": ["Packages/MossadCore/Sources/MossadCore/Sync/CloudSync.swift", "Packages/MossadCore/Sources/MossadCore/Sync/CloudKitStore.swift"]
+        },
+        {
+          "id": "separate-profiles",
+          "title": "Work and personal, kept apart",
+          "body": "Keep work calls and personal calls in separate profiles on your Mac and your iPhone, and change from one to the other with one click.",
+          "details": [
+            "Each profile has its own keys, people, voices, coach, sync, and backup",
+            "A call is recorded by the profile you are in, and the menu bar shows which one",
+            "An AI app that you connect to one profile never reads the other",
+            "The profile you are not in still finishes its meetings and keeps its sync and backup up to date",
+            "A recording from your iPhone gets its notes while the Mac is in another profile",
+            "On your iPhone, each profile has its own meetings, and you change profile in Settings",
+            "A phone call that you share goes to the profile you pick",
+            "A meeting that went to the wrong profile moves to the right one, with its recording, its notes, and the chats about that meeting alone",
+            "During a call you can say that it is for the other profile, and that profile writes the notes",
+            "When the call goes on as a new recording, your choice is kept; when Mossad is not sure it is the same call, it holds the recording until you choose",
+            "With one profile, nothing changes"
+          ],
+          "icon": "person.2.crop.square.stack",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Profiles/ProfileRegistry.swift", "Packages/MossadCore/Sources/MossadCore/Support/AppIdentity.swift", "App/ProfileSwitcher.swift", "App/ProfileSettings.swift", "Packages/MossadCore/Sources/MossadCore/Worker/ProfileWorker.swift", "PhoneApp/PhoneProfiles.swift", "PhoneApp/ProfilesScreen.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/PhoneProfileBook.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/MovePlan.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/MoveAfterCall.swift", "App/AppController+Moves.swift"]
         }
       ]
     },
@@ -1041,7 +1075,7 @@
     },
     {
       "question": "Is there an iPhone app?",
-      "answer": "Yes. It shows your meetings, chat, people, analytics, and the coach, and it records meetings in a room for your Mac to write up. It syncs through iCloud or your own server. It is not in the App Store; build it from the source with Xcode."
+      "answer": "Yes. It shows your meetings, chat, people, analytics, and the coach. It records meetings in a room for your Mac to write up, and it turns a recorded phone call into a meeting. It syncs through iCloud or your own server. It is not in the App Store; build it from the source with Xcode."
     },
     {
       "question": "How do updates work?",

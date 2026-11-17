@@ -329,6 +329,27 @@ extension PipelineTests {
         XCTAssertEqual(left, [])
     }
 
+    /// A quit after the merged record took its place but before the old Undo copy went: the next run removes it.
+    func testAMergeStoppedAfterItsRecordWasSavedDropsTheUndoCopy() async throws {
+        let first = try makeRecord()
+        let p = pipeline()
+        await p.process(first)
+        _ = await p.transcribeAgain(first, speakers: nil)
+        let second = try makeSecondPart(after: first, gap: 3, meetingID: nil)
+        await p.process(second)
+        let dir = paths.callDirectory(first)
+        XCTAssertTrue(Pipeline.hasPreviousTranscript(dir))
+        var merged = MeetingMerge.combine([try load(first), try load(second)], durations: [first: 30, second: 20])
+        merged.status = .identified
+        try merged.save(to: dir)
+        try Pipeline.MergePlan(ids: [first, second], phase: .saved, had: ["me.caf", "them.caf", Recording.fileName]).save(in: dir)
+
+        await pipeline().runPending()
+
+        XCTAssertEqual(try load(first).parts.count, 2)
+        XCTAssertFalse(Pipeline.hasPreviousTranscript(dir))
+    }
+
     // MARK: Review fixes
 
     /// A failed call kept its job. "Transcribe again" with a speaker count must start its own job.

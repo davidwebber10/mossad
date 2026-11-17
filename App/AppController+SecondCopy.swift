@@ -11,8 +11,13 @@ extension AppController {
                 try? await Task.sleep(for: .seconds(30))
                 guard let self else { return }
                 // Only a look: the lock is free again at once.
-                var free = false
-                if case .held = InstanceLock.acquire(root: paths.root) { free = true }
+                var folderFree = false
+                if case .held = InstanceLock.acquire(root: paths.root) { folderFree = true }
+                // With profiles, the other copy may be another profile: its Mac-wide lock must be free too.
+                let macWideFree: Bool? = ProfileLaunch.takesForegroundLock(AppIdentity.current)
+                    ? InstanceLock.waitUntilFree(root: Self.macWideLockFolder, timeout: 0)
+                    : nil
+                let free = LaunchLocks.mayRestart(folderFree: folderFree, macWideFree: macWideFree)
                 if free != otherCopyQuit {
                     otherCopyQuit = free
                     if free { notifier.postSecondCopy(otherQuit: true) }

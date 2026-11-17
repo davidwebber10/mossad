@@ -81,10 +81,11 @@ struct RecordingSettings: View {
                     .padding(.top, Space.s).padding(.bottom, 4)
                 }
             }
-            SettingsGroup(label: "Do not record", footer: controller.noRecord.unreadable
-                          ? "The do-not-record list could not be read, so calls with an invite are not recorded. Reset the list, or set a choice for any upcoming meeting, to record them again."
-                          : "Removes every \"Don't record\" choice you made for upcoming meetings.") {
+            SettingsGroup(label: "Do not record", footer: controller.noRecordProblem?.settingsFooter
+                          ?? "Removes every \"Don't record\" choice you made for upcoming meetings.") {
                 Button("Reset do-not-record list") { controller.resetNoRecordList() }
+                    // Another profile's list is reset in that profile: a reset here would not end the block.
+                    .disabled({ if case .otherProfile = controller.noRecordProblem { return true }; return false }())
                     .buttonStyle(SettingsTextButtonStyle(color: Palette.recording, weight: .medium))
                     .font(.system(size: Rhythm.bodySize))
                     .padding(.vertical, 9)

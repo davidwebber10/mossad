@@ -32,6 +32,8 @@ public struct ChatTools: Sendable {
     let paths: Paths?
     /// The call recording now, if any, for current_call.
     let live: CallRecord?
+    /// Why the call that records now has no live transcript, as the app knows it (a guess, a take-back); nil in other AI apps.
+    let liveOff: LiveOffReason?
 
     /// The saved people, so a name or an id finds a person under any name the records have: an old name after a
     /// rename, or "Carter, Sam". Empty without the people store; then names match as text, as before ids.
@@ -51,9 +53,15 @@ public struct ChatTools: Sendable {
     var now: Date { fixedNow ?? Date() }
 
     public init(records: [CallRecord], owner: String, paths: Paths? = nil, people: [Person]? = nil, profiles: [VoiceProfile]? = nil,
-                personaTraits: Bool = true, settings: ToolSettings? = nil, now: Date? = nil) {
+                personaTraits: Bool = true, settings: ToolSettings? = nil, now: Date? = nil, leaving: Set<String>? = nil,
+                liveOff: LiveOffReason? = nil) {
         fixedNow = now
-        self.records = records.filter { $0.status == .written }.sorted { $0.start > $1.start }
+        self.liveOff = liveOff
+        // A meeting that the other profile took in is that profile's from then on: no tool and no digest part reads it
+        // here while its removal runs (`MoveOut.syncHeld`, read-only from this profile's own `Moves`; nothing there,
+        // nothing read). A call marked during its recording is never written here, so it is never in the list.
+        let left = leaving ?? paths.map(MoveOut.syncHeld) ?? []
+        self.records = records.filter { $0.status == .written && !left.contains($0.id) }.sorted { $0.start > $1.start }
         live = records.filter { $0.status == .recording }.max { $0.start < $1.start }
         self.owner = owner
         self.paths = paths

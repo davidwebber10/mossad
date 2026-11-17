@@ -140,6 +140,11 @@ struct MeetingDetailView: View {
                 } else {
                     LiveTranscriptPanel(record: record, top: Self.underTabs + 28, jump: $liveJump)
                 }
+            } else if record.status != .written, let row = controller.moveRow(record) {
+                // A meeting that waits to move is not processed here: its row's sentence takes the progress's place.
+                ScrollView {
+                    MoveRowLine(record: record, row: row).detailColumn(top: 28)
+                }
             } else if processingFirstTime, let step = ProcessingStep(status: record.status) {
                 // Until the first note is written the tabs have nothing to show, so the progress takes their place.
                 ScrollView {
@@ -171,8 +176,13 @@ struct MeetingDetailView: View {
         switch tab {
         case .summary:
             ScrollView {
-                SummaryTab(record: record, people: people, player: player, delete: record.canDelete ? { deleting = record } : nil)
-                    .detailColumn(top: Self.underTabs + 32)
+                VStack(alignment: .leading, spacing: Rhythm.groupGap) {
+                    // A written meeting that moves: its row's line and the move's answers on its own page too.
+                    if record.status == .written, let row = controller.moveRow(record) { MoveRowLine(record: record, row: row) }
+                    MoveLineView(meeting: record.id, inScroll: true)
+                    SummaryTab(record: record, people: people, player: player, delete: record.canDelete ? { deleting = record } : nil)
+                }
+                .detailColumn(top: Self.underTabs + 32)
             }
         case .transcript:
             TranscriptTab(record: record, people: people, player: player, top: Self.underTabs + 28, highlight: highlight)

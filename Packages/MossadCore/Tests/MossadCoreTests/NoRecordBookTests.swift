@@ -134,6 +134,114 @@ final class NoRecordBookTests: XCTestCase {
         gate.update(book: NoRecordBook())
         XCTAssertFalse(gate.blocks(platform: .meet, meetingID: "abc-defg-hij", at: at(0)))
     }
+
+    // Not recording is Mac-wide: the gate of the active profile reads every profile's list.
+
+    private let zoom = "https://acme.zoom.us/j/123456789"
+
+    private func temp() -> URL {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("no-record-\(UUID().uuidString)")
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        return dir
+    }
+
+    func testARefusalInAnotherProfileBlocksTheCall() {
+        let e = event("Vendor", in: 0, text: zoom)
+        var other = NoRecordBook()
+        other.set(.skipSeries, for: meeting(e))
+        let own = NoRecordBook()
+        let gate = NoRecordBook.forGate(own: own, others: [other])
+        XCTAssertTrue(gate.blocks(platform: .zoom, meetingID: nil, at: at(2), events: [e]))
+        XCTAssertEqual(own.choice(for: meeting(e)), .record)
+        XCTAssertFalse(NoRecordBook.forGate(own: own, others: []).blocks(platform: .zoom, meetingID: nil, at: at(2), events: [e]))
+    }
+
+    func testOnlyTheActiveProfilesEndedRulesKeepNotesOut() {
+        let e = event("Vendor", in: 0, text: zoom)
+        var other = NoRecordBook()
+        other.set(.skipSeries, for: meeting(e), at: at(-60))
+        other.set(.record, for: meeting(e), at: at(60))
+        XCTAssertTrue(other.excludesNotes(of: e))
+        XCTAssertFalse(NoRecordBook.forGate(own: NoRecordBook(), others: [other]).excludesNotes(of: e))
+    }
+
+    func testAnotherProfilesListIsReadAndNeverChanged() throws {
+        let dir = temp()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent(NoRecordBook.fileName)
+        try Data("{".utf8).write(to: file)
+        XCTAssertTrue(NoRecordBook.peek(from: dir).unreadable)
+        XCTAssertEqual(try Data(contentsOf: file), Data("{".utf8))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), [NoRecordBook.fileName])
+        let missing = temp()
+        XCTAssertEqual(NoRecordBook.peek(from: missing), NoRecordBook())
+        XCTAssertFalse(FileManager.default.fileExists(atPath: missing.path))
+        XCTAssertTrue(NoRecordBook.forGate(own: NoRecordBook(), others: [NoRecordBook.peek(from: dir)]).unreadable)
+    }
+
+    func testAListMovedAsideByItsOwnProfileStaysUnknown() throws {
+        let dir = temp()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data("{".utf8).write(to: dir.appendingPathComponent(NoRecordBook.fileName))
+        _ = NoRecordBook.load(from: dir)   // the profile that owns the list moves it aside
+        XCTAssertTrue(NoRecordBook.peek(from: dir).unreadable)
+    }
+
+    func testABlockedCallGoesOnAfterASwitch() {
+        let e = event("Vendor", in: 0, text: meet)
+        var book = NoRecordBook()
+        book.set(.skipThisMeeting, for: meeting(e))
+        let dirA = temp(), dirB = temp()
+        let a = NoRecordGate()
+        a.update(book: book)
+        a.update(events: [e])
+        a.persistSession(in: dirA)
+        XCTAssertTrue(a.blocksStart(platform: .meet, bundleID: "com.google.Chrome", meetingID: "abc-defg-hij", at: at(1)))
+        let fileA = dirA.appendingPathComponent(NoRecordGate.sessionFileName)
+        let before = try? Data(contentsOf: fileA)
+        let b = NoRecordGate()
+        b.persistSession(in: dirB)
+        b.adopt(sessionsIn: [dirA])
+        b.update(events: [])
+        XCTAssertTrue(b.blocksStart(platform: .meet, bundleID: "com.google.Chrome", meetingID: "abc-defg-hij", at: at(2)))
+        XCTAssertEqual(b.currentBlock?.title, "")
+        XCTAssertNotNil(before); XCTAssertEqual(try? Data(contentsOf: fileA), before)
+    }
+
+    func testAnEndedBlockOfAnotherProfileIsNotAdopted() {
+        let e = event("Vendor", in: 0, text: zoom)
+        var book = NoRecordBook()
+        book.set(.skipThisMeeting, for: meeting(e))
+        let dirA = temp(), dirB = temp()
+        let a = NoRecordGate()
+        a.update(book: book)
+        a.update(events: [e])
+        a.persistSession(in: dirA)
+        XCTAssertTrue(a.blocksStart(platform: .zoom, bundleID: "us.zoom.xos", meetingID: nil, at: at(1)))
+        XCTAssertTrue(a.callEnded(at: at(5)))
+        let b = NoRecordGate()
+        b.persistSession(in: dirB)
+        b.adopt(sessionsIn: [dirA])
+        b.update(events: [])
+        XCTAssertFalse(b.blocksStart(platform: .zoom, bundleID: "us.zoom.xos", meetingID: nil, at: at(6)))
+    }
+
+    func testTheGatesOwnNewerSessionIsKept() {
+        let e = event("Vendor", in: 0, text: meet)
+        let other = event("Other", in: 0, text: "https://meet.google.com/xyz-abcd-efg")
+        var bookA = NoRecordBook(), bookB = NoRecordBook()
+        bookA.set(.skipThisMeeting, for: meeting(e))
+        bookB.set(.skipThisMeeting, for: meeting(other))
+        let dirA = temp(), dirB = temp()
+        let a = NoRecordGate()
+        a.update(book: bookA); a.update(events: [e]); a.persistSession(in: dirA)
+        XCTAssertTrue(a.blocksStart(platform: .meet, bundleID: "com.google.Chrome", meetingID: "abc-defg-hij", at: at(1)))
+        let b = NoRecordGate()
+        b.update(book: bookB); b.update(events: [other]); b.persistSession(in: dirB)
+        XCTAssertTrue(b.blocksStart(platform: .meet, bundleID: "com.google.Chrome", meetingID: "xyz-abcd-efg", at: at(3)))
+        b.adopt(sessionsIn: [dirA])
+        XCTAssertEqual(b.currentBlock?.title, "Other")
+    }
 }
 
 final class NoRecordGateSessionTests: XCTestCase {

@@ -37,8 +37,10 @@ public struct SpeakerIdentifier: Sendable {
 
     /// `call` is the call's id and start, kept with each voice sample that the call teaches. `invite` is the call's
     /// invite, nil when it has none; `InviteVoiceRules` says what it changes.
+    /// `enrolOwner` false keeps the owner's voice unlearned on a call where the voice that talks most may be another
+    /// person's, such as a phone call.
     public func identify(utterances: [Utterance], meURL: URL, themURL: URL, call: (id: String, start: Date)? = nil,
-                         invite: CallInvite? = nil) async throws -> SpeakerIdentification {
+                         invite: CallInvite? = nil, enrolOwner: Bool = true) async throws -> SpeakerIdentification {
         var result = SpeakerIdentification()
         var keys: [String] = []
         for u in utterances where !keys.contains(u.speakerKey) { keys.append(u.speakerKey) }
@@ -70,7 +72,7 @@ public struct SpeakerIdentifier: Sendable {
         }
 
         // Without an enrolled owner, the speaker who talks most on the mic is the owner.
-        if library.owner == nil {
+        if library.owner == nil, enrolOwner {
             let meKeys = keys.filter { $0.hasPrefix("me:") }
             // The fingerprint uses all of the speaker's audio, so most of it must be clean too.
             if let dominant = meKeys.max(by: { clean($0) < clean($1) }), clean(dominant) >= Self.minimumOwnerSpeech,

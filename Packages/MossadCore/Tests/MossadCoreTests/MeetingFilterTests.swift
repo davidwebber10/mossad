@@ -786,4 +786,8 @@ final class MeetingFilterTests: XCTestCase {
         XCTAssertEqual(narrow.matches, ["a"])
         XCTAssertEqual(narrow.filterMatches, ["a", "b"], "the list meets the newest search text with these")
     }
+
+    func testAPhoneCallsChipWords() {
+        XCTAssertEqual(MeetingFilter.Active.platform(.phoneCall).label(calendar: calendar, now: now), "Phone call")
+    }
 }

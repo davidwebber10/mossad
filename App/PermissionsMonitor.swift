@@ -101,15 +101,15 @@ final class PermissionsMonitor: ObservableObject {
     private static func remember(_ state: PermissionState, for kind: PermissionKind) -> PermissionState {
         guard case .automation(let id) = kind else { return state }
         let key = "automationState.\(id)"
-        let lastKnown: PermissionState? = switch UserDefaults.standard.string(forKey: key) {
+        let lastKnown: PermissionState? = switch MacDefaults.store.string(forKey: key) {
         case "granted": .granted
         case "denied": .denied
         default: nil
         }
         switch Permissions.remembered(after: state, previous: lastKnown) {
-        case .granted: UserDefaults.standard.set("granted", forKey: key)
-        case .denied: UserDefaults.standard.set("denied", forKey: key)
-        default: UserDefaults.standard.removeObject(forKey: key)
+        case .granted: MacDefaults.store.set("granted", forKey: key)
+        case .denied: MacDefaults.store.set("denied", forKey: key)
+        default: MacDefaults.store.removeObject(forKey: key)
         }
         return Permissions.resolve(state, lastKnown: lastKnown)
     }
@@ -123,8 +123,8 @@ final class PermissionsMonitor: ObservableObject {
     /// Asks macOS for Screen & System Audio Recording, one time only and only when the owner turns on "Capture
     /// shared screens". macOS shows its alert, which opens System Settings. Never called at launch or in a call.
     func requestScreenCaptureOnce() {
-        guard !CGPreflightScreenCaptureAccess(), !UserDefaults.standard.bool(forKey: Self.screenAskedKey) else { return refresh() }
-        UserDefaults.standard.set(true, forKey: Self.screenAskedKey)
+        guard !CGPreflightScreenCaptureAccess(), !MacDefaults.store.bool(forKey: Self.screenAskedKey) else { return refresh() }
+        MacDefaults.store.set(true, forKey: Self.screenAskedKey)
         // The request can wait for the alert, so it stays off the main thread.
         DispatchQueue.global(qos: .userInitiated).async {
             _ = CGRequestScreenCaptureAccess()
@@ -195,7 +195,7 @@ final class PermissionsMonitor: ObservableObject {
         case .screenCapture:
             // The check shows no prompt. macOS does not tell "not asked" from "denied"; Mossad remembers that it asked.
             if CGPreflightScreenCaptureAccess() { return .granted }
-            return UserDefaults.standard.bool(forKey: screenAskedKey) ? .denied : .notAsked
+            return MacDefaults.store.bool(forKey: screenAskedKey) ? .denied : .notAsked
         }
     }
 

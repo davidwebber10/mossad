@@ -111,7 +111,7 @@ targets:
       path: PhoneApp/Info.plist
       properties:
         NSMicrophoneUsageDescription: Mossad records meetings in the room so your Mac can write the notes.
-        NSCameraUsageDescription: Mossad scans the code your Mac shows to connect to your server.
+        NSCameraUsageDescription: Mossad scans the code your Mac shows to connect to your server or to add a profile.
         UIBackgroundModes: [audio]
         CFBundleDisplayName: Mossad
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -119,6 +119,12 @@ targets:
         UILaunchScreen: {}
         CFBundleURLTypes: [{CFBundleURLName: com.dwebber.mossad.phone, CFBundleURLSchemes: [mossad]}]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Audio
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.audio]
+        LSSupportsOpeningDocumentsInPlace: false
     entitlements:
       path: PhoneApp/MossadPhone.entitlements
       properties:

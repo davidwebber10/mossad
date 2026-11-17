@@ -43,6 +43,7 @@ struct MeetingList: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
+                    MoveLineView(inScroll: true)
                     if !live.isEmpty {
                         GroupHeader(title: "Now", color: Palette.recording, first: true)
                         // Its own id in the stack: with the record's id, a stopped call's row moved to its day kept
@@ -72,7 +73,8 @@ struct MeetingList: View {
                         ForEach(day.records, id: \.id) { r in
                             let match = searching ? controller.meetingListMatches[r.id] : nil
                             MeetingRow(record: r, selected: selection == r.id, match: match)
-                                .listRow(selected: selection == r.id) { open(r.id, at: match?.time) }
+                                // A meeting that arrives from another profile does not open until it is taken in.
+                                .listRow(selected: selection == r.id) { if !controller.isArriving(r) { open(r.id, at: match?.time) } }
                                 .contextMenu { MeetingMenuItems(record: r, deleting: $deleting) }
                         }
                     }
@@ -309,6 +311,7 @@ private struct MeetingRow: View {
                 .font(.system(size: Rhythm.secondarySize))
                 .lineLimit(1)
                 if let match { ListMatchLine(match: match).padding(.top, Rhythm.pairGap) }
+                if let row = controller.moveRow(record) { MoveRowLine(record: record, row: row).padding(.top, Rhythm.pairGap) }
                 // The open meeting says how many voices, on a line of its own, as the canvas shows it.
                 if selected, record.badge == .needsNames {
                     let n = record.unknownSpeakers.count

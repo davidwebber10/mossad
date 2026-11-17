@@ -236,11 +236,18 @@ public final class MergedCalendarSource: CalendarSource, @unchecked Sendable {
     public func forget() { lock.withLock { cache = nil; failedAt = nil; inFlight = []; generation += 1 } }
 
     public func events(from: Date, to: Date) async -> [CalendarEventInfo] {
+        await read(from: from, to: to).events
+    }
+
+    /// `known` stays true here: the window app never marks a meeting for a calendar it could not read. How Google
+    /// went is this read's own.
+    public func read(from: Date, to: Date) async -> CalendarRead {
         let local = await mac.events(from: from, to: to)
         let on = google()?.isOn == true
         let page = await googlePage(from: from, to: to)
-        lock.withLock { googleRead = !on ? .no : page == nil ? .failed : .yes }
-        return CalendarMerge.merge(mac: local, google: page)
+        let google: CalendarSnapshot.Access.Read = !on ? .no : page == nil ? .failed : .yes
+        lock.withLock { googleRead = google }
+        return CalendarRead(events: CalendarMerge.merge(mac: local, google: page), known: true, google: google)
     }
 
     /// How the last read of Google went: not connected, read, or failed (the Mac's calendar alone then).

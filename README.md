@@ -59,7 +59,7 @@ Screenshots are coming.
 
 **Chat, sharing, and sync**
 
-- **Chat** with your meetings, or give Claude, ChatGPT, and other AI apps read access through MCP (`Mossad --mcp`, or your own server).
+- **Chat** with your meetings, or give Claude, ChatGPT, and other AI apps read access through MCP (`Mossad --mcp`; for another profile, `Mossad --mcp --profile <id>`, as Settings > AI shows; or your own server).
 - **Share one meeting** with a link and an optional PIN, through your own server, and see who opened it.
 - **An iPhone app** for your meetings, the coach, and recording meetings in a room. It syncs through iCloud or your own server.
 - **Backups** of recordings to Cloudflare R2, Amazon S3, or your own server.
@@ -185,6 +185,8 @@ Everything stays in your home folder.
 | `~/Mossad/Audio/<call id>/` | `recording.m4a` (both sides mixed, kept forever, about 14 MB an hour), the two raw tracks (deleted after 30 days by default), and `call.json` with the processing state. |
 | `~/Mossad/Voices/voices.json` | Saved voice fingerprints and names |
 | `~/Mossad/Logs/mossad.log` | The app log, rotated at 5 MB |
+
+Another profile keeps the same layout in its own folder, such as `~/Mossad Work`.
 
 Audio goes to the transcription provider you chose, and the transcript goes to the AI provider you chose, unless you choose models that run on your Mac. Your meetings, recordings, and names go nowhere else unless you turn on sync, backup, sharing, Google, or the weekly email.
 

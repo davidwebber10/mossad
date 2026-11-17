@@ -111,7 +111,7 @@ public actor Pipeline {
     public func runPending() async {
         finishInterruptedMerges()
         // Calls held because their muted parts could not be silenced (a full disk): try that again.
-        for r in queue.allRecords() where r.mutedAudioPending && r.status == .failed && r.failedStep == .recorded { await retry(r.id) }
+        for r in queue.allRecords() where r.mutedAudioPending && r.status == .failed && r.failedStep == .recorded && r.moveTo == nil { await retry(r.id) }
         for r in queue.pending(now: now()) { await process(r.id) }
         await retryMissingSummaries()
     }
@@ -119,7 +119,7 @@ public actor Pipeline {
     /// Meetings written without a summary (the provider failed three times) try again once a day while a model is set.
     private func retryMissingSummaries() async {
         guard summarizer != nil else { return }
-        for r in queue.allRecords() where r.status == .written && r.summaryMissing == true && !r.utterances.isEmpty
+        for r in queue.allRecords() where r.status == .written && r.summaryMissing == true && !r.utterances.isEmpty && r.moveTo == nil
             && (r.nextAttempt ?? .distantPast) <= now() && !inFlight.contains(r.id) {
             let next = now().addingTimeInterval(Self.missingSummaryRetry)
             // Saved first, so a failure or a crash waits a day too. Quiet: the calendar match and the names are done.
@@ -163,6 +163,16 @@ public actor Pipeline {
             try? FileManager.default.removeItem(at: dir.appendingPathComponent(Self.quietFileName))
         }
         guard var r = try? CallRecord.load(from: dir) else { return }
+        // A meeting that leaves for another profile sends nothing to this profile's providers.
+        if r.moveTo != nil {
+            Log.info("\(id) is moving to another profile; it is not processed here")
+            return
+        }
+        // A meeting of a newer build waits for it: this build does not know how its tracks hold the voices.
+        if r.platform == .unknown, r.status != .written {
+            Log.info("\(id) has a platform this build does not know; it waits for an update")
+            return
+        }
         // A quiet run that a quit interrupted is still quiet: its record from before was saved beside it.
         if quietRuns[id] == nil, let original = try? CallRecord.load(from: dir, fileName: Self.quietFileName) { quietRuns[id] = original }
         jobs[id] = r.transcriptionJobs ?? [:]
@@ -230,7 +240,7 @@ public actor Pipeline {
     /// meetings keep their calendar title and attendees and the owner is not pinged once per meeting.
     public func regenerateSummary(_ id: String, quiet: Bool = false) async {
         let dir = paths.callDirectory(id)
-        guard !inFlight.contains(id), var r = try? CallRecord.load(from: dir), r.status == .written, !r.utterances.isEmpty else { return }
+        guard !inFlight.contains(id), var r = try? CallRecord.load(from: dir), r.status == .written, !r.utterances.isEmpty, r.moveTo == nil else { return }
         let original = r
         if quiet {
             // On disk too, so a quit during the run neither matches the calendar again nor notifies on the next launch.
@@ -251,7 +261,8 @@ public actor Pipeline {
     public func backfill(_ id: String) async -> Bool {
         // Saved first, so a retry after a failure keeps the tags too. Old owner tags and old model tags look alike.
         let dir = paths.callDirectory(id)
-        if var r = try? CallRecord.load(from: dir), r.status == .written, !r.tags.isEmpty, r.tagsSetByOwner != true {
+        // A meeting whose move waits is not written here (`regenerateSummary` refuses it too).
+        if var r = try? CallRecord.load(from: dir), r.status == .written, r.moveTo == nil, !r.tags.isEmpty, r.tagsSetByOwner != true {
             r.tagsSetByOwner = true
             try? store(r, dir: dir)
         }
@@ -272,17 +283,32 @@ public actor Pipeline {
         FileManager.default.fileExists(atPath: dir.appendingPathComponent(previousFileName).path)
     }
 
+    /// Undo brings back the last whole meeting: only a record as whole as the kept copy replaces it. A quit or a crash
+    /// resumes the run, and "Transcribe again" waits for its end.
+    static func keepsUndoCopy(kept: CallRecord, current: CallRecord) -> Bool {
+        undoWorth(kept) > undoWorth(current)
+    }
+
+    /// A failed run, even one that failed only at the note write, ranks with no transcript: Undo would write it as is.
+    private static func undoWorth(_ r: CallRecord) -> Int {
+        guard r.status != .failed, !r.utterances.isEmpty else { return 0 }
+        return r.summary?.nonBlank == nil ? 1 : 2
+    }
+
     /// Transcribes a finished meeting again from its audio, optionally with how many people spoke, then names the
     /// voices and writes a new summary and note. The current record is kept first, so the person can go back.
     @discardableResult
     public func transcribeAgain(_ id: String, speakers: Int?) async -> Bool {
         let dir = paths.callDirectory(id)
-        guard var r = try? CallRecord.load(from: dir), r.status == .written || r.status == .failed,
+        guard var r = try? CallRecord.load(from: dir), r.status == .written || r.status == .failed, r.moveTo == nil,
               Self.canTranscribeAgain(dir), !inFlight.contains(id) else { return false }
         do {
             let previous = dir.appendingPathComponent(Self.previousFileName)
-            try? FileManager.default.removeItem(at: previous)
-            try FileManager.default.copyItem(at: dir.appendingPathComponent(CallRecord.fileName), to: previous)
+            let kept = try? CallRecord.load(from: dir, fileName: Self.previousFileName)
+            if kept.map({ Self.keepsUndoCopy(kept: $0, current: r) }) != true {
+                try? FileManager.default.removeItem(at: previous)
+                try FileManager.default.copyItem(at: dir.appendingPathComponent(CallRecord.fileName), to: previous)
+            }
         } catch {
             Log.error("Could not keep the transcript of \(id) before transcribing again: \(error)")
             return false
@@ -297,6 +323,8 @@ public actor Pipeline {
         r.unknownSpeakers = []
         r.speakerEmbeddings = [:]
         r.speakerSamples = nil
+        // The old summary describes the old transcript; undo brings it back.
+        r.clearSummary()
         r.fromInvite = nil
         r.status = .recorded
         r.failedStep = nil
@@ -313,7 +341,7 @@ public actor Pipeline {
     @discardableResult
     public func restorePreviousTranscript(_ id: String) async -> Bool {
         let dir = paths.callDirectory(id)
-        guard let current = try? CallRecord.load(from: dir), current.status == .written || current.status == .failed,
+        guard let current = try? CallRecord.load(from: dir), current.status == .written || current.status == .failed, current.moveTo == nil,
               var r = try? CallRecord.load(from: dir, fileName: Self.previousFileName), !inFlight.contains(id) else { return false }
         // The note is written again from the old record; any path change follows the current one.
         r.markdownPath = current.markdownPath
@@ -336,7 +364,7 @@ public actor Pipeline {
     /// Starts a failed or waiting call again now.
     public func retry(_ id: String) async {
         let dir = paths.callDirectory(id)
-        guard var r = try? CallRecord.load(from: dir) else { return }
+        guard var r = try? CallRecord.load(from: dir), r.moveTo == nil else { return }
         if r.status == .failed, let step = r.failedStep {
             r.status = step
             r.failedStep = nil
@@ -364,8 +392,12 @@ public actor Pipeline {
     /// Loads one record and changes it. While the call is in flight the change is also kept for `carryOwnerEdits`,
     /// so it must give the same result when applied again. Returns nil when the record cannot be read, or when
     /// `change` returns false (nothing to change). The caller saves.
-    private func edit(_ id: String, _ change: @escaping (inout CallRecord) -> Bool) -> CallRecord? {
-        guard var r = try? CallRecord.load(from: paths.callDirectory(id)), change(&r) else { return nil }
+    ///
+    /// `owner`: a change the owner asked for (a title, tags, a bookmark, a screen, a voice). While a move waits (the
+    /// record has `moveTo`), it is refused: the copy in the other profile would not have it, and the meeting would
+    /// lose it there. The app says `MoveWords.moving(to:)`.
+    private func edit(_ id: String, owner: Bool = false, _ change: @escaping (inout CallRecord) -> Bool) -> CallRecord? {
+        guard var r = try? CallRecord.load(from: paths.callDirectory(id)), !(owner && r.moveTo != nil), change(&r) else { return nil }
         if inFlight.contains(id) { ownerEdits[id, default: []].append(change) }
         return r
     }
@@ -477,7 +509,8 @@ public actor Pipeline {
     public func refreshLabels(renamed: (old: String, new: String)? = nil) -> Int {
         var changed = 0
         if let refs = references() {
-            for record in ProcessingQueue(paths: paths).allRecords() {
+            // A meeting whose move waits is left as it is: the target names its people again.
+            for record in ProcessingQueue(paths: paths).allRecords() where record.moveTo == nil {
                 // A first look at the record in memory: most runs change nothing, and then no file is read again.
                 guard refs.refresh(record) != record else { continue }
                 let dir = paths.callDirectory(record.id)
@@ -544,7 +577,7 @@ public actor Pipeline {
     @discardableResult
     public func attachNotes(callID: String, _ notes: GeminiNotesRef) -> Bool {
         guard var r = edit(callID, { r in
-            guard r.gemini == nil else { return false }
+            guard r.gemini == nil, r.moveTo == nil else { return false }
             r.gemini = notes
             return true
         }) else { return false }
@@ -571,6 +604,59 @@ public actor Pipeline {
     /// processing is refused, so the pipeline never writes into a folder that is gone.
     public func delete(callID: String) -> Bool { remove(callID: callID) != nil }
 
+    /// A run of this call is in flight.
+    public func isBusy(_ id: String) -> Bool { inFlight.contains(id) }
+
+    /// Removes a meeting that the target has taken in: the note, its reference backups, and the call folder (renamed out
+    /// of `Audio` first). Only a record marked with `moveTo` that is not in flight; any status. A folder that is gone
+    /// counts as done.
+    ///
+    /// Only an id that `MovePaths` takes, and only the folder in `Audio` whose record reads, has that id, and is
+    /// marked for `target`; a folder that is gone from `Audio` (renamed out by an earlier run) is finished.
+    public func removeMoved(callID: String, target: String, stop: @Sendable (String) throws -> Void = { _ in }) -> Bool {
+        guard MovePaths.isID(callID), MovePaths.isID(target), !inFlight.contains(callID) else { return false }
+        let dir = paths.callDirectory(callID)
+        if FileManager.default.fileExists(atPath: dir.path) {
+            guard let r = try? CallRecord.load(from: dir), r.id == callID, r.moveTo == target else { return false }
+        }
+        guard (try? MoveRemoval.removeFolderOrStop(callID, paths: paths, stop: stop)) == true else { return false }
+        heavy.forget(callID)
+        return true
+    }
+
+    /// Marks a meeting as leaving for a profile, or takes the mark off (nil). False for a call in flight, a call that
+    /// records, a record that cannot be read, or one already marked for another profile.
+    @discardableResult
+    public func setMoveTarget(callID: String, _ profile: String?) -> Bool {
+        guard !inFlight.contains(callID) else { return false }
+        guard var r = edit(callID, { r in
+            guard r.status != .recording, r.moveTo == nil || profile == nil || r.moveTo == profile, r.moveTo != profile else { return false }
+            r.moveTo = profile
+            return true
+        }) else {
+            // Already so: nothing to change, and that is not a refusal.
+            return (try? CallRecord.load(from: paths.callDirectory(callID)))
+                .map { $0.status != .recording && $0.moveTo == profile } ?? false
+        }
+        do { try store(r, dir: paths.callDirectory(callID)) } catch { return false }
+        r.moveTo = profile
+        return true
+    }
+
+    /// Changes the mark of a call that waits for the owner from one profile to another in one write, so the call is
+    /// never unmarked in between. False unless the record is marked for `replacing` and not in flight.
+    @discardableResult
+    public func setMoveTarget(callID: String, _ profile: String, replacing old: String) -> Bool {
+        guard !inFlight.contains(callID), profile != old else { return false }
+        guard let r = edit(callID, { r in
+            guard r.status != .recording, r.moveTo == old else { return false }
+            r.moveTo = profile
+            return true
+        }) else { return false }
+        do { try store(r, dir: paths.callDirectory(callID)) } catch { return false }
+        return true
+    }
+
     /// Deletes like `delete` and returns the record as it was on disk, so the caller can remove what the meeting
     /// has outside this Mac (its archived recording) from the record's own values, not from a list in memory.
     public func remove(callID: String) -> CallRecord? { remove(callID: callID, keepNotes: false) }
@@ -579,7 +665,7 @@ public actor Pipeline {
     /// or billed again.
     func remove(callID: String, keepNotes: Bool) -> CallRecord? {
         let dir = paths.callDirectory(callID)
-        guard let r = try? CallRecord.load(from: dir), r.status == .written || r.status == .failed else { return nil }
+        guard let r = try? CallRecord.load(from: dir), r.status == .written || r.status == .failed, r.moveTo == nil else { return nil }
         if !keepNotes { RemovedNotes.add(r, paths: paths) }
         if let note = r.markdownPath { try? FileManager.default.removeItem(atPath: note) }
         // The copy of the record from before the ids goes with the meeting.
@@ -640,7 +726,7 @@ public actor Pipeline {
     /// on a call the owner is on the mic and the rest are in the call audio.
     static func speakerHints(_ r: CallRecord) -> [Track: Int] {
         guard let n = r.speakersExpected, n > 0 else { return [:] }
-        return r.platform == .inPerson ? [.me: n] : [.them: max(1, n - 1)]
+        return r.platform.isOneTrack ? [.me: n] : [.them: max(1, n - 1)]
     }
 
     private func transcribeIfNeeded(_ done: [Utterance]?, track: Track, speakers: Int?, dir: URL, callID: String) async -> Result<[Utterance], Error> {
@@ -689,8 +775,8 @@ public actor Pipeline {
         p.detail = nil
         if step == .transcribing {
             p.tracks = [.me: r.meUtterances == nil ? .uploading(nil) : .done, .them: r.themUtterances == nil ? .uploading(nil) : .done]
-            // A room has no call audio to wait for.
-            if r.platform == .inPerson { p.tracks[.them] = .skipped }
+            // A room or a phone call has no call audio to wait for.
+            if r.platform.isOneTrack { p.tracks[.them] = .skipped }
         }
         progress[r.id] = p
         onProgress(r.id, p)
@@ -758,18 +844,21 @@ public actor Pipeline {
         }
         // Who was invited decides whose voice may be named on a call. The invite found when the call started was
         // matched to a guessed end, and can have changed since: it is matched again with the call's real times. A
-        // room recording keeps the rules of before.
-        let onCall = r.platform != .inPerson && !r.isNotesOnly
+        // room recording keeps the rules of before; a phone call has the person the owner named as its invite.
+        let onCall = !r.platform.isOneTrack && !r.isNotesOnly
         let sure = onCall ? await matchInvite(&r) : false
-        let invite = onCall ? CallInvite(record: r, sure: sure) : nil
+        let invite = onCall ? CallInvite(record: r, sure: sure)
+            : r.platform == .phoneCall ? r.personHint.map(CallInvite.init(hint:)) : nil
         detail(r.id, "Identifying speakers")
         // Short pieces of each voice, at most a minute per speaker, through the one copy of the voice models that the
         // live transcript's namer also uses; so it runs behind a call.
         let plan = await clearance(r.id, .voiceIdentification)
         let identifier = identifier, utterances = r.utterances, call = (id: r.id, start: r.start)
+        // On a phone call the other person may talk more than the owner: their voice must never become the owner's.
+        let enrolOwner = r.platform != .phoneCall
         let me = dir.appendingPathComponent(Track.me.fileName), them = dir.appendingPathComponent(Track.them.fileName)
         let result = try await runHeavy(r.id, .voiceIdentification, plan) {
-            try await identifier.identify(utterances: utterances, meURL: me, themURL: them, call: call, invite: invite)
+            try await identifier.identify(utterances: utterances, meURL: me, themURL: them, call: call, invite: invite, enrolOwner: enrolOwner)
         }
         r.speakerNames = result.names
         r.unknownSpeakers = result.unknown
@@ -804,10 +893,53 @@ public actor Pipeline {
     @discardableResult
     private func matchInvite(_ r: inout CallRecord) async -> Bool {
         detail(r.id, "Finding the calendar invite")
-        let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
-        guard let match = CalendarMatcher.match(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) else { return false }
-        r.setInvite(match.event)
-        return match.sure
+        let (found, read) = await invite(for: r)
+        guard let found else {
+            // No invite, or a calendar that could not be read: then "no invite" is not known, and the record says so.
+            r.inviteUnknown = read.known ? nil : true
+            return false
+        }
+        r.setInvite(found.event)
+        r.inviteUnknown = nil
+        return found.sure
+    }
+
+    /// The invite of a call by the rules of its platform, or nil.
+    private func invite(for r: CallRecord) async -> (found: (event: CalendarEventInfo, sure: Bool)?, read: CalendarRead) {
+        let read = await calendar.read(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
+        let events = read.events
+        if r.platform == .phoneCall {
+            // Only the event of its one person; the owner's typed title stays, as `customTitle` wins over the invite's.
+            guard let event = CalendarMatcher.phoneCallEvent(start: r.start, end: r.end, in: events, hint: r.personHint,
+                                                             people: library.identity?.people.people ?? []) else { return (nil, read) }
+            return ((event, true), read)
+        }
+        guard let match = CalendarMatcher.match(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) else { return (nil, read) }
+        return ((match.event, match.sure), read)
+    }
+
+    /// Looks again for the invite of each written meeting marked `inviteUnknown` that ended in the last `days` days,
+    /// when this calendar can be read. A match gives the title and the people and writes the note again; the summary
+    /// and the names of the voices stay. No match only clears the mark. Returns how many it matched.
+    public func matchUnknownInvites(newerThan days: Int = 30) async -> Int {
+        guard await calendar.canRead() else { return 0 }
+        let since = now().addingTimeInterval(-Double(days) * 86_400)
+        var matched = 0
+        for r in ProcessingQueue(paths: paths).allRecords() where r.inviteUnknown == true && r.status == .written && r.end >= since && r.moveTo == nil {
+            let (found, read) = await invite(for: r)
+            // A read that failed, Google's too (offline, or slower than the wait): no match is no answer, and the mark
+            // stays for the next launch, within the days.
+            if found == nil, !read.known || read.google == .failed { continue }
+            guard var saved = edit(r.id, { record in
+                record.inviteUnknown = nil
+                if let found { record.setInvite(found.event) }
+                return true
+            }) else { continue }
+            save(&saved, dir: paths.callDirectory(r.id))
+            if found != nil { matched += 1 }
+        }
+        if matched > 0 { Log.info("Calendar: \(matched) meetings got their invite at launch") }
+        return matched
     }
 
     /// Adds calendar details and the summary. Returns false when the summary should be retried later.
@@ -824,7 +956,9 @@ public actor Pipeline {
                 let s = try await UsageContext.$callID.withValue(r.id) {
                     try await summarizer.summarize(transcript: transcript, title: title, knownTags: known, people: people)
                 }
-                r.apply(s)
+                if !r.applyUnlessIncomplete(s) {
+                    Log.info("The new summary for \(r.id) has no overview or an empty topic; the meeting keeps its summary")
+                }
                 r.summaryMissing = nil
             } catch where Self.keyRejected(error) {
                 // Not the call's fault, and not billed: wait for a good key without using up attempts.
@@ -905,14 +1039,15 @@ public actor Pipeline {
     /// Runs a heavy step off this actor at the plan's priority. A step that ran during a call logs its time.
     private func runHeavy<T: Sendable>(_ id: String, _ step: HeavyStep, _ plan: HeavyWorkPlan,
                                        _ body: @escaping @Sendable () async throws -> T) async throws -> T {
-        guard plan.duringCall else { return try await HeavyWork.run(priority: plan.priority, body) }
+        guard plan.usesLane else { return try await HeavyWork.run(priority: plan.priority, body) }
         let heavy = heavy
+        let logs = plan.duringCall
         return try await heavy.lane.run {
             let clock = ContinuousClock(), start = clock.now
             var failed = true
             defer {
                 let d = (clock.now - start).components
-                heavy.log(step.logLine(callID: id, seconds: Double(d.seconds) + Double(d.attoseconds) / 1e18, failed: failed))
+                if logs { heavy.log(step.logLine(callID: id, seconds: Double(d.seconds) + Double(d.attoseconds) / 1e18, failed: failed)) }
             }
             let value = try await HeavyWork.run(priority: plan.priority, body)
             failed = false
@@ -959,8 +1094,9 @@ public actor Pipeline {
     /// Applies names chosen by David, learns those voices, and rewrites the summary and the file.
     /// `emails` uses the same speaker keys as `names`; each email is stored on that person's voice profile.
     public func applyNames(callID: String, names: [String: String], emails: [String: String] = [:]) async {
+        // A meeting whose move waits keeps its names: nothing is learned from it here either.
         let dir = paths.callDirectory(callID)
-        guard let current = try? CallRecord.load(from: dir) else { return }
+        guard let current = try? CallRecord.load(from: dir), current.moveTo == nil else { return }
         // The labels the summary used before the names, such as "Speaker A".
         let before = MarkdownWriter.displayNames(current)
         var chosen: [String: String] = [:]
@@ -1020,7 +1156,10 @@ public actor Pipeline {
         }), !inFlight.contains(id),
               // Names changed during the request: that save's own summary is newer.
               var latest = edit(id, { $0.speakerNames == names }) else { return }
-        latest.apply(s)
+        // A kept summary is saved too: the reply's title replaces a guess such as "with Speaker A", note name and all.
+        if !latest.applyUnlessIncomplete(s) {
+            Log.info("The new summary for \(id) has no overview or an empty topic; the meeting keeps its summary")
+        }
         latest.summaryMissing = nil
         save(&latest, dir: dir)
     }
@@ -1029,11 +1168,9 @@ public actor Pipeline {
     /// of this one is the same meeting, split by a restart or a crash: join them.
     func continueSplitMeeting(_ id: String) async {
         // A meeting made from Gemini's notes has no audio to join: it is never a part of a recording.
-        guard let r = try? CallRecord.load(from: paths.callDirectory(id)), r.status == .written, !r.isNotesOnly, let meetingID = r.meetingID else { return }
+        guard let r = try? CallRecord.load(from: paths.callDirectory(id)), r.status == .written, !r.isNotesOnly, r.meetingID != nil else { return }
         let sibling = queue.allRecords().first { other in
-            other.id != r.id && other.status == .written && !other.isNotesOnly && other.meetingID == meetingID
-                && (abs(r.start.timeIntervalSince(other.end)) <= MeetingMerge.continuationGap
-                    || abs(other.start.timeIntervalSince(r.end)) <= MeetingMerge.continuationGap)
+            other.id != r.id && other.status == .written && !other.isNotesOnly && MeetingMerge.continues(.init(r), .init(other))
         }
         guard let sibling else { return }
         Log.info("Continuing \(sibling.id) and \(r.id): the same meeting, split by a restart")
@@ -1056,7 +1193,7 @@ public actor Pipeline {
     public func merge(callIDs: [String]) async -> String? {
         let records = callIDs.compactMap { try? CallRecord.load(from: paths.callDirectory($0)) }.sorted { $0.start < $1.start }
         guard records.count >= 2, records.count == Set(callIDs).count,
-              records.allSatisfy({ $0.status == .written || $0.status == .failed }) else { return nil }
+              records.allSatisfy({ ($0.status == .written || $0.status == .failed) && $0.moveTo == nil }) else { return nil }
         if let notes = records.first(where: \.isNotesOnly) {
             Log.info("Not joining \(notes.id): it was made from Gemini's notes and has no audio")
             return nil
@@ -1194,6 +1331,9 @@ public actor Pipeline {
                 return false
             }
         }
+        // The copy from before a "Transcribe again" is one part's record and does not fit the joined audio. Before the
+        // plan goes, so a quit here is finished on the next run.
+        try? fm.removeItem(at: dir.appendingPathComponent(Self.previousFileName))
         FrameStore.finishJoin(in: dir)
         for r in parts {
             if let note = r.markdownPath { try? fm.removeItem(atPath: note) }
@@ -1242,21 +1382,21 @@ public actor Pipeline {
     public func setTags(callID: String, _ tags: [String]) {
         var seen = Set<String>()
         let tags = tags.compactMap(\.nonBlank).filter { seen.insert($0.lowercased()).inserted }
-        guard var r = edit(callID, { $0.tags = tags; $0.tagsSetByOwner = true; return true }) else { return }
+        guard var r = edit(callID, owner: true, { $0.tags = tags; $0.tagsSetByOwner = true; return true }) else { return }
         save(&r, dir: paths.callDirectory(callID))
     }
 
     /// Sets the title the owner chose, or clears it when `title` is nil or blank, and renames the note.
     public func setTitle(callID: String, _ title: String?) {
         let title = title?.trimmingCharacters(in: .whitespacesAndNewlines).nonBlank
-        guard var r = edit(callID, { $0.customTitle = title; return true }) else { return }
+        guard var r = edit(callID, owner: true, { $0.customTitle = title; return true }) else { return }
         save(&r, dir: paths.callDirectory(callID))
     }
 
     /// Sets a bookmark's note after the call, or adds a bookmark at `offset` when none is there, and rewrites the note.
     @discardableResult
     public func setBookmarkNote(callID: String, offset: TimeInterval, note: String) -> Bool {
-        guard var r = edit(callID, { r in
+        guard var r = edit(callID, owner: true, { r in
             let time = r.start.addingTimeInterval(offset).formatted(date: .omitted, time: .shortened)
             return r.setBookmarkNote(at: offset, note, markerText: "★ Bookmarked at \(time)")
         }) else { return false }
@@ -1267,7 +1407,7 @@ public actor Pipeline {
     /// Takes away the bookmark within a second of `offset` and rewrites the note: the Undo of one the chat added.
     @discardableResult
     public func removeBookmark(callID: String, offset: TimeInterval) -> Bool {
-        guard var r = edit(callID, { $0.removeBookmark(at: offset) }) else { return false }
+        guard var r = edit(callID, owner: true, { $0.removeBookmark(at: offset) }) else { return false }
         save(&r, dir: paths.callDirectory(callID))
         return true
     }
@@ -1276,7 +1416,7 @@ public actor Pipeline {
     /// second of `offset`, so a double click does not make two.
     @discardableResult
     public func addBookmark(callID: String, offset: TimeInterval) -> Bool {
-        guard var r = edit(callID, { r in
+        guard var r = edit(callID, owner: true, { r in
             let time = r.start.addingTimeInterval(offset).formatted(date: .omitted, time: .shortened)
             return r.addBookmark(at: offset, markerText: "★ Bookmarked at \(time)")
         }) else { return false }
@@ -1290,7 +1430,7 @@ public actor Pipeline {
     @discardableResult
     public func deleteScreen(callID: String, file: String) -> Bool {
         let dir = paths.callDirectory(callID)
-        guard var r = edit(callID, { r in
+        guard var r = edit(callID, owner: true, { r in
             let listed = r.screens?.contains { $0.file == file } ?? false
             let known = r.deletedScreens?.contains(file) ?? false
             guard listed || known else { return false }
@@ -1314,13 +1454,13 @@ public actor Pipeline {
 
     /// Skipped voices stay in the transcript as letters, but the call stops asking for them.
     public func dismissSpeakers(callID: String, keys: [String]) {
-        guard var r = edit(callID, { $0.unknownSpeakers.removeAll { keys.contains($0) }; return true }) else { return }
+        guard var r = edit(callID, owner: true, { $0.unknownSpeakers.removeAll { keys.contains($0) }; return true }) else { return }
         save(&r, dir: paths.callDirectory(callID))
     }
 
     /// Asks for skipped voices again.
     public func restoreSpeakers(callID: String, keys: [String]) {
-        guard var r = edit(callID, { r in
+        guard var r = edit(callID, owner: true, { r in
             r.unknownSpeakers += keys.filter { r.skippedSpeakers.contains($0) }
             return true
         }) else { return }
@@ -1335,7 +1475,7 @@ public actor Pipeline {
         guard !new.isEmpty, new != old else { return 0 }
         var changed = 0
         for record in ProcessingQueue(paths: paths).allRecords() where record.mentions(old) {
-            guard var r = edit(record.id, { r in
+            guard var r = edit(record.id, owner: true, { r in
                 for (key, name) in r.speakerNames where name == old { r.speakerNames[key] = new }
                 r.actionItems = r.actionItems.map { var a = $0; if a.owner == old { a.owner = new }; return a }
                 if old.contains("@") {
@@ -1381,6 +1521,17 @@ public struct MissingAPIKey: Error, CustomStringConvertible {
     public let service: String
     public init(service: String) { self.service = service }
     public var description: String { "No \(service) API key. Run scripts/import-keys.sh, then reopen Mossad." }
+}
+
+/// Used when no key is stored for the chosen transcription: the call stays queued until a key exists.
+public struct MissingKeyTranscriber: Transcribing {
+    public let service: String
+
+    public init(service: String) { self.service = service }
+
+    public func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
+        throw MissingAPIKey(service: service)
+    }
 }
 
 private extension CallRecord {

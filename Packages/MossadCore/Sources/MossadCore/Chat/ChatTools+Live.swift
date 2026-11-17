@@ -11,6 +11,10 @@ extension ChatTools {
 
     func currentCall(minutes: Double?, now: Date = Date()) -> String {
         guard let r = live, let paths else { return "No call is recording now." }
+        // A call the owner marked for another profile: nothing of it is read here, for this chat or another AI app.
+        guard MoveAfterCall.allows(.currentCall, MoveAfterCall.choice(of: r.moveTo)) else {
+            return (liveOff == .maybeOtherProfile ? LiveOffReason.maybeOtherProfile : .forOtherProfile).text
+        }
         let clockTime = now.timeIntervalSince(r.start)
         let url = paths.callDirectory(r.id).appendingPathComponent(LiveTranscript.fileName)
         let transcript = try? LiveTranscript.load(from: url)
@@ -21,7 +25,8 @@ extension ChatTools {
         if !r.attendees.isEmpty { parts.append("Invited: \(r.attendees.joined(separator: ", "))") }
         guard let transcript else {
             if let points = livePoints(r, heard: []) { parts.append(points) }
-            parts.append("No live transcript yet. It needs Live transcript on in Settings and an AssemblyAI key; the full transcript comes after the call.")
+            parts.append(liveOff == .afterOtherProfile ? LiveOffReason.afterOtherProfile.text
+                         : "No live transcript yet. It needs Live transcript on in Settings and an AssemblyAI key; the full transcript comes after the call.")
             return parts.joined(separator: "\n")
         }
         if let points = livePoints(r, heard: Array(Set(transcript.voiceNames.values))) { parts.append(points) }

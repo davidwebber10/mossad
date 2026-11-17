@@ -34,6 +34,9 @@ final class FakeSummarizer: Summarizing, @unchecked Sendable {
     var delayOnCall: [Int: Duration] = [:]
     var lastKnownTags: [String] = []
     var title: String?
+    /// Replaces the overview of the next replies, such as "" for a reply with no overview.
+    var overview: String?
+    var topics: [SummaryTopic] = []
     func summarize(transcript: String, title: String, knownTags: [String]) async throws -> MeetingSummary {
         lastKnownTags = knownTags
         calls += 1
@@ -41,7 +44,7 @@ final class FakeSummarizer: Summarizing, @unchecked Sendable {
         lastTranscript = transcript
         if let delay = delayOnCall[call] { try await Task.sleep(for: delay) }
         if fail { throw SummaryError.malformed }
-        return MeetingSummary(summary: "Summary \(call)", actionItems: [ActionItem(owner: "Alex Rivera", task: "send forecast")],
+        return MeetingSummary(summary: overview ?? "Summary \(call)", topics: topics, actionItems: [ActionItem(owner: "Alex Rivera", task: "send forecast")],
                               decisions: [Decision(text: "Decision \(call)", at: nil)], headline: "Headline \(call)", title: self.title)
     }
 }
@@ -379,6 +382,106 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(r.speakerNames["them:A"], "Alex Rivera")
     }
 
+    // Asking for a new summary sends a second request too: an incomplete reply keeps the summary the meeting has,
+    // and counts as no failure, so nothing is retried or marked missing.
+    func testANewSummaryThatIsIncompleteKeepsTheOneTheMeetingHas() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        summarizer.topics = [SummaryTopic(title: "Freight", summary: "Amy books it.")]
+        await p.process(id)
+        summarizer.overview = " "
+        summarizer.topics = [SummaryTopic(title: "Freight", summary: "")]
+        await p.regenerateSummary(id)
+        let r = try load(id)
+        XCTAssertEqual(summarizer.calls, 2)
+        XCTAssertEqual(r.summary, "Summary 1")
+        XCTAssertEqual(r.topics, [SummaryTopic(title: "Freight", summary: "Amy books it.")])
+        XCTAssertEqual(r.decisions.map(\.text), ["Decision 1"])
+        XCTAssertEqual(r.status, .written)
+        XCTAssertNil(r.summaryMissing)
+        XCTAssertNil(r.failureReason)
+    }
+
+    func testATopicWithNoTitleIsIncompleteToo() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        summarizer.topics = [SummaryTopic(title: "Freight", summary: "Amy books it.")]
+        await p.process(id)
+        summarizer.topics = [SummaryTopic(title: " ", summary: "Amy books it.")]
+        await p.regenerateSummary(id)
+        XCTAssertEqual(try load(id).summary, "Summary 1")
+    }
+
+    // The backfill counts a kept summary as done, so it does not pay again for a meeting that gets such replies.
+    func testTheBackfillCountsAKeptSummaryAsDone() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        var r = try load(id)
+        r.summaryVersion = nil
+        try r.save(to: paths.callDirectory(id))
+        summarizer.overview = ""
+        let ok = await p.backfill(id)
+        XCTAssertTrue(ok)
+        XCTAssertEqual(try load(id).summary, "Summary 1")
+        XCTAssertEqual(try load(id).summaryVersion, SummaryBackfill.currentVersion)
+    }
+
+    func testAKeptSummaryStillTakesTheNewTitle() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        summarizer.overview = ""
+        summarizer.title = "Freight planning with Amy"
+        await p.regenerateSummary(id)
+        let r = try load(id)
+        XCTAssertEqual(r.summary, "Summary 1")
+        XCTAssertEqual(r.generatedTitle, "Freight planning with Amy")
+    }
+
+    // "Transcribe again" drops all of the old summary, so a failed new summary never leaves old topics, action items,
+    // or decisions beside the new transcript. Undo brings them back.
+    func testTranscribingAgainDropsTheWholeOldSummary() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        summarizer.topics = [SummaryTopic(title: "Freight", summary: "Amy books it.")]
+        await p.process(id)
+        summarizer.fail = true
+        _ = await p.transcribeAgain(id, speakers: nil)
+        let r = try load(id)
+        XCTAssertNil(r.summary)
+        XCTAssertEqual(r.topics, [])
+        XCTAssertEqual(r.actionItems, [])
+        XCTAssertEqual(r.decisions, [])
+        XCTAssertNil(r.headline)
+    }
+
+    // A first summary has nothing to keep: an incomplete reply is written once, with no paid retries.
+    func testAnIncompleteFirstSummaryIsWrittenOnce() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        summarizer.overview = ""
+        await p.process(id)
+        let r = try load(id)
+        XCTAssertEqual(summarizer.calls, 1)
+        XCTAssertEqual(r.status, .written)
+        XCTAssertNil(r.summaryMissing)
+        XCTAssertEqual(r.actionItems.count, 1)
+    }
+
+    // The old summary describes the old transcript, so after "Transcribe again" the new reply replaces it.
+    func testAfterTranscribingAgainAnIncompleteReplyReplacesTheOldSummary() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        summarizer.overview = ""
+        let ran = await p.transcribeAgain(id, speakers: nil)
+        XCTAssertTrue(ran)
+        let r = try load(id)
+        XCTAssertEqual(r.summary, "")
+        XCTAssertEqual(r.decisions.map(\.text), ["Decision 2"])
+    }
+
     func testRegenerateSummaryWritesANewSummaryForAFinishedMeeting() async throws {
         let id = try makeRecord()
         let p = pipeline()
@@ -421,6 +524,93 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(transcriber.speakers[.me], 12)
     }
 
+    func testTranscribeAgainOnAPhoneCallSendsTheCountWithTheOneTrack() async throws {
+        let id = try makeRecord()
+        var r = try load(id)
+        r.platform = .phoneCall
+        r.bundleID = PhoneRecording.bundleID
+        try r.save(to: paths.callDirectory(id))
+        let p = pipeline()
+        await p.process(id)
+        _ = await p.transcribeAgain(id, speakers: 12)
+        XCTAssertEqual(transcriber.speakers[.me], 12)
+        XCTAssertNil(transcriber.speakers[.them])
+    }
+
+    /// A phone call as the iPhone sends it: one track with the owner (200 Hz) and one other voice (400 Hz).
+    private func makePhoneCall(hint: PersonHint?) throws -> String {
+        try library.add([1, 0, 0, 0], to: "Avery Lane", isOwner: true)
+        transcriber.result = [.me: [Utterance(track: .me, speakerLabel: "A", start: 0, end: 10, text: "Hello."),
+                                    Utterance(track: .me, speakerLabel: "B", start: 11, end: 35, text: "Hello, it is me.")], .them: []]
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        try writeSegments(dir.appendingPathComponent("me.caf"), total: 40, [(0, 10, 200), (11, 35, 400)])
+        try writeSegments(dir.appendingPathComponent("them.caf"), total: 40, [])
+        var r = try load(id)
+        r.platform = .phoneCall
+        r.bundleID = PhoneRecording.bundleID
+        r.personHint = hint
+        if let hint { r.attendees = [hint.name] }
+        try r.save(to: dir)
+        return id
+    }
+
+    func testAPhoneCallWithAPersonNamesTheOneOtherVoice() async throws {
+        let id = try makePhoneCall(hint: PersonHint(name: "Sam Carter"))
+        await pipeline().process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.speakerNames, ["me:A": "Avery Lane", "me:B": "Sam Carter"])
+        XCTAssertEqual(r.fromInvite, ["me:B"])
+        XCTAssertEqual(library.provisional["Sam Carter"], id)
+    }
+
+    func testAPhoneCallWithNoPersonKeepsTheRulesOfBefore() async throws {
+        let id = try makePhoneCall(hint: nil)
+        await pipeline().process(id)
+        let r = try load(id)
+        XCTAssertNil(r.speakerNames["me:B"])
+        XCTAssertEqual(r.unknownSpeakers, ["me:B"])
+        XCTAssertNil(r.fromInvite)
+    }
+
+    /// A phone call as `importAudio` makes it, with the person and the title the owner gave.
+    private func makeImportedPhoneCall() throws -> String {
+        let id = try makeRecord()
+        var r = try load(id)
+        r.platform = .phoneCall
+        r.bundleID = PhoneRecording.bundleID
+        r.customTitle = "Renewal terms"
+        r.personHint = PersonHint(name: "Sam Carter")
+        r.attendees = ["Sam Carter"]
+        r.invitees = [Invitee(name: "Sam Carter", email: nil)]
+        try r.save(to: paths.callDirectory(id))
+        return id
+    }
+
+    func testAPhoneCallTakesTheEventOfItsOnePersonAndKeepsTheTypedTitle() async throws {
+        let id = try makeImportedPhoneCall()
+        let event = CalendarEventInfo(title: "Sam and Avery", start: start, end: start.addingTimeInterval(1800),
+                                      attendees: ["Avery Lane", "Sam Carter"], text: "", isAllDay: false,
+                                      participants: [Invitee(name: "Avery Lane", email: "avery@example.com", isSelf: true),
+                                                     Invitee(name: "Sam Carter", email: "sam@example.com")])
+        await pipeline(calendar: FakeCalendar(events: [event])).process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.calendarTitle, "Sam and Avery")
+        XCTAssertEqual(r.title, "Renewal terms")
+        XCTAssertEqual(r.invitees?.count, 2)
+        XCTAssertEqual(r.personHint, PersonHint(name: "Sam Carter"))
+    }
+
+    func testAPhoneCallDuringTheOwnersOwnBlockGetsNoEvent() async throws {
+        let id = try makeImportedPhoneCall()
+        let lunch = CalendarEventInfo(title: "Lunch", start: start, end: start.addingTimeInterval(3600), attendees: [], text: "", isAllDay: false)
+        await pipeline(calendar: FakeCalendar(events: [lunch])).process(id)
+        let r = try load(id)
+        XCTAssertNil(r.calendarTitle)
+        XCTAssertEqual(r.attendees, ["Sam Carter"])
+        XCTAssertEqual(r.title, "Renewal terms")
+    }
+
     func testRestorePreviousTranscriptBringsBackTheOldOne() async throws {
         let id = try makeRecord()
         let p = pipeline()
@@ -434,6 +624,144 @@ final class PipelineTests: XCTestCase {
         XCTAssertFalse(Pipeline.hasPreviousTranscript(paths.callDirectory(id)))
         let note = try String(contentsOfFile: try XCTUnwrap(r.markdownPath), encoding: .utf8)
         XCTAssertTrue(note.contains("Summary 1"))
+    }
+
+    // A failed "Transcribe again" leaves a meeting with no transcript and no summary; a second one must not keep
+    // that in place of the meeting Undo brings back.
+    func testUndoAfterTwoTranscribeAgainsWhereTheFirstFailedBringsBackTheLastWholeMeeting() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        transcriber.error = Boom()
+        _ = await p.transcribeAgain(id, speakers: nil)
+        for _ in 1..<Pipeline.maxAttempts { await p.process(id) }
+        XCTAssertEqual(try load(id).status, .failed)
+        transcriber.error = nil
+        let ran = await p.transcribeAgain(id, speakers: 3)
+        XCTAssertTrue(ran)
+        let restored = await p.restorePreviousTranscript(id)
+        XCTAssertTrue(restored)
+        let r = try load(id)
+        XCTAssertEqual(r.status, .written)
+        XCTAssertEqual(r.summary, "Summary 1")
+        XCTAssertEqual(r.decisions.map(\.text), ["Decision 1"])
+        XCTAssertEqual(r.actionItems.count, 1)
+        XCTAssertFalse(r.utterances.isEmpty)
+    }
+
+    // A run that wrote the meeting without a summary (the model failed each time) is not a whole meeting either.
+    func testUndoAfterTranscribeAgainWithoutASummaryBringsBackTheOneWithIt() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        summarizer.fail = true
+        _ = await p.transcribeAgain(id, speakers: nil)
+        for _ in 1..<Pipeline.maxSummaryAttempts { await p.process(id) }
+        XCTAssertEqual(try load(id).summaryMissing, true)
+        XCTAssertEqual(try load(id).status, .written)
+        summarizer.fail = false
+        _ = await p.transcribeAgain(id, speakers: 3)
+        XCTAssertNotNil(try load(id).summary)
+        let restored = await p.restorePreviousTranscript(id)
+        XCTAssertTrue(restored)
+        let r = try load(id)
+        XCTAssertEqual(r.summary, "Summary 1")
+        XCTAssertEqual(r.decisions.map(\.text), ["Decision 1"])
+    }
+
+    // A run that failed at identification holds a transcript but no names; it must not replace a good copy, even one
+    // with no summary.
+    func testUndoAfterARunThatFailedAtIdentificationBringsBackTheMeetingWithNoSummary() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        summarizer.overview = ""
+        await p.process(id)
+        let good = try load(id)
+        XCTAssertFalse(good.speakerNames.isEmpty)
+        _ = await p.transcribeAgain(id, speakers: nil)
+        // The doubles cannot fail identification, so the record is put in that state by hand.
+        var failed = try load(id)
+        failed.status = .failed
+        failed.failedStep = .transcribed
+        failed.speakerNames = [:]
+        failed.clearSummary()
+        try failed.save(to: paths.callDirectory(id))
+        _ = await p.transcribeAgain(id, speakers: 3)
+        let restored = await p.restorePreviousTranscript(id)
+        XCTAssertTrue(restored)
+        let r = try load(id)
+        XCTAssertEqual(r.status, .written)
+        XCTAssertEqual(r.speakerNames, good.speakerNames)
+        XCTAssertEqual(r.utterances.count, good.utterances.count)
+    }
+
+    // Undo keeps the most whole meeting: a failed run or no transcript, then a transcript, then a transcript and a
+    // summary. A copy that is failed or empty is never kept over the record of now; an equal record replaces it.
+    func testTheUndoCopyIsKeptOnlyOverALessWholeRecord() {
+        let line = Utterance(track: .them, speakerLabel: "A", start: 0, end: 5, text: "It leaves Friday.")
+        func record(_ status: CallStatus, transcript: Bool, summary: String?) -> CallRecord {
+            var r = CallRecord(id: "c", platform: .meet, bundleID: "com.google.Chrome", start: start, end: start.addingTimeInterval(60), status: status)
+            r.utterances = transcript ? [line] : []
+            r.summary = summary
+            return r
+        }
+        let whole = record(.written, transcript: true, summary: "Summary 1")
+        let noSummary = record(.written, transcript: true, summary: nil)
+        let blankSummary = record(.written, transcript: true, summary: " ")
+        let silent = record(.written, transcript: false, summary: nil)
+        let failedAtTranscription = record(.failed, transcript: false, summary: nil)
+        let failedAtIdentification = record(.failed, transcript: true, summary: nil)
+        let failedAtWrite = record(.failed, transcript: true, summary: "Summary 2")
+        let rows: [(String, CallRecord, CallRecord, Bool)] = [
+            ("whole over whole", whole, whole, false),
+            ("whole over no summary", whole, noSummary, true),
+            ("whole over blank summary", whole, blankSummary, true),
+            ("whole over silence", whole, silent, true),
+            ("whole over failed at transcription", whole, failedAtTranscription, true),
+            ("whole over failed at identification", whole, failedAtIdentification, true),
+            ("whole over failed at the note write", whole, failedAtWrite, true),
+            ("no summary over whole", noSummary, whole, false),
+            ("no summary over no summary", noSummary, noSummary, false),
+            ("no summary over silence", noSummary, silent, true),
+            ("no summary over failed at transcription", noSummary, failedAtTranscription, true),
+            ("no summary over failed at identification", noSummary, failedAtIdentification, true),
+            ("no summary over failed at the note write", noSummary, failedAtWrite, true),
+            ("silence over whole", silent, whole, false),
+            ("silence over failed at identification", silent, failedAtIdentification, false),
+            ("failed over whole", failedAtIdentification, whole, false),
+            ("failed over no summary", failedAtTranscription, noSummary, false),
+            ("failed over failed", failedAtIdentification, failedAtTranscription, false),
+        ]
+        for (name, kept, current, keeps) in rows {
+            XCTAssertEqual(Pipeline.keepsUndoCopy(kept: kept, current: current), keeps, name)
+        }
+    }
+
+    // A merge joins other audio into the folder: the copy from before an earlier "Transcribe again" no longer fits it.
+    func testAMergeDropsTheUndoCopyOfTheTarget() async throws {
+        let first = try makeRecord()
+        let p = pipeline()
+        await p.process(first)
+        _ = await p.transcribeAgain(first, speakers: nil)
+        XCTAssertTrue(Pipeline.hasPreviousTranscript(paths.callDirectory(first)))
+        let second = try makeSecondPart(after: first, gap: 600, meetingID: nil)
+        await p.process(second)
+        let merged = await p.merge(callIDs: [first, second])
+        XCTAssertEqual(merged, first)
+        XCTAssertFalse(Pipeline.hasPreviousTranscript(paths.callDirectory(first)))
+        let restored = await p.restorePreviousTranscript(first)
+        XCTAssertFalse(restored)
+        XCTAssertEqual(try load(first).parts.count, 2)
+    }
+
+    // After a run that succeeded, a new "Transcribe again" keeps that run's meeting for Undo.
+    func testUndoAfterTwoGoodTranscribeAgainsBringsBackTheSecondToLast() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        await p.process(id)
+        _ = await p.transcribeAgain(id, speakers: nil)
+        _ = await p.transcribeAgain(id, speakers: 3)
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id), fileName: Pipeline.previousFileName).summary, "Summary 2")
     }
 
     func testTranscribeAgainNeedsTheAudioTracks() async throws {
@@ -1256,6 +1584,43 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(try load(id).status, .written)
     }
 
+    // A call's summary was erased when a voice was named: the new reply had action items but no overview, no topic
+    // text, and no decisions. A reply like that never replaces the summary the meeting has.
+    func testNamingAVoiceKeepsTheSummaryWhenTheNewReplyHasNoOverview() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        summarizer.topics = [SummaryTopic(title: "Freight", summary: "Amy books it.")]
+        await p.process(id)
+        summarizer.overview = ""
+        summarizer.topics = [SummaryTopic(title: "Freight", summary: "")]
+        await p.applyNames(callID: id, names: ["them:A": "Alex Rivera"])
+        let r = try load(id)
+        XCTAssertEqual(summarizer.calls, 2)
+        XCTAssertEqual(r.summary, "Summary 1")
+        XCTAssertEqual(r.topics, [SummaryTopic(title: "Freight", summary: "Amy books it.")])
+        XCTAssertEqual(r.decisions.map(\.text), ["Decision 1"])
+        XCTAssertEqual(r.speakerNames["them:A"], "Alex Rivera")
+    }
+
+    // The kept summary still takes the reply's title, so a guess such as "with Speaker A" goes, in the note too.
+    func testNamingAVoiceWithAKeptSummaryStillTakesTheNewTitle() async throws {
+        let id = try makeRecord()
+        let p = pipeline()
+        summarizer.title = "Freight planning with Speaker A"
+        await p.process(id)
+        let oldNote = try XCTUnwrap(try load(id).markdownPath)
+        summarizer.overview = ""
+        summarizer.title = "Freight planning with Alex Rivera"
+        await p.applyNames(callID: id, names: ["them:A": "Alex Rivera"])
+        let r = try load(id)
+        XCTAssertEqual(r.summary, "Summary 1")
+        XCTAssertEqual(r.generatedTitle, "Freight planning with Alex Rivera")
+        let note = try XCTUnwrap(r.markdownPath)
+        XCTAssertTrue(note.contains("Freight planning with Alex Rivera"))
+        XCTAssertTrue(try String(contentsOfFile: note, encoding: .utf8).contains("Summary 1"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: oldNote), "the note under the old title must not stay")
+    }
+
     func testApplyNamesRewritesFileAndLearnsVoices() async throws {
         let id = try makeRecord()
         let p = pipeline()
@@ -1398,5 +1763,50 @@ final class PipelineTests: XCTestCase {
         await p.retry(id)
         r = try load(id)
         XCTAssertEqual(r.status, .written)
+    }
+
+    func testAPhoneCallNeverEnrolsTheOwnersVoice() async throws {
+        transcriber.result = [.me: [Utterance(track: .me, speakerLabel: "A", start: 0, end: 10, text: "Hello."),
+                                    Utterance(track: .me, speakerLabel: "B", start: 11, end: 35, text: "Hello, it is me.")], .them: []]
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        try writeSegments(dir.appendingPathComponent("me.caf"), total: 40, [(0, 10, 200), (11, 35, 400)])
+        try writeSegments(dir.appendingPathComponent("them.caf"), total: 40, [])
+        var r = try load(id)
+        r.platform = .phoneCall
+        r.bundleID = PhoneRecording.bundleID
+        try r.save(to: dir)
+        await pipeline().process(id)
+        XCTAssertNil(library.owner, "the other person may talk more: no owner from a phone call")
+        XCTAssertEqual(try load(id).status, .written)
+    }
+
+    func testAPhoneCallSkipsTheCallTrackInTheProgress() async throws {
+        let id = try makeRecord()
+        var r = try load(id)
+        r.platform = .phoneCall
+        try r.save(to: paths.callDirectory(id))
+        let seen = Locked<[ProcessingProgress?]>([])
+        let notifications = notifications
+        let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { notifications.records.append($0) },
+                         ownerName: "Avery Lane", onProgress: { _, progress in seen.withLock { $0.append(progress) } })
+        await p.process(id)
+        XCTAssertTrue(seen.withLock { $0 }.contains { $0?.tracks[.them] == .skipped })
+    }
+
+    func testARecordWithAPlatformThisBuildDoesNotKnowWaitsUnprocessed() async throws {
+        let id = try makeRecord()
+        let file = paths.callDirectory(id).appendingPathComponent(CallRecord.fileName)
+        let text = try String(contentsOf: file, encoding: .utf8)
+        try text.replacingOccurrences(of: #""platform":"meet""#, with: #""platform":"fax""#).write(to: file, atomically: true, encoding: .utf8)
+        await pipeline().process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.platform, .unknown)
+        XCTAssertEqual(r.status, .recorded)
+        XCTAssertEqual(r.attempts, 0)
+        XCTAssertNil(r.failureReason)
+        XCTAssertEqual(transcriber.calls.count, 0)
+        XCTAssertTrue(try String(contentsOf: file, encoding: .utf8).contains(#""platform":"fax""#))
     }
 }

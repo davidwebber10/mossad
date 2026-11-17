@@ -76,9 +76,15 @@ final class AppController: ObservableObject {
         }
     }
 
+    /// Whether a call records, for the move's look off the main actor.
+    let callFlag = RecordingFlag()
+
     @Published private(set) var status: Status = .idle {
         // An in-person recording owns the mic until Stop; the call scan every 2 s would be thrown away.
         didSet {
+            let was = if case .recording = oldValue { true } else { false }
+            if was != isRecording { workers?.setRecording(isRecording) }
+            callFlag.set(isRecording)
             let room = if case .recording(.inPerson, _) = status { true } else { false }
             detection.isSuspended = room
             // With detection suspended, the room's mic gets its own stall check.
@@ -161,6 +167,11 @@ final class AppController: ObservableObject {
     var liveCoverage = LiveCoverage()
     /// Why this call has no live transcript; nil when it runs. The live chat and the quick panel say it.
     @Published var liveOff: LiveOffReason?
+    /// "This call is for": the choice of the call that records now (`MoveAfterCall`); nil is `.here`.
+    @Published var callChoice: (callID: String, choice: MoveAfterCall.Choice)?
+    /// The carry of the owner's choice from a call to a new recording of it (`MoveAfterCall.Book`): read back at a
+    /// launch, decided at each start before any send, kept again at each end.
+    var carry = MoveAfterCall.Book()
     var liveOffReason: String? { liveOff?.text }
     /// The live chat of each call, so an answer that runs survives a change of tab or of view (the Chat tab and
     /// the quick panel show the same one).
@@ -185,7 +196,8 @@ final class AppController: ObservableObject {
     /// One voice model for the pipeline and the live names, loaded once.
     private let embeddings = FluidEmbeddingProvider()
     /// 0 means on. Otherwise Mossad is off until this time (seconds since 1970; `.infinity` for "until I turn it on").
-    @AppStorage("offUntil") private var offUntil: Double = 0
+    /// Mac-wide: Off holds across a switch of profile.
+    @AppStorage("offUntil", store: MacDefaults.store) private var offUntil: Double = 0
     private var resumeTimer: Timer?
 
     var isOn: Bool { offUntil == 0 }
@@ -222,7 +234,13 @@ final class AppController: ObservableObject {
     /// The one controller, for the app delegate's Dock handling.
     nonisolated(unsafe) static weak var current: AppController?
     /// Checks GitHub releases for new versions; never in an inert copy.
-    private(set) lazy var updater = Updater(start: !isInert && !AppIdentity.current.isPreview) { [weak self] in self?.isRecording ?? false }
+    private(set) lazy var updater = Updater(start: !isInert && !AppIdentity.current.isPreview,
+                                            isRecording: { [weak self] in self?.isRecording ?? false },
+                                            beforeInstall: { [weak self] in self?.workers?.quit() },
+                                            afterNoInstall: { [weak self] in
+                                                guard let self else { return }
+                                                self.workers?.resume(recording: self.isRecording)
+                                            })
     /// Whether the main window can be seen. A window on another desktop or behind others keeps its views
     /// alive, so animations check this and stop while it is hidden.
     @Published private(set) var windowVisible = false
@@ -239,6 +257,24 @@ final class AppController: ObservableObject {
     /// The upcoming meetings the owner chose not to record.
     @Published private(set) var noRecord = NoRecordBook()
     private let noRecordGate = NoRecordGate()
+    /// The other profiles' do-not-record lists, read once at launch for the gate only: never shown, never logged.
+    var otherNoRecord: [(id: String, name: String, book: NoRecordBook)] = []
+    /// Every other live profile with its NoRecord folder; none for a copy that takes no profiles or runs on a made-up
+    /// registry.
+    var otherNoRecordFolders: [(id: String, name: String, folder: URL)] {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return AppIdentity.current.otherProfiles(in: profiles.registry).map { ($0.id, $0.name, Paths(root: $0.rootURL(home: home)).noRecord) }
+    }
+
+    /// The other profiles' lists again after the registry changed (an Add, a Rename, a Delete): a deleted profile's
+    /// list leaves the gate at once, a new profile's joins it.
+    func refreshOtherNoRecord() {
+        otherNoRecord = otherNoRecordFolders.map { ($0.id, $0.name, NoRecordBook.peek(from: $0.folder)) }
+        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord.map(\.book)))
+    }
+    /// Why calls with an invite are kept off the record with no choice of the owner: an unknown list, the active
+    /// profile's or another's.
+    var noRecordProblem: NoRecordListProblem? { NoRecordListProblem.find(own: noRecord, others: otherNoRecord.map { ($0.name, $0.book) }) }
     /// Calls still to come, without the ones being recorded or already recorded.
     /// Views ask for this each time they draw. The list changes with the events, the meetings, and the clock, so it
     /// is computed once for each of those and for each minute.
@@ -375,9 +411,52 @@ final class AppController: ObservableObject {
     let paths = Paths.live
     /// Held for the life of the app: only the copy that has it records, recovers, and processes in this folder.
     private var instanceLock: InstanceLock?
+    /// With a registry file: the Mac-wide lock, so only one profile is the foreground app.
+    var foregroundLock: InstanceLock?
+    /// The registry as the switcher and Settings show it; read again before each change.
+    @Published var profiles: ProfileRegistry.Loaded = AppIdentity.current.registry
+    /// Why the last change of profiles did not happen, in words for the owner.
+    @Published var profileProblem: String? { didSet { profileProblemSince = Date() } }
+    /// The sheet of Settings > General > Profiles that is open.
+    @Published var profileSheet: ProfileSheet?
+    /// When `profileProblem` was set, for how long it shows.
+    var profileProblemSince = Date()
+    /// A switch is going on: no other change of profiles starts until it ends.
+    var switching = false
     /// A preview, Rehearsal, or a second copy on the same folder: it shows the meetings and records, processes,
     /// and syncs nothing.
     private(set) var isInert = false
+    /// What this process is (`RunMode`): the window app is `full` or `inert`, never a worker. Set where `isInert` is.
+    /// `full` until the launch decides, as `isInert` is false until then.
+    private(set) var mode: RunMode = .full
+    /// The workers of the other profiles; nothing with one profile.
+    private(set) var workers: WorkerManager!
+    /// The switcher's second line of each other profile, from its worker's status file. A change can mean that a
+    /// worker took in a meeting that this profile moved: the moves are looked at.
+    @Published var workerLines: [String: String] = [:] {
+        didSet { if workerLines != oldValue { checkMoves() } }
+    }
+    /// The look at the moves of this profile (`AppController+Moves`); nothing with one profile.
+    var moveLook = MoveLook()
+    /// This profile's moves that are not done, by call id, read by the look; empty with one profile.
+    @Published var moves: [String: MoveOut] = [:]
+    /// The share of a copy made, by call id, for a long recording.
+    @Published var moveProgress: [String: Double] = [:]
+    /// "Moved to Work", or the sentence of a refusal, above the list for a short time.
+    @Published var moveLine: MoveShow.Line?
+    /// The reasons a move left for the owner, until each line was on the screen.
+    @Published var moveNotices = MoveNotices()
+    /// Why a move ended that the owner has not seen yet, or that holds a call marked during its recording.
+    @Published var moveEnded: [String: MoveEnded] = [:]
+    /// A start after the call that was refused, with its words: the call is held, and only the owner tries again.
+    @Published var moveRefused: [String: String] = [:]
+    /// Why each other profile cannot take a meeting in now, as far as the app can tell.
+    @Published var moveReach: [String: MoveShow.Reach] = [:]
+    /// The confirmation of "Move to" that is open.
+    @Published var moveRequest: MoveRequest?
+    /// Set once the launch knows whether this copy is inert. Before it, and in an inert copy, the iCloud Keychain
+    /// items the iPhone reads are neither written nor deleted.
+    private(set) var launchDecided = false
     /// Another copy held the folder's lock at launch (+SecondCopy). The menu says so, and nothing is processed.
     @Published private(set) var isSecondCopy = false
     /// The second copy saw the lock free: the menu offers "Restart Mossad".
@@ -500,7 +579,7 @@ final class AppController: ObservableObject {
     @Published var transcribingAgainCallID: String?
     @AppStorage("coachEnabled") var coachEnabled = false
     /// "Send anonymous usage statistics" (Settings › Storage & Sync): on by default (+UsageStats).
-    @AppStorage(UsageReportPlan.enabledKey) var usageStatsEnabled = true
+    @AppStorage(UsageReportPlan.enabledKey, store: MacDefaults.store) var usageStatsEnabled = true
     /// The wait, the daily check, and the send; cancelled when the owner turns the statistics off.
     var usageStatsTask: Task<Void, Never>?
     /// The days the app ran and the failures by kind, for the statistics only.
@@ -585,6 +664,8 @@ final class AppController: ObservableObject {
     }
 
     init() {
+        // A worker never makes the window app's objects (`WorkerEntry`).
+        precondition(!WorkerLaunch.isWorker(CommandLine.arguments))
         try? paths.ensureDirectories()
         Log.directory = paths.logs
         // A preview only looks: its lines would fill the owner's log with starts that recorded nothing.
@@ -604,8 +685,12 @@ final class AppController: ObservableObject {
         shareBook = ShareBook.load(from: paths.shares)
         rememberBucketKind()
         noRecord = NoRecordBook.load(from: paths.noRecord)
-        noRecordGate.update(book: noRecord)
+        // Not recording is Mac-wide: another profile's refusal blocks here too, and its blocked call goes on.
+        let otherFolders = otherNoRecordFolders
+        otherNoRecord = otherFolders.map { ($0.id, $0.name, NoRecordBook.peek(from: $0.folder)) }
+        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord.map(\.book)))
         noRecordGate.persistSession(in: paths.noRecord)
+        noRecordGate.adopt(sessionsIn: otherFolders.map(\.folder))
         // The chosen calendars apply before anything matches a call to an invite.
         macCalendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         loadGoogleNames()
@@ -624,20 +709,56 @@ final class AppController: ObservableObject {
         // Rehearsal only walks through setup: like a preview, it starts no detection, recording, processing, or sync.
         // A second copy on the same folder would delete or cut the first copy's live recording at launch.
         if !preview, !Rehearsal.isOn {
-            switch InstanceLock.acquire(root: paths.root) {
-            case .held(let lock): instanceLock = lock
-            case .taken:
+            // With profiles, one copy of Mossad is the foreground app for the Mac: the Mac-wide lock first, then the
+            // folder's. `LaunchLocks` decides what this copy keeps; a second copy keeps no lock.
+            var macWide: LaunchLocks.Result?
+            if ProfileLaunch.takesForegroundLock(AppIdentity.current) {
+                switch InstanceLock.acquire(root: Self.macWideLockFolder) {
+                case .held(let lock): foregroundLock = lock; macWide = .held
+                case .taken: macWide = .taken
+                case .failed(let code):
+                    macWide = .failed
+                    Log.error("Could not take the Mac-wide lock: \(String(cString: strerror(code)))")
+                }
+            }
+            var folder: LaunchLocks.Result?
+            if LaunchLocks.triesFolder(macWide: macWide) {
+                switch InstanceLock.acquire(root: paths.root) {
+                case .held(let lock): instanceLock = lock; folder = .held
+                case .taken: folder = .taken
+                case .failed(let code):
+                    folder = .failed
+                    // Not a sign of another copy, so this copy works as before the lock existed.
+                    Log.error("Could not lock \(paths.root.path): \(String(cString: strerror(code)))")
+                }
+            }
+            let decision = LaunchLocks.decide(macWide: macWide, folder: folder)
+            Log.info("Profiles: this copy is \(AppIdentity.current.profile.id)\(AppIdentity.current.madeUpRegistry ? " at \(paths.root.path)" : ""); "
+                     + "Mac-wide lock \(macWide.map { "\($0)" } ?? "not used"), folder lock \(folder.map { "\($0)" } ?? "not tried"), second copy \(decision.secondCopy)")
+            if !decision.keepsMacWide { foregroundLock = nil }
+            if decision.secondCopy {
                 isSecondCopy = true
-                Log.error("Another copy of Mossad uses \(paths.root.path); this copy only shows the meetings")
+                Log.error(macWide == .taken ? "Another copy of Mossad runs on this Mac; this copy only shows the meetings"
+                                            : "Another copy of Mossad uses \(paths.root.path); this copy only shows the meetings")
                 notifier.postSecondCopy(otherQuit: false)
                 waitForInstanceLock()
-            case .failed(let code):
-                // Not a sign of another copy, so this copy works as before the lock existed.
-                Log.error("Could not lock \(paths.root.path): \(String(cString: strerror(code)))")
             }
         }
-        let inert = preview || AppIdentity.current.isPreview || Rehearsal.isOn || isSecondCopy
+        let inert = RunMode.decide(preview: preview || AppIdentity.current.isPreview, rehearsal: Rehearsal.isOn, secondCopy: isSecondCopy,
+                                   madeUpRegistry: AppIdentity.current.madeUpRegistry) == .inert
+        // The detection, the recording, the hot keys, the login item, the updater, the permissions, the notifications,
+        // the usage statistics, and the upkeep run only in a `full` copy; an `inert` one only shows.
+        mode = inert ? .inert : .full
         isInert = inert
+        workers = WorkerManager(identity: .current, mode: mode, proof: DevHooks.proofWorkers) { [weak self] in self?.workerLines = $0 }
+        launchDecided = true
+        if inert {
+            Log.info("iCloud Keychain: this copy is inert and leaves the items for the iPhone alone")
+        } else {
+            updateSharedAIKey()
+            updateSharedServer()
+            noteSync()
+        }
         // Reading the calendar records nothing. A preview lists made-up calendars, and its invites come from MOSSAD_UPCOMING.
         if inert { refreshUpcoming() }
         if !inert {
@@ -657,7 +778,7 @@ final class AppController: ObservableObject {
                 }
             }
             notifier.onNotACall = { [weak self] call in self?.quietUnconfirmed(call) }
-            for answer in UnconfirmedDismissals(data: UserDefaults.standard.data(forKey: "notACall")).active(at: Date()) {
+            for answer in UnconfirmedDismissals(data: MacDefaults.store.data(forKey: "notACall")).active(at: Date()) {
                 detection.dismissUnconfirmed(answer.call, until: answer.until)
             }
 
@@ -679,7 +800,10 @@ final class AppController: ObservableObject {
                         if let block = self.noRecordGate.currentBlock, block.listUnreadable {
                             // Not the owner's choice, so never silent: say it at each call, with a way to record.
                             Log.error("Not recording \(block.title): the do-not-record list could not be read")
-                            Task { @MainActor in self.notifier.postNotRecorded(title: block.title, bundleID: bundleID, platform: platform) }
+                            Task { @MainActor in
+                                self.notifier.postNotRecorded(title: block.title, bundleID: bundleID, platform: platform,
+                                                              problem: self.noRecordProblem ?? .own)
+                            }
                         } else {
                             Log.info("Not recording \(platform.displayName): the owner chose not to record this meeting")
                         }
@@ -691,7 +815,7 @@ final class AppController: ObservableObject {
                 // Recorder commands go straight from the detection queue to the capture queue, so they keep
                 // the detector's order relative to the process updates below. The UI follows on the main actor.
                 CaptureQueue.queue.async { self.capture(event, processIDs: ids, meetingID: meetingID, recorder: recorder) }
-                Task { @MainActor in self.show(event) }
+                Task { @MainActor in self.show(event, meetingID: meetingID) }
             }
             detection.onUnconfirmed = { @Sendable [weak self] call in
                 Task { @MainActor in
@@ -740,8 +864,10 @@ final class AppController: ObservableObject {
             }
             requestPermissions()
             _ = updater
-            hotKeys.register(.bookmark, HotKeyShortcut.bookmark) { [weak self] in self?.bookmarkCurrentCall() }
-            registerAskShortcut()
+            // Tried again for a while: after a switch the instance before may still hold them for a moment.
+            hotKeys.onRegistered = { [weak self] id in if id == .ask { self?.askShortcutFailed = false } }
+            hotKeys.register(.bookmark, HotKeyShortcut.bookmark, retrying: true) { [weak self] in self?.bookmarkCurrentCall() }
+            registerAskShortcut(retrying: true)
 
             refreshUpcoming()
             // Chats and notes from the phone arrive within five minutes.
@@ -771,12 +897,12 @@ final class AppController: ObservableObject {
         }
         // The recovery and the first list decode every record: off the main thread, so the menu bar icon and the
         // window do not wait for them. The order stays: recover, then start detection, then process.
-        let paths = paths
+        let paths = paths, recovers = mode.does(.recover)
         Task.detached(priority: .userInitiated) { [weak self] in
             // Before detection starts: a call that starts during a slow launch must not look like a crashed one.
-            let held = inert ? [] : ProcessingQueue(paths: paths).recoverInterrupted()
+            let (held, recovered) = recovers ? ProcessingQueue(paths: paths).recoverInterruptedCalls() : ([], [])
             let records = Self.previewFailures(MeetingIndex(paths: paths).all())
-            await self?.finishLaunch(records, held: held, inert: inert)
+            await self?.finishLaunch(records, held: held, recovered: Set(recovered), inert: inert)
         }
         Log.info("Mossad started")
         // The launch used to block when a record could not be read from a volume that does not answer, and that was
@@ -797,9 +923,10 @@ final class AppController: ObservableObject {
         if meetingsLoaded { work() } else { waitingForLaunch.append(work) }
     }
 
-    private func finishLaunch(_ records: [CallRecord], held: [String], inert: Bool) {
+    private func finishLaunch(_ records: [CallRecord], held: [String], recovered: Set<String>, inert: Bool) {
         meetings = records
         meetingsLoaded = true
+        reportMacWideStrays()
         // The count of the cards in the sidebar, from the start, and again as cards get old.
         refreshFindings()
         Task { [weak self] in
@@ -814,6 +941,13 @@ final class AppController: ObservableObject {
             waiting.forEach { $0() }
         }
         if !inert {
+            // A delete of a profile that stopped goes on.
+            finishRemovals()
+            // A move of this profile goes on, and a meeting moved here is taken in: with two profiles or more only.
+            checkMoves()
+            startMoveLook()
+            // A call marked for another profile that a quit or a crash ended: a new recording of it keeps the choice.
+            carry.launched(records, recovered: recovered, now: Date())
             // A recovered call whose muted parts are still in its track is held back; the pipeline tries again.
             if !held.isEmpty { notifier.postCaptureProblem(.mutedNotSilenced) }
             if isOn || (offUntilDate.map { $0 <= Date() } ?? false) {
@@ -840,6 +974,9 @@ final class AppController: ObservableObject {
             startShareWatch()
             startUsageStats()
         }
+        // The other profiles' workers, once this launch is done: none with one profile. On a made-up registry only
+        // with the proof hook.
+        workers.start(recording: isRecording)
         DevHooks.run(self, inert: inert)
     }
 
@@ -945,11 +1082,12 @@ final class AppController: ObservableObject {
     /// The local server's address as typed, or Ollama's when it does not read as an address.
     var localServerBase: URL { LocalServer.url(from: localServerURL) ?? LocalServer.ollama }
 
+    /// The settings the services are built from, read now: the same keys as the `@AppStorage` lines above.
+    var services: ServiceSettings { .read(.standard, fullUserName: NSFullUserName()) }
+
     /// The chosen AI model, or nil without its key (or without a picked OpenRouter or local server model).
     var languageModel: (any LanguageModel)? {
-        let key = aiProvider.key.flatMap { keychain.get($0) }
-        guard key != nil || !aiProvider.requiresKey, !(aiModel.isEmpty && aiProvider.defaultModel.isEmpty) else { return nil }
-        return aiProvider.model(aiModel, apiKey: key, usage: usage, serverURL: localServerBase)
+        services.languageModel(key: { keychain.get($0) }, usage: usage)
     }
 
     var mailSettings: MailSettings {
@@ -983,7 +1121,7 @@ final class AppController: ObservableObject {
     /// labels after a rename or a merge, and the org matches by id. Off the main thread; each part compares before
     /// it writes, so it is safe to run at any time. `renamed` is a rename the owner made just now.
     func refreshPeopleReferences(renamed: (old: String, new: String)? = nil) {
-        guard !isInert, !isSecondCopy, let pipeline else { return }
+        guard mode.does(.people), !isSecondCopy, let pipeline else { return }
         let paths = paths
         Task {
             let changed = await pipeline.refreshLabels(renamed: renamed)
@@ -1013,14 +1151,9 @@ final class AppController: ObservableObject {
                 do { try people.setOwnerName(owner) } catch { Log.error("People: the owner's new name was not saved: \(error)") }
             }
         }
-        let organization = organization.trimmingCharacters(in: .whitespaces)
-        let provider = transcriptionProvider
-        let transcriber: Transcribing = if let key = provider.key {
-            keychain.get(key).map { provider.transcriber(model: transcriptionModel, apiKey: $0, usage: usage) } ?? MissingKeyTranscriber(service: provider.displayName)
-        } else {
-            provider.transcriber(model: transcriptionModel, apiKey: "", usage: usage)
-        }
-        let summarizer: Summarizing? = languageModel.map { LLMSummarizer(llm: $0, ownerName: owner, organization: organization) }
+        let services = services
+        let transcriber = services.transcriber(key: { keychain.get($0) }, usage: usage)
+        let summarizer = services.summarizer(key: { keychain.get($0) }, usage: usage)
         let notifier = notifier
         if let pipeline {
             pipeline.configure(Pipeline.Configuration(transcriber: transcriber, summarizer: summarizer, ownerName: owner,
@@ -1124,8 +1257,7 @@ final class AppController: ObservableObject {
             }
             // The stopped record goes into the list at once, so its row stops saying "recording".
             Task { @MainActor in self.update(record); self.refresh() }
-            // Utility: the next call may start in the same minute, and the call app comes first.
-            Task(priority: .utility) { @MainActor in await self.track { await self.pipeline.process(record.id) } }
+            Task { @MainActor in self.endOfCall(record) }
         }
         isMuted = false
         status = .idle
@@ -1133,7 +1265,7 @@ final class AppController: ObservableObject {
         stopLive()
         updater.callEnded()
         summarizeLiveChats()
-        forgetLiveCall()
+        forgetLiveCall(end: Date())
     }
 
     /// Quit during a call: closes the tracks and saves the call as recorded, so the next launch processes it.
@@ -1191,7 +1323,7 @@ final class AppController: ObservableObject {
             for r in meetings {
                 guard let step = ProcessingStep(status: r.status) else { continue }
                 var p = ProcessingProgress(step: state == "summarizing" ? .summarizing : step, started: Date().addingTimeInterval(-134))
-                let room = r.platform == .inPerson
+                let room = r.platform.isOneTrack
                 switch state {
                 case "upload": p.tracks = room ? [.me: .uploading(0.42)] : [.me: .done, .them: .uploading(0.42)]
                 case "queued": p.tracks = room ? [.me: .queued] : [.me: .transcribing, .them: .queued]
@@ -1228,6 +1360,7 @@ final class AppController: ObservableObject {
             refresh()
             return live
         }
+        guard !refusedForMove(callID) else { return nil }
         await pipeline.addBookmark(callID: callID, offset: offset)
         refresh()
         return offset
@@ -1242,7 +1375,7 @@ final class AppController: ObservableObject {
                     done.resume(returning: recorder.currentRecord?.id == callID && recorder.setBookmarkNote(at: offset, note))
                 }
             }
-            if !live { await pipeline.setBookmarkNote(callID: callID, offset: offset, note: note) }
+            if !live, !refusedForMove(callID) { await pipeline.setBookmarkNote(callID: callID, offset: offset, note: note) }
             refresh()
         }
     }
@@ -1256,6 +1389,8 @@ final class AppController: ObservableObject {
         status = .recording(.inPerson, since: start)
         isPaused = false
         isMuted = false
+        // A room has no link and no call app: nothing carries, and the decision is made before the live transcript.
+        carryChoice(to: MoveAfterCall.Call(callID: CallRecorder.callID(for: start), platform: .inPerson, bundleID: nil, meetingID: nil, start: start))
         let recorder = recorder
         CaptureQueue.queue.async {
             do {
@@ -1292,7 +1427,7 @@ final class AppController: ObservableObject {
     }
 
     /// Opens one streaming session per track. Billed while open, so only while recording and not paused.
-    private func startLive(reset: Bool) {
+    func startLive(reset: Bool) {
         stopLive()
         if reset { live.reset() } else { live.newSession() }
         if reset {
@@ -1300,6 +1435,11 @@ final class AppController: ObservableObject {
             liveCoverage = LiveCoverage()
         }
         guard case .recording(_, let since) = status else { return }
+        // The carry of this call was decided before anything is sent (`show(.started)`, `recordInPerson`).
+        assert(AppIdentity.current.isPreview || carry.decided == CallRecorder.callID(for: since), "the carry of this call is not decided yet")
+        // A call for another profile, or one taken back from it: the streams never open again for it.
+        let choice = self.choice(forCall: CallRecorder.callID(for: since))
+        guard MoveAfterCall.allows(.liveTranscript, choice) else { liveOff = MoveAfterCall.liveOff(choice); return }
         guard liveTranscriptEnabled else { liveOff = .setting; return }
         guard let key = keychain.get(.assemblyai) else { liveOff = .noKey; return }
         // The two audio streams take about half a megabit of upload. On a network the owner marked to save data
@@ -1360,6 +1500,7 @@ final class AppController: ObservableObject {
     /// Once per call, after about 5 minutes of live transcript, asks a small model for a provisional title so the
     /// menu and the list show it while the call runs. The summary's title replaces it.
     private func startLiveTitling(callID: String) {
+        guard MoveAfterCall.allows(.liveTitle, choice(forCall: callID)) else { return }
         let chosen = aiProvider.resolvedModel(aiModel)
         let key = aiProvider.key.flatMap { keychain.get($0) }
         guard key != nil || !aiProvider.requiresKey, let model = aiProvider.smallModel ?? (chosen.isEmpty ? nil : chosen) else { return }
@@ -1368,7 +1509,7 @@ final class AppController: ObservableObject {
         liveTitling?.cancel()
         liveTitling = Task { [weak self] in
             try? await Task.sleep(for: .seconds(300))
-            guard !Task.isCancelled, let self, self.isRecording(callID) else { return }
+            guard !Task.isCancelled, let self, self.isRecording(callID), MoveAfterCall.allows(.liveTitle, self.choice(forCall: callID)) else { return }
             // A calendar title or the owner's title wins, so no model call is spent on a title nobody shows.
             let recorder = self.recorder
             let hasTitle = await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in
@@ -1390,7 +1531,11 @@ final class AppController: ObservableObject {
 
     /// After the call: the namer, the events around the call, and the chat runs are not needed any more. A chat
     /// answer still on its way keeps its own session and saves its chat.
-    private func forgetLiveCall() {
+    private func forgetLiveCall(end: Date) {
+        // The choice stays for a new recording of the same call. A second end of the same call (the detector's, after
+        // Stop) keeps what the first one kept.
+        carry.ended(choice: carry.call.flatMap { c in callChoice.flatMap { $0.callID == c.callID ? $0.choice : nil } }, at: end)
+        callChoice = nil
         liveNamer = nil
         liveCalendar = nil
         liveChatSessions = [:]
@@ -1455,7 +1600,7 @@ final class AppController: ObservableObject {
         }
     }
 
-    private func stopLive() {
+    func stopLive() {
         liveRestart?.cancel()
         liveRestart = nil
         live.save()
@@ -1492,7 +1637,7 @@ final class AppController: ObservableObject {
     /// Settings › Recording: an empty do-not-record list. Also ends the block that a damaged list causes, at once.
     func resetNoRecordList() {
         noRecord.reset()
-        noRecordGate.update(book: noRecord)
+        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord.map(\.book)))
         do { try noRecord.save(to: paths.noRecord) } catch { Log.error("Saving the do-not-record list failed: \(error)") }
         Log.info("The do-not-record list was reset")
     }
@@ -1510,7 +1655,7 @@ final class AppController: ObservableObject {
     func setRecording(_ choice: RecordingChoice, for meeting: UpcomingMeeting) {
         noRecord.set(choice, for: meeting)
         noRecord.removeExpired(now: Date())
-        noRecordGate.update(book: noRecord)
+        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord.map(\.book)))
         do { try noRecord.save(to: paths.noRecord) } catch { Log.error("Saving the recording choice failed: \(error)") }
     }
 
@@ -1574,6 +1719,7 @@ final class AppController: ObservableObject {
     }
 
     func applyNames(callID: String, names: [String: String], emails: [String: String] = [:]) {
+        guard !refusedForMove(callID) else { return }
         Task {
             await pipeline.applyNames(callID: callID, names: names, emails: emails)
             refresh()
@@ -1582,6 +1728,7 @@ final class AppController: ObservableObject {
 
     /// The owner's own title; nil or blank goes back to the automatic one.
     func setTitle(callID: String, _ title: String?) {
+        guard !refusedForMove(callID) else { return }
         Task {
             await pipeline.setTitle(callID: callID, title)
             refresh()
@@ -1589,6 +1736,7 @@ final class AppController: ObservableObject {
     }
 
     func setTags(callID: String, _ tags: [String]) {
+        guard !refusedForMove(callID) else { return }
         Task {
             await pipeline.setTags(callID: callID, tags)
             refresh()
@@ -1598,7 +1746,7 @@ final class AppController: ObservableObject {
     /// Deletes one shared screen of a meeting: its picture, its entry in the frames list, and its line in the
     /// transcript. The note is written again.
     func deleteScreen(callID: String, file: String) {
-        guard !isSecondCopy else { return }
+        guard !isSecondCopy, !refusedForMove(callID) else { return }
         Task {
             await pipeline.deleteScreen(callID: callID, file: file)
             // After the file is gone, so a decode that was on its way cannot put the picture back in memory.
@@ -1638,10 +1786,18 @@ final class AppController: ObservableObject {
         guard let llm = languageModel else { throw MissingAPIKey(service: aiProvider.displayName) }
         // The chat's `remember` tool writes the coach's profile.
         defer { coachVersion += 1 }
-        return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: meetings, paths: paths,
+        // The call that records now carries the owner's choice from memory, as every other gate reads it: the list's
+        // copy of its record gets the mark only after the recorder's write and a refresh.
+        let records = meetings.map { r -> CallRecord in
+            guard r.status == .recording, let to = choice(forCall: r.id).moveTo else { return r }
+            var m = r
+            m.moveTo = to
+            return m
+        }
+        return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: records, paths: paths,
                                                                           about: callID, personaTraits: personasOn,
                                                                           actions: isInert ? nil : chatActionHost, earlier: earlier, questionID: questionID,
-                                                                          onAction: onAction,
+                                                                          onAction: onAction, liveOff: liveOff,
                                                                           onStep: onStep)
     }
 
@@ -1686,6 +1842,8 @@ final class AppController: ObservableObject {
     func deleteMeeting(_ callID: String) {
         guard !isSecondCopy else { return }
         Task {
+            // A meeting whose move waits: the move is cancelled first when it still can be; else nothing changes.
+            guard await cancelMoveBeforeDelete(callID) else { return }
             // The pipeline first: it refuses a call that is still processing, and then the cloud copy must stay.
             // It gives back the record from disk, which has the archive key even when the list here is older.
             if let removed = await pipeline.remove(callID: callID) {
@@ -1716,7 +1874,7 @@ final class AppController: ObservableObject {
     /// is asked for, it then goes on with the move.
     func syncCloud() {
         // One loop at a time: two would upload the same recording together.
-        guard !isInert, let pipeline else { return }
+        guard mode.does(.backup), let pipeline else { return }
         // A request during a loop runs one more loop after it, so a recording finished meanwhile is not left out.
         if cloudSyncing { cloudSyncAgain = true; return }
         // A move that was asked for starts when the server is ready. Until then this pass works as before.
@@ -1762,7 +1920,7 @@ final class AppController: ObservableObject {
     func progressText(_ r: CallRecord) -> String? {
         // While uploading, the list and the menu show the percent of the track that is furthest behind.
         if let p = progress[r.id], p.step == .transcribing, p.detail == nil, let t = p.slowestUpload,
-           let line = p.trackLine(t, service: transcriptionProvider.displayName, room: r.platform == .inPerson) {
+           let line = p.trackLine(t, service: transcriptionProvider.displayName, platform: r.platform) {
             return line
         }
         return stepDetails[r.id] ?? ProcessingStep(status: r.status)?.title
@@ -1819,20 +1977,23 @@ final class AppController: ObservableObject {
     }
 
     func transcribeAgain(_ id: String, speakers: Int?) {
+        guard !refusedForMove(id) else { return }
         Task(priority: .utility) { await track { await self.pipeline.transcribeAgain(id, speakers: speakers) } }
     }
 
     func restorePreviousTranscript(_ id: String) {
+        guard !refusedForMove(id) else { return }
         Task(priority: .utility) { await track { await self.pipeline.restorePreviousTranscript(id) } }
     }
 
     func regenerateSummary(_ id: String) {
+        guard !refusedForMove(id) else { return }
         Task(priority: .utility) { await track { await self.pipeline.regenerateSummary(id) } }
     }
 
     /// Joins the meetings into the earliest one and opens it.
     func mergeMeetings(_ ids: [String]) {
-        guard !isSecondCopy else { return }
+        guard !isSecondCopy, !ids.contains(where: refusedForMove) else { return }
         Task {
             let merged = await pipeline.merge(callIDs: ids)
             refresh()
@@ -1875,6 +2036,7 @@ final class AppController: ObservableObject {
     }
 
     func retry(_ callID: String) {
+        guard !refusedForMove(callID) else { return }
         Task(priority: .utility) {
             await track { await self.pipeline.retry(callID) }
         }
@@ -1920,8 +2082,36 @@ final class AppController: ObservableObject {
                 return
             }
             Task { @MainActor in self.update(record); self.refresh() }
+            Task { @MainActor in self.endOfCall(record) }
+        }
+    }
+
+    /// The end of a kept call: processed here, or moved as "recorded" to the profile it is for, or held for the owner.
+    func endOfCall(_ record: CallRecord) {
+        // The owner's latest choice, in memory, is read after the recorder's last write: a choice in the same instant as
+        // the end that missed the record is written now, before anything else reads the mark.
+        let latest: MoveAfterCall.Choice? = if let c = callChoice, c.callID == record.id { c.choice } else { carry.keptChoice(of: record.id) }
+        let settled = MoveAfterCall.settled(record, latest: latest)
+        if settled.moveTo != record.moveTo {
+            Task { @MainActor in
+                // The pipeline refuses nothing here but a call in flight, which an ended call is not yet.
+                _ = await pipeline.setMoveTarget(callID: record.id, settled.moveTo)
+                refresh()
+                endOfCall(settled)
+            }
+            return
+        }
+        switch MoveAfterCall.atEnd(record, latest: latest, targets: moveTargets.map(\.id)) {
+        case .process:
             // Utility: the next call may start in the same minute, and the call app comes first.
             Task(priority: .utility) { @MainActor in await self.track { await self.pipeline.process(record.id) } }
+        case .move(let to):
+            moveAfterCall(record.id, to: to)
+        case .hold:
+            // A guess is held with its reason saved (`MoveEnded`, `.notSure`): the row asks the owner.
+            checkMoves()
+        case .nothing:
+            break
         }
     }
 
@@ -1942,31 +2132,35 @@ final class AppController: ObservableObject {
     private func quietUnconfirmed(_ call: UnconfirmedCall) {
         let now = Date()
         let until = UnconfirmedDismissals.endOfDay(after: now)
-        var answers = UnconfirmedDismissals(data: UserDefaults.standard.data(forKey: "notACall"))
+        var answers = UnconfirmedDismissals(data: MacDefaults.store.data(forKey: "notACall"))
         answers.add(call, until: until, now: now)
-        UserDefaults.standard.set(answers.data, forKey: "notACall")
+        MacDefaults.store.set(answers.data, forKey: "notACall")
         detection.dismissUnconfirmed(call, until: until)
     }
 
     /// Call starts whose recording failed, by start time, until the UI has seen them.
     private var failedStarts: Set<Date> = []
 
-    private func show(_ event: DetectorEvent) {
+    private func show(_ event: DetectorEvent, meetingID: String?) {
         if case .recording(.inPerson, _) = status { return }
         switch event {
-        case .started(let platform, _, let at):
+        case .started(let platform, let bundleID, let at):
             notifier.clearUnconfirmed()
             // The failure can arrive first: a recording that did not start must not show as one.
             if failedStarts.remove(at) != nil { return }
             status = .recording(platform, since: at)
             isPaused = false
             isMuted = false
+            // Before the live transcript and any other send, from the detector's own values: the same call going on
+            // keeps the owner's choice, for sure or as a guess.
+            carryChoice(to: MoveAfterCall.Call(callID: CallRecorder.callID(for: at), platform: platform, bundleID: bundleID,
+                                               meetingID: meetingID, start: at))
             startLive(reset: true)
-        case .ended:
+        case .ended(let at, _):
             failedStarts.removeAll()
             updater.callEnded()
             summarizeLiveChats()
-            forgetLiveCall()
+            forgetLiveCall(end: at)
             status = .idle
             isPaused = false
             isMuted = false
@@ -1991,14 +2185,14 @@ final class AppController: ObservableObject {
 
     /// Processes calls waiting in the queue, such as a recording that arrived from the iPhone.
     func processPending() {
-        guard !isInert else { return }
+        guard mode.does(.queue) else { return }
         Task(priority: .utility) { await track { await self.pipeline.runPending() } }
     }
 
     /// A meeting written while the next call recorded has no recording yet (the encode waited). Each time some
     /// work ends and no call records, the missing ones are made, one run at a time, and then archived.
     private func makeMissingRecordings() {
-        guard !isInert, !isRecording, !makingRecordings else { return }
+        guard mode.does(.backup), !isRecording, !makingRecordings else { return }
         makingRecordings = true
         let audio = paths.audio
         Task(priority: .background) { [weak self] in
@@ -2018,15 +2212,26 @@ final class AppController: ObservableObject {
         }
     }
 
+    /// A meeting that a worker finished while it could not read the calendar gets its invite: at each housekeeping
+    /// (the first runs at launch), so a Google read that failed is tried again within the hour. With one profile (no registry
+    /// file) nothing is read.
+    private func lookAgainForInvites() {
+        guard WorkerCalendar.looksAgainAtLaunch(registry: profiles.state, macCalendar: .macCalendar, googleCalendar: google.has(.calendar)),
+              let pipeline else { return }
+        Task { if await pipeline.matchUnknownInvites() > 0 { self.refresh() } }
+    }
+
     private func runHousekeeping() async {
+        checkMoves()
         consumeBackupMoveRequest()
+        lookAgainForInvites()
         await track { await self.pipeline.runPending() }
         let audio = paths.audio, days = deleteRecordings ? max(1, recordingDays) : nil, tracks = max(1, rawTracksDays)
         // Only a backup that this Mac can read counts as "the recording exists": a mark for another server does not.
         let archive = cloudArchive
-        await Task.detached(priority: .background) {
+        if mode.does(.retention) { await Task.detached(priority: .background) {
             Retention.sweep(audioRoot: audio, rawTracksAfterDays: tracks, recordingsAfterDays: days, hasBackup: { archive?.holds($0) ?? false })
-        }.value
+        }.value }
         runCoach()
         runCommitments()
         runNextTimeCheck()
@@ -2063,11 +2268,22 @@ final class AppController: ObservableObject {
         permissions.askAutomationIfNeeded(bundleID)
     }
 
+    /// A Mac-wide key in a profile's own settings means something read or wrote it past `MacDefaults`.
+    private func reportMacWideStrays() {
+        let identity = AppIdentity.current
+        guard identity.takesProfiles, !identity.profile.isDefault, let suite = identity.defaultsSuite else { return }
+        let strays = MacDefaults.strays(in: UserDefaults.standard.persistentDomain(forName: suite) ?? [:])
+        if !strays.isEmpty { Log.error("Settings: Mac-wide keys in this profile's settings: \(strays.joined(separator: ", "))") }
+        // The rule that no test of the app target can reach: every Mac-wide key (`offUntil` and `usageStatsEnabled`
+        // through `@AppStorage(store: MacDefaults.store)` among them) is read and written past the profile's swap.
+        assert(strays.isEmpty, "Mac-wide keys in this profile's settings: \(strays)")
+    }
+
     private func enableLaunchAtLoginOnce() {
-        guard !AppIdentity.current.isPreview, !UserDefaults.standard.bool(forKey: "didSetLoginItem") else { return }
+        guard !AppIdentity.current.isPreview, !MacDefaults.store.bool(forKey: "didSetLoginItem") else { return }
         do {
             try SMAppService.mainApp.register()
-            UserDefaults.standard.set(true, forKey: "didSetLoginItem")
+            MacDefaults.store.set(true, forKey: "didSetLoginItem")
         } catch {
             Log.error("Launch at login failed: \(error)")
         }
@@ -2104,7 +2320,7 @@ final class AppController: ObservableObject {
             // For Chat's and other AI apps' tools, which cannot read the calendar: the events as read, without their
             // notes (`CalendarSnapshot`). Never made-up invites.
             let access = CalendarSnapshot.Access(mac: .macCalendar, google: calendar.lastGoogleRead)
-            let dir = paths.calendar, inert = isInert, read = events, made = sampled
+            let dir = paths.calendar, inert = !mode.does(.calendarSnapshot), read = events, made = sampled
             Task.detached(priority: .utility) {
                 do { try CalendarSnapshot.write(read, access: access, saved: now, inert: inert, sampled: made, to: dir) }
                 catch { Log.error("Saving the calendar for the tools failed: \(error)") }
@@ -2169,15 +2385,6 @@ final class AppController: ObservableObject {
     }
 }
 
-
-/// Used when no AssemblyAI key is stored: the call stays queued until a key exists.
-struct MissingKeyTranscriber: Transcribing {
-    let service: String
-
-    func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
-        throw MissingAPIKey(service: service)
-    }
-}
 
 /// The live transcript, published at most four times a second: AssemblyAI sends several partial results a second.
 @MainActor
@@ -2247,6 +2454,11 @@ final class LiveTranscriptModel: ObservableObject {
         var snapshot = pending
         snapshot.clock = clock?()
         saves.async { try? snapshot.save(to: url) }
+    }
+
+    /// Deletes the saved file after any save on its way, so nothing puts it back.
+    func removeFile(_ url: URL) {
+        saves.async { try? FileManager.default.removeItem(at: url) }
     }
 
     func reset() {

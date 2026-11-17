@@ -54,13 +54,16 @@ public enum MarkdownWriter {
         return names
     }
 
-    /// Whether the note names this call in its `audio:` line.
+    /// Whether the note names this call in its `audio:` line, in any profile's folder.
     static func isNote(_ url: URL, of id: String) -> Bool {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
         defer { try? handle.close() }
         let head = String(decoding: (try? handle.read(upToCount: 4096)) ?? Data(), as: UTF8.self)
-        return head.components(separatedBy: "\n").contains { $0 == "audio: ~/Mossad/Audio/\(id)" }
+        return head.components(separatedBy: "\n").contains { $0.hasPrefix("audio: ") && $0.hasSuffix("/Audio/\(id)") }
     }
+
+    /// The folder the note's `audio:` line names: this process's profile.
+    public static var audioRoot: String { AppIdentity.current.noteRoot }
 
     /// `screens` false leaves out the lines of shared screens, for a reader that only wants what people said.
     public static func transcript(_ r: CallRecord, screens: Bool = true) -> String {
@@ -72,7 +75,7 @@ public enum MarkdownWriter {
             .joined(separator: "\n")
     }
 
-    public static func render(_ r: CallRecord) -> String {
+    public static func render(_ r: CallRecord, audioRoot: String = MarkdownWriter.audioRoot) -> String {
         let names = displayNames(r)
         var speakers: [String] = []
         for u in r.utterances {
@@ -88,7 +91,7 @@ public enum MarkdownWriter {
             "title: \(quoted(oneLine(r.title)))",
             "attendees: [\(r.attendees.map(quoted).joined(separator: ", "))]",
             "speakers: [\(speakers.map(quoted).joined(separator: ", "))]",
-            "audio: ~/Mossad/Audio/\(r.id)",
+            "audio: \(audioRoot)/Audio/\(r.id)",
         ]
         if let kind = r.kind { lines.insert("kind: \(quoted(kind))", at: lines.count - 4) }
         if !r.tags.isEmpty { lines.insert("tags: [\(r.tags.map(quoted).joined(separator: ", "))]", at: lines.count - 4) }

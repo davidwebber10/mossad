@@ -187,7 +187,8 @@ public struct Decision: Codable, Equatable, Sendable, Hashable {
 
 public struct CallRecord: Codable, Equatable, Sendable {
     public var id: String
-    public var platform: Platform
+    /// A platform this build does not know reads as `unknown` and is written back as it was read.
+    @KeptPlatform public var platform: Platform
     public var bundleID: String
     public var start: Date
     public var end: Date
@@ -222,6 +223,10 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var failedStep: CallStatus?
     /// Short text for the last error, such as "AssemblyAI key missing"; nil once a step succeeds.
     public var failureReason: String?
+    /// The calendar could not be read when the invite was looked for (a worker), so "no invite" is not known: the
+    /// next launch of the profile's window app looks again. Never written as false. An older build drops this when it
+    /// saves the record; then the invite is not looked for again.
+    public var inviteUnknown: Bool?
     /// Speaker key (`me:A`, `them:B`) → person name. The name is a label: `speakerPeople` says who it is.
     public var speakerNames: [String: String] = [:]
     /// Speaker key → the id of the person in `people.json`, on a sure match only. Nil in records from before ids,
@@ -301,6 +306,11 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// The meeting's "Notes by Gemini" document: the source of a notes-only meeting, or a second source of a recorded
     /// one. Nil when there is none.
     public var gemini: GeminiNotesRef?
+    /// The other person of a phone call, as the owner said on the iPhone. Nil for every other meeting.
+    public var personHint: PersonHint?
+    /// The profile this meeting leaves for. Set when a move starts; the pipeline and the queue leave a marked call alone.
+    /// Written only for a move.
+    public var moveTo: String?
     /// The file names of screens the owner deleted. The text step drops them from `frames.json` if they are still
     /// there (a failed save, a run that was reading at that moment), so a deleted screen never comes back.
     public var deletedScreens: [String]?
@@ -318,7 +328,7 @@ public struct CallRecord: Codable, Equatable, Sendable {
         if customTitle != nil { .custom } else if calendarTitle != nil { .calendar } else if generatedTitle != nil { .generated } else { .platform }
     }
 
-    public var title: String { customTitle ?? calendarTitle ?? generatedTitle ?? "\(platform.displayName) call" }
+    public var title: String { customTitle ?? calendarTitle ?? generatedTitle ?? platform.untitled }
 
     /// Takes the invite's title, people, and planned times. An all-day event plans no time of day.
     public mutating func setInvite(_ event: CalendarEventInfo) {
@@ -398,6 +408,7 @@ extension CallRecord {
         themUtterances = try c.decodeIfPresent([Utterance].self, forKey: .themUtterances)
         failedStep = try c.decodeIfPresent(CallStatus.self, forKey: .failedStep)
         failureReason = try c.decodeIfPresent(String.self, forKey: .failureReason)
+        inviteUnknown = try c.decodeIfPresent(Bool.self, forKey: .inviteUnknown)
         speakerNames = try c.decodeIfPresent([String: String].self, forKey: .speakerNames) ?? [:]
         speakerPeople = try c.decodeIfPresent([String: String].self, forKey: .speakerPeople)
         unknownSpeakers = try c.decodeIfPresent([String].self, forKey: .unknownSpeakers) ?? []
@@ -434,7 +445,51 @@ extension CallRecord {
         screenGaps = try c.decodeIfPresent([ScreenGap].self, forKey: .screenGaps)
         deletedScreens = try c.decodeIfPresent([String].self, forKey: .deletedScreens)
         source = try c.decodeIfPresent(String.self, forKey: .source)
+        _platform = try c.decode(KeptPlatform.self, forKey: .platform)
         gemini = try c.decodeIfPresent(GeminiNotesRef.self, forKey: .gemini)
+        personHint = try c.decodeIfPresent(PersonHint.self, forKey: .personHint)
+        moveTo = try c.decodeIfPresent(String.self, forKey: .moveTo)
+    }
+}
+
+/// A record's platform with the text it was read from, so a platform of a newer build is not lost when this build
+/// saves the record. Any change of the platform here drops the text.
+@propertyWrapper
+public struct KeptPlatform: Codable, Equatable, Sendable {
+    private var value: Platform
+    private var raw: String?
+
+    public init(wrappedValue: Platform) { value = wrappedValue }
+
+    public var wrappedValue: Platform {
+        get { value }
+        set {
+            value = newValue
+            raw = nil
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let text = try decoder.singleValueContainer().decode(String.self)
+        value = Platform(rawValue: text) ?? .unknown
+        raw = value == .unknown ? text : nil
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(raw ?? value.rawValue)
+    }
+}
+
+/// The one other person of a phone call, as the owner said on the iPhone.
+public struct PersonHint: Codable, Equatable, Sendable {
+    public var name: String
+    /// The saved person the owner picked; nil for a name the owner typed.
+    public var personID: String?
+
+    public init(name: String, personID: String? = nil) {
+        self.name = name
+        self.personID = personID
     }
 }
 
@@ -488,14 +543,24 @@ extension CallRecord {
     }
 
     /// Swaps labels such as "Speaker A" for names in the summary, topics, decisions, and action items. Whole
-    /// words only, so "Speaker A" never matches inside "Speaker AB".
+    /// words only, so "Speaker A" never matches inside "Speaker AB". All at once: a label that becomes another label
+    /// ("Speaker B" to "Speaker A") never then becomes the name meant for the first.
     mutating func replaceSpeakerLabels(_ labels: [String: String]) {
         guard !labels.isEmpty else { return }
+        let pattern = labels.keys.sorted { $0.count > $1.count }.map { "\\b\(NSRegularExpression.escapedPattern(for: $0))\\b" }.joined(separator: "|")
+        let regex = try? NSRegularExpression(pattern: pattern)
         func swap(_ text: String) -> String {
-            labels.reduce(text) { text, pair in
-                text.replacingOccurrences(of: "\\b\(NSRegularExpression.escapedPattern(for: pair.key))\\b", with: NSRegularExpression.escapedTemplate(for: pair.value),
-                                          options: .regularExpression)
+            guard let regex else { return text }
+            let ns = text as NSString
+            var out = ""
+            var at = 0
+            for m in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                out += ns.substring(with: NSRange(location: at, length: m.range.location - at))
+                let found = ns.substring(with: m.range)
+                out += labels[found] ?? found
+                at = m.range.location + m.range.length
             }
+            return out + ns.substring(from: at)
         }
         summary = summary.map(swap)
         topics = topics.map { SummaryTopic(title: swap($0.title), summary: swap($0.summary)) }

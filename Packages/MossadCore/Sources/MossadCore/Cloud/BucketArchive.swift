@@ -4,21 +4,24 @@ import Foundation
 public struct BucketArchive: ArchiveBackend {
     let config: S3Config
     let session: URLSession
+    /// The profile's place in the bucket: the root for the first profile, as today; `profiles/<id>/` for another.
+    let root: String
 
-    public init(config: S3Config, session: URLSession = .shared) {
+    public init(config: S3Config, session: URLSession = .shared, root: String = AppIdentity.current.backupPrefix) {
         self.config = config
         self.session = session
+        self.root = root
     }
 
     public var kind: ArchiveKind { .bucket }
     public var maxBytes: Int64? { nil }
     static let prefix = "calls/"
-    public func key(for callID: String) -> String { "\(Self.prefix)\(callID)/\(Recording.fileName)" }
+    public func key(for callID: String) -> String { "\(root)\(Self.prefix)\(callID)/\(Recording.fileName)" }
 
-    /// The objects under `calls/`, from one list of at most 1000. Enough to tell "none" from "some". Nil when the
+    /// The objects under the profile's `calls/`, from one list of at most 1000. Enough to tell "none" from "some". Nil when the
     /// bucket did not answer, or the key may not list.
     public func recordingCount() async -> Int? {
-        let url = S3Presigner.url(config, method: "GET", key: "", query: [("list-type", "2"), ("prefix", Self.prefix), ("max-keys", "1000")])
+        let url = S3Presigner.url(config, method: "GET", key: "", query: [("list-type", "2"), ("prefix", root + Self.prefix), ("max-keys", "1000")])
         guard let (data, response) = try? await session.data(from: url), (response as? HTTPURLResponse)?.statusCode == 200,
               let text = String(data: data, encoding: .utf8), text.contains("<ListBucketResult") else { return nil }
         return text.components(separatedBy: "<Key>").count - 1

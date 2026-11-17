@@ -26,7 +26,7 @@ struct PhoneMeetingChat: View {
             } else {
                 VStack(alignment: .leading, spacing: 0) {
                     PhoneLabel("Ask about this meeting")
-                    ExampleQuestions(questions: examples) { question = $0; send() }
+                    if MoveShow.phoneChatOff(record) == nil { ExampleQuestions(questions: examples) { question = $0; send() } }
                 }
             }
             if running {
@@ -36,16 +36,21 @@ struct PhoneMeetingChat: View {
                 }
             }
             if let error = run.error { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
-            HStack(alignment: .bottom, spacing: Space.s) {
-                if chat != nil {
-                    Button { chatID = nil; fresh = true } label: {
-                        Image(systemName: "square.and.pencil").foregroundStyle(Palette.ink).frame(width: 44, height: 44)
+            if let off = MoveShow.phoneChatOff(record) {
+                // Before any request: the Mac would not keep the chat, so nothing is sent or billed.
+                Text(off).textRole(.secondary).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+            } else {
+                HStack(alignment: .bottom, spacing: Space.s) {
+                    if chat != nil {
+                        Button { chatID = nil; fresh = true } label: {
+                            Image(systemName: "square.and.pencil").foregroundStyle(Palette.ink).frame(width: 44, height: 44)
+                        }
+                        .mossadGlass(in: Circle(), interactive: true)
+                        .accessibilityLabel("New chat")
                     }
-                    .mossadGlass(in: Circle(), interactive: true)
-                    .accessibilityLabel("New chat")
+                    ChatComposer(text: $question, prompt: chat == nil ? "Ask about this meeting" : "Ask a follow-up",
+                                 focused: $focused, disabled: running) { send() }
                 }
-                ChatComposer(text: $question, prompt: chat == nil ? "Ask about this meeting" : "Ask a follow-up",
-                             focused: $focused, disabled: running) { send() }
             }
         }
         .dismissesKeyboard($focused)
@@ -59,7 +64,7 @@ struct PhoneMeetingChat: View {
 
     private func send() {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty, !running else { return }
+        guard !q.isEmpty, !running, MoveShow.phoneChatOff(record) == nil else { return }
         var current = chat ?? {
             var c = Chat(title: Chat.title(from: q))
             c.callID = record.id
@@ -96,7 +101,7 @@ struct PhoneMeetingChat: View {
 
     /// Asks the last question again: it leaves the chat and goes back through send.
     private func retry() {
-        guard var c = chat, let last = c.messages.last, last.role == .user else { return }
+        guard MoveShow.phoneChatOff(record) == nil, var c = chat, let last = c.messages.last, last.role == .user else { return }
         c.messages.removeLast()
         store.save(c)
         question = last.text

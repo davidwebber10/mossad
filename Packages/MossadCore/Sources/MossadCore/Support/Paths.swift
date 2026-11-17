@@ -23,6 +23,8 @@ public struct Paths: Sendable {
     public var audio: URL { root.appendingPathComponent("Audio") }
     public var voices: URL { root.appendingPathComponent("Voices") }
     public var logs: URL { root.appendingPathComponent("Logs") }
+    /// A worker's status file; made only by a worker, never by `ensureDirectories`.
+    public var worker: URL { root.appendingPathComponent("Worker") }
     /// The coach's profile of the owner: patterns, the current focus, and notes on each person.
     public var coach: URL { root.appendingPathComponent("Coach") }
     /// One JSON file per chat in the Chat tab.
@@ -49,6 +51,11 @@ public struct Paths: Sendable {
 
     /// Copies made before a migration changed a file, so it can be undone by hand.
     public var backups: URL { root.appendingPathComponent("Backups") }
+
+    /// Meetings that another profile is moving here (`Incoming/<id>`), and this profile's own moves out (`Moves`).
+    /// Made by the first move, never by `ensureDirectories`: with one profile neither folder exists.
+    public var incoming: URL { root.appendingPathComponent("Incoming") }
+    public var moves: URL { root.appendingPathComponent("Moves") }
 
     public func callDirectory(_ id: String) -> URL {
         audio.appendingPathComponent(id)

@@ -78,10 +78,11 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sen
 
     /// A call with an invite was kept off the record, and not by the owner's choice: the do-not-record list is
     /// damaged, so Mossad cannot know the choice. Said at each such call; Record starts the recording.
-    func postNotRecorded(title: String, bundleID: String, platform: Platform) {
+    /// `problem` says whose list: another profile's is fixed in that profile, never by a reset here.
+    func postNotRecorded(title: String, bundleID: String, platform: Platform, problem: NoRecordListProblem) {
         let content = UNMutableNotificationContent()
         content.title = "Mossad did not record \(title.isEmpty ? "this call" : title)"
-        content.body = "The do-not-record list could not be read. Press Record to record this call. To end this, set a choice for any upcoming meeting, or reset the list in Settings, Recording."
+        content.body = problem.notificationBody
         content.sound = .default
         content.categoryIdentifier = Self.notRecordedCategory
         content.userInfo = ["bundleID": bundleID, "platform": platform.rawValue]

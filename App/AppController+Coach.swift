@@ -46,7 +46,7 @@ extension AppController {
 
     /// Reviews the calls that are due, one at a time, then sends the weekly email when it is due.
     func runCoach() {
-        guard !isInert else { return }
+        guard mode.does(.coach) else { return }
         guard coachEnabled, !coaching, let llm = languageModel else { return }
         coaching = true
         linkCoachPeople()
@@ -110,7 +110,7 @@ extension AppController {
 
     /// `now` sends the last period's email even when it was sent already.
     func sendCoachEmail(_ kind: CoachEmailKind? = nil, now: Bool = false) async {
-        guard coachEnabled, let to = coachEmailTo.nonEmpty, coachEmailFrom.nonEmpty != nil,
+        guard mode.does(.weeklyMail), coachEnabled, let to = coachEmailTo.nonEmpty, coachEmailFrom.nonEmpty != nil,
               let llm = languageModel, let secret = keychain.get(mailProvider.key) else { return }
         let mailer = mailSettings.mailer(mailProvider, secret: secret), writer = LLMDigestWriter(llm: llm)
         if (kind == nil && coachEmailEnabled) || kind == .weekly {

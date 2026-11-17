@@ -35,15 +35,20 @@ public struct ProcessingQueue: Sendable {
 
     public func pending(now: Date) -> [CallRecord] {
         allRecords().filter { r in
-            r.status != .written && r.status != .recording && r.status != .failed && (r.nextAttempt ?? .distantPast) <= now
+            // A meeting that leaves for another profile is never processed here.
+            r.status != .written && r.status != .recording && r.status != .failed && r.moveTo == nil && (r.nextAttempt ?? .distantPast) <= now
         }
     }
 
     /// Finishes calls that were still recording when the app stopped. Returns the calls whose muted parts could not
     /// be silenced: they are kept, held back from processing, and tried again by the pipeline.
     @discardableResult
-    public func recoverInterrupted() -> [String] {
-        var held: [String] = []
+    public func recoverInterrupted() -> [String] { recoverInterruptedCalls().held }
+
+    /// The same, with the calls that were recording when the app stopped and are kept (`recovered`): their audio
+    /// length says nothing of a pause, so a kept choice of another profile counts from the launch (`MoveAfterCall`).
+    public func recoverInterruptedCalls() -> (held: [String], recovered: [String]) {
+        var held: [String] = [], recovered: [String] = []
         for var r in allRecords() where r.status == .recording {
             let dir = paths.callDirectory(r.id)
             removeTempTracks(in: dir)
@@ -63,6 +68,7 @@ public struct ProcessingQueue: Sendable {
                 r.status = .failed
                 r.failedStep = .recorded
                 try? r.save(to: dir)
+                recovered.append(r.id)
                 continue
             }
             if duration < Self.minimumCallDuration {
@@ -80,10 +86,11 @@ public struct ProcessingQueue: Sendable {
                     held.append(r.id)
                 }
                 try? r.save(to: dir)
+                recovered.append(r.id)
                 Log.info("Recovered interrupted call \(r.id) (\(Int(duration)) s)")
             }
         }
-        return held
+        return (held, recovered)
     }
 
     /// A rewrite that a quit stopped leaves its temp file (a UUID name) in the call folder.

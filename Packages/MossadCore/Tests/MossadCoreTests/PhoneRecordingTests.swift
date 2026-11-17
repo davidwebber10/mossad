@@ -36,4 +36,143 @@ final class PhoneRecordingTests: XCTestCase {
     func testRecordingsUseTheirOwnRecordNames() {
         XCTAssertEqual(PhoneRecording.recordName("20270115-090000"), "rec-20270115-090000")
     }
+
+    private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+    private var call: PhoneRecording {
+        PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 600, title: nil, kind: .phoneCall, person: "Sam Carter", personID: "p1")
+    }
+
+    func testAPlanBecomesAPhoneCallRecording() {
+        let plan = CallImport.Plan(id: "20270115-090000", start: t0, end: t0 + 600, title: nil,
+                                   person: .init(name: "Sam Carter", personID: "p1"), convert: false)
+        XCTAssertEqual(PhoneRecording(plan), call)
+        XCTAssertTrue(call.isPhoneCall)
+    }
+
+    func testAPayloadFromBeforeTheNewFieldsStillReads() throws {
+        let p = try JSONDecoder().decode(PhoneRecording.self, from: Data(#"{"id":"20270115-090000","start":0,"end":3,"title":"Offsite planning"}"#.utf8))
+        XCTAssertNil(p.kind)
+        XCTAssertNil(p.person)
+        XCTAssertNil(p.personID)
+        XCTAssertFalse(p.isPhoneCall)
+        XCTAssertEqual(p.title, "Offsite planning")
+    }
+
+    func testAPhoneCallIsWrittenWithItsKindAndPerson() throws {
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(call)) as! [String: Any]
+        XCTAssertEqual(json["kind"] as? String, "phoneCall")
+        XCTAssertEqual(json["person"] as? String, "Sam Carter")
+        XCTAssertEqual(json["personID"] as? String, "p1")
+        XCTAssertEqual(try JSONDecoder().decode(PhoneRecording.self, from: JSONEncoder().encode(call)), call)
+    }
+
+    func testARoomRecordingIsWrittenWithNoNewKeys() throws {
+        let room = PhoneRecording(id: "a", start: t0, end: t0 + 3, title: "Offsite")
+        XCTAssertEqual(Set((try JSONSerialization.jsonObject(with: JSONEncoder().encode(room)) as! [String: Any]).keys), ["id", "start", "end", "title"])
+        XCTAssertEqual(Set(room.fields.keys), ["start", "end", "title"])
+    }
+
+    func testAKindThisBuildDoesNotKnowReadsAsARoomRecording() throws {
+        let p = try JSONDecoder().decode(PhoneRecording.self, from: Data(#"{"id":"a","start":0,"end":3,"kind":"voicemail"}"#.utf8))
+        XCTAssertNil(p.kind)
+        XCTAssertFalse(p.isPhoneCall)
+    }
+
+    func testTheStoreFieldsRoundTrip() {
+        XCTAssertEqual(Set(call.fields.keys), ["start", "end", "kind", "person", "personID"])
+        XCTAssertEqual(call.fields["kind"], .string("phoneCall"))
+        XCTAssertEqual(PhoneRecording(id: call.id, fields: call.fields), call)
+        XCTAssertNil(PhoneRecording(id: "a", fields: ["end": .date(t0)]))
+        XCTAssertNil(PhoneRecording(id: "a", fields: ["start": .date(t0), "end": .date(t0), "kind": .string("voicemail")])?.kind)
+    }
+
+    /// A CAF file whose header says 1 Hz: it reads, and no converter takes it.
+    private func audioWithNoConverter() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).caf")
+        try writeTestAudio(url, seconds: 0.1, sampleRate: 8_000)
+        var data = try Data(contentsOf: url)
+        let desc = try XCTUnwrap(data.range(of: Data("desc".utf8)))
+        var one = Double(1).bitPattern.bigEndian
+        data.replaceSubrange((desc.upperBound + 8)..<(desc.upperBound + 16), with: Data(bytes: &one, count: 8))
+        try data.write(to: url)
+        return url
+    }
+
+    func testAFileTheConverterCannotTakeFailsTheImportAndLeavesNoCallFolder() throws {
+        let paths = Paths(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        let rec = PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 600, title: nil)
+        XCTAssertThrowsError(try PhoneRecording.importAudio(try audioWithNoConverter(), recording: rec, into: paths)) {
+            XCTAssertTrue($0 is PhoneRecording.ConversionFailed, "\($0)")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.callDirectory(rec.id).path), "the half-made folder goes")
+    }
+
+    func testAPhoneCallBecomesAPhoneCallRecordWithTheOwnersTitle() throws {
+        let paths = Paths(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        let r = try PhoneRecording.importAudio(try phoneAudio(), recording: PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 3,
+                                               title: "Renewal terms", kind: .phoneCall), into: paths)
+        XCTAssertEqual(r.platform, .phoneCall)
+        XCTAssertEqual(r.bundleID, "iphone")
+        XCTAssertEqual(r.status, .recorded)
+        XCTAssertEqual(r.customTitle, "Renewal terms")
+        XCTAssertNil(r.calendarTitle)
+        let untitled = try PhoneRecording.importAudio(try phoneAudio(), recording: PhoneRecording(id: "20270115-100000", start: t0, end: t0 + 3,
+                                                      title: nil, kind: .phoneCall), into: paths)
+        XCTAssertNil(untitled.customTitle)
+        XCTAssertEqual(untitled.title, "Phone call")
+    }
+
+    func testThePhoneCallsPersonIsKeptOnTheRecord() throws {
+        let paths = Paths(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        let r = try PhoneRecording.importAudio(try phoneAudio(), recording: PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 3, title: nil,
+                                               kind: .phoneCall, person: "Sam Carter", personID: "p1"), into: paths)
+        XCTAssertEqual(r.personHint, PersonHint(name: "Sam Carter", personID: "p1"))
+        XCTAssertEqual(r.attendees, ["Sam Carter"])
+        XCTAssertEqual(r.invitees, [Invitee(name: "Sam Carter", email: nil, personID: "p1")])
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(r.id)).personHint, r.personHint, "it survives a restart between steps")
+
+        let blank = try PhoneRecording.importAudio(try phoneAudio(), recording: PhoneRecording(id: "20270115-100000", start: t0, end: t0 + 3, title: nil,
+                                                   kind: .phoneCall, person: "  "), into: paths)
+        XCTAssertNil(blank.personHint)
+        XCTAssertEqual(blank.attendees, [])
+        let room = try PhoneRecording.importAudio(try phoneAudio(), recording: PhoneRecording(id: "20270115-110000", start: t0, end: t0 + 3, title: nil,
+                                                  person: "Sam Carter"), into: paths)
+        XCTAssertNil(room.personHint, "a room recording names nobody, whatever a store sent")
+        XCTAssertEqual(room.attendees, [])
+    }
+
+    func testAStereoFileKeepsTheVoiceOnItsSecondChannel() throws {
+        let paths = Paths(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        let source = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).caf")
+        try writeSecondChannelTone(source, seconds: 3)
+        let rec = PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 3, title: nil, kind: .phoneCall)
+        try PhoneRecording.importAudio(source, recording: rec, into: paths)
+        let me = try AVAudioFile(forReading: paths.callDirectory(rec.id).appendingPathComponent(Track.me.fileName))
+        XCTAssertGreaterThan(try peak(of: me), 0.05, "the person on channel 2 is in the mono track")
+    }
+
+    /// The peak of the Mac's mic track after an import of `source`.
+    private func importedPeak(_ source: URL) throws -> Float {
+        let paths = Paths(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        let rec = PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 3, title: nil, kind: .phoneCall)
+        try PhoneRecording.importAudio(source, recording: rec, into: paths)
+        return try peak(of: AVAudioFile(forReading: paths.callDirectory(rec.id).appendingPathComponent(Track.me.fileName)))
+    }
+
+    func testTheTwoChannelsAreMixedByTheirMean() throws {
+        let one = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).caf")
+        try writeSecondChannelTone(one, seconds: 3, amplitude: 0.9)
+        XCTAssertEqual(try importedPeak(one), 0.45, accuracy: 0.135, "one side of two is half as loud")
+        let both = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).caf")
+        try writeSecondChannelTone(both, seconds: 3, amplitude: 0.9, both: true)
+        let p = try importedPeak(both)
+        XCTAssertEqual(p, 0.9, accuracy: 0.09)
+        XCTAssertLessThanOrEqual(p, 1.0, "a mean never clips")
+    }
+
+    func testAMonoFileKeepsItsLevel() throws {
+        let mono = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).caf")
+        try writeTestAudio(mono, seconds: 3, frequency: 440)
+        XCTAssertEqual(try importedPeak(mono), 0.5, accuracy: 0.05)
+    }
 }
