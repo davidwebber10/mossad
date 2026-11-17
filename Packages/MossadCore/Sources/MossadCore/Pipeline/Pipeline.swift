@@ -163,6 +163,11 @@ public actor Pipeline {
             try? FileManager.default.removeItem(at: dir.appendingPathComponent(Self.quietFileName))
         }
         guard var r = try? CallRecord.load(from: dir) else { return }
+        // A meeting of a newer build waits for it: this build does not know how its tracks hold the voices.
+        if r.platform == .unknown, r.status != .written {
+            Log.info("\(id) has a platform this build does not know; it waits for an update")
+            return
+        }
         // A quiet run that a quit interrupted is still quiet: its record from before was saved beside it.
         if quietRuns[id] == nil, let original = try? CallRecord.load(from: dir, fileName: Self.quietFileName) { quietRuns[id] = original }
         jobs[id] = r.transcriptionJobs ?? [:]
@@ -785,9 +790,11 @@ public actor Pipeline {
         // live transcript's namer also uses; so it runs behind a call.
         let plan = await clearance(r.id, .voiceIdentification)
         let identifier = identifier, utterances = r.utterances, call = (id: r.id, start: r.start)
+        // On a phone call the other person may talk more than the owner: their voice must never become the owner's.
+        let enrolOwner = r.platform != .phoneCall
         let me = dir.appendingPathComponent(Track.me.fileName), them = dir.appendingPathComponent(Track.them.fileName)
         let result = try await runHeavy(r.id, .voiceIdentification, plan) {
-            try await identifier.identify(utterances: utterances, meURL: me, themURL: them, call: call, invite: invite)
+            try await identifier.identify(utterances: utterances, meURL: me, themURL: them, call: call, invite: invite, enrolOwner: enrolOwner)
         }
         r.speakerNames = result.names
         r.unknownSpeakers = result.unknown

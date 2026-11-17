@@ -129,6 +129,62 @@ final class CalendarMatcherTests: XCTestCase {
         XCTAssertNil(CalendarMatcher.bestEvent(for: .phoneCall, meetingID: nil, start: start, end: start.addingTimeInterval(1800), in: [room]),
                      "the general rule never gives a phone call an event")
     }
+
+    private var ownerPerson: Person {
+        var p = Person(id: PersonID(rawValue: "p9"), displayName: "Avery Webb", isOwner: true, origin: .owner, at: .distantPast)
+        p.addEmail("avery@example.com", state: .verified, source: .owner, at: .distantPast)
+        return p
+    }
+
+    func testTheOwnerIsKnownByThePeopleStoreToo() {
+        let unmarked = Invitee(name: "Avery Webb", email: "avery@example.com")
+        XCTAssertTrue(found(event([unmarked, samInvitee]), hint: nil, people: [ownerPerson]), "the owner without the flag is still the owner")
+        XCTAssertFalse(found(event([unmarked]), hint: nil, people: [ownerPerson]), "the owner's own block, without the flag")
+    }
+
+    func testANameOnlyHintFindsTheOneSavedPersonsAddress() {
+        var p = Person(id: PersonID(rawValue: "p1"), displayName: "Sam Carter", origin: .voiceNaming, at: .distantPast)
+        p.addEmail("sam@example.com", state: .verified, source: .voiceNaming, at: .distantPast)
+        let onlyAddress = event([me, Invitee(name: nil, email: "sam@example.com")])
+        XCTAssertTrue(found(onlyAddress, hint: PersonHint(name: "Sam Carter"), people: [p]))
+        var twin = Person(id: PersonID(rawValue: "p4"), displayName: "Sam Carter", origin: .voiceNaming, at: .distantPast)
+        twin.addEmail("s.carter@example.com", state: .verified, source: .voiceNaming, at: .distantPast)
+        XCTAssertFalse(found(onlyAddress, hint: PersonHint(name: "Sam Carter"), people: [p, twin]), "two saved people of that name are nobody")
+    }
+
+    func testTheWholeNameIsNoMatchAtAnAddressThatIsSomeoneElses() {
+        var p = Person(id: PersonID(rawValue: "p1"), displayName: "Sam Carter", origin: .voiceNaming, at: .distantPast)
+        p.addEmail("sam.old@example.com", state: .rejected, source: .owner, at: .distantPast)
+        var twin = Person(id: PersonID(rawValue: "p4"), displayName: "Sam Carter", origin: .voiceNaming, at: .distantPast)
+        twin.addEmail("s.carter@example.com", state: .verified, source: .voiceNaming, at: .distantPast)
+        let hint = PersonHint(name: "Sam Carter", personID: "p1")
+        XCTAssertFalse(found(event([me, Invitee(name: "Sam Carter", email: "sam.old@example.com")]), hint: hint, people: [p, twin]), "an address p1 refused")
+        XCTAssertFalse(found(event([me, Invitee(name: "Sam Carter", email: "s.carter@example.com")]), hint: hint, people: [p, twin]), "the other Sam's address")
+        XCTAssertTrue(found(event([me, Invitee(name: "Sam Carter", email: "sam@elsewhere.example")]), hint: hint, people: [p, twin]))
+    }
+
+    func testTwoEventsWithDifferentPeopleAndNoHintGiveNoEvent() {
+        let sam = CalendarEventInfo(title: "1:1 Sam", start: t0, end: t0.addingTimeInterval(300), attendees: [], text: "", isAllDay: false,
+                                    participants: [me, samInvitee])
+        let jo2 = CalendarEventInfo(title: "1:1 Jo", start: t0, end: t0.addingTimeInterval(600), attendees: [], text: "", isAllDay: false,
+                                    participants: [me, Invitee(name: "Jo Fenwick", email: "jo@example.com")])
+        XCTAssertNil(CalendarMatcher.phoneCallEvent(start: t0, end: t0.addingTimeInterval(600), in: [sam, jo2], hint: nil, people: []))
+    }
+
+    func testThePhoneCallTakesTheLongestOverlapOfItsPerson() {
+        let short = CalendarEventInfo(title: "Short", start: t0.addingTimeInterval(500), end: t0.addingTimeInterval(900), attendees: [], text: "",
+                                      isAllDay: false, participants: [me, samInvitee])
+        let long = CalendarEventInfo(title: "Long", start: t0, end: t0.addingTimeInterval(600), attendees: [], text: "",
+                                     isAllDay: false, participants: [me, samInvitee])
+        XCTAssertEqual(CalendarMatcher.phoneCallEvent(start: t0, end: t0.addingTimeInterval(600), in: [short, long], hint: nil, people: [])?.title, "Long")
+        XCTAssertEqual(CalendarMatcher.phoneCallEvent(start: t0, end: t0.addingTimeInterval(600), in: [long, short], hint: nil, people: [])?.title, "Long")
+    }
+
+    func testAnAllDayEventIsNeverAPhoneCallsEvent() {
+        let day = CalendarEventInfo(title: "Offsite", start: t0.addingTimeInterval(-3600), end: t0.addingTimeInterval(80_000), attendees: [], text: "",
+                                    isAllDay: true, participants: [me, samInvitee])
+        XCTAssertNil(CalendarMatcher.phoneCallEvent(start: t0, end: t0.addingTimeInterval(600), in: [day], hint: nil, people: []))
+    }
 }
 
 final class CalendarAccessTests: XCTestCase {

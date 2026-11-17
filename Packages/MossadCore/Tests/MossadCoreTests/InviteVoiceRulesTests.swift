@@ -427,4 +427,55 @@ final class InviteVoiceRulesTests: XCTestCase {
         XCTAssertTrue(InviteRoster(invite: invite, profiles: profiles, people: []).oneTrack)
         XCTAssertFalse(InviteRoster(invite: CallInvite(guests: []), profiles: profiles, people: []).oneTrack)
     }
+
+    func testAShortThirdVoiceOnAPhoneCallDoesNotStopTheName() {
+        let d = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", [], seconds: 60), voice("me:C", [], seconds: 4)], sam)
+        XCTAssertEqual(d.verdicts["me:B"], .inferred("Sam Carter", learn: true))
+        XCTAssertEqual(d.verdicts["me:C"], .unknown, "a short voice gets no name from the hint")
+        let unheard = InviteVoiceRules.Voice(key: "me:C", scores: [], fingerprint: false)
+        let e = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", [], seconds: 60), unheard], sam)
+        XCTAssertEqual(e.verdicts["me:B"], .inferred("Sam Carter", learn: true), "a key with no fingerprint is no candidate")
+    }
+
+    func testTwoLongVoicesLeftOnAPhoneCallNameNobody() {
+        let d = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", [], seconds: 30), voice("me:C", [], seconds: 30)], sam)
+        XCTAssertNil(d.inferred)
+    }
+
+    func testTheTwoTrackRuleStillCountsAShortVoice() {
+        let invite = CallInvite(guests: [Guest(email: "jo.fenwick@example.com")])
+        let d = decide([voice("me:A", [(owner, 0.95)]), voice("them:A", [], seconds: 60), voice("them:B", [], seconds: 4)], invite)
+        XCTAssertNil(d.inferred, "on a call, two voices of the call audio are left as before")
+    }
+
+    func testATypedNameIsReadAsANameAndAnAddressIsNoName() {
+        let comma = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", [])], CallInvite(hint: PersonHint(name: "Carter, Sam")))
+        XCTAssertEqual(comma.verdicts["me:B"], .inferred("Sam Carter", learn: true))
+        let address = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", [])], CallInvite(hint: PersonHint(name: "sam@example.com")))
+        XCTAssertNil(address.inferred)
+        XCTAssertEqual(address.verdicts["me:B"], .unknown)
+    }
+
+    func testAMergedPickedPersonGivesTheSurvivorsName() {
+        let survivor = Person(id: PersonID(rawValue: "p1"), displayName: "Sam Carter", origin: .voiceNaming, at: .distantPast)
+        var merged = Person(id: PersonID(rawValue: "p0"), displayName: "Samuel Carter", origin: .voiceNaming, at: .distantPast)
+        merged.mergedInto = PersonID(rawValue: "p1")
+        let d = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", [])], CallInvite(hint: PersonHint(name: "Sam", personID: "p0")),
+                       people: [merged, survivor])
+        XCTAssertEqual(d.verdicts["me:B"], .inferred("Sam Carter", learn: true))
+    }
+
+    func testAHintThatNamesTheOwnerNamesNobody() {
+        let d = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", [])], CallInvite(hint: PersonHint(name: owner)))
+        XCTAssertNil(d.inferred)
+        XCTAssertEqual(d.verdicts["me:B"], .unknown)
+    }
+
+    func testAHintedPersonWithAFirmVoiceIsNamedByTheVoiceOnly() {
+        let all = profiles + [profile("Sam Carter")]
+        let d = decide([voice("me:A", [(owner, 0.95)]), voice("me:B", [("Sam Carter", 0.9)]), voice("me:C", [])], sam, profiles: all)
+        XCTAssertEqual(d.verdicts["me:B"], .named("Sam Carter", score: 0.9, learn: true))
+        XCTAssertEqual(d.verdicts["me:C"], .unknown, "no other voice takes the name")
+        XCTAssertNil(d.inferred)
+    }
 }

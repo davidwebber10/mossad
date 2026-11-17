@@ -216,4 +216,13 @@ final class OutboxTests: XCTestCase {
         o.addFinished(call)
         XCTAssertEqual(o.settle(arrived: Outbox.arrived([meeting("20270115-090000-iphone", .inPerson)])), ["20270115-090000"])
     }
+
+    func testARecordingTheMacMadeAtTheSameSecondIsNoProof() {
+        let call = PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 600, title: nil, kind: .phoneCall)
+        var o = Outbox()
+        o.addFinished(call)
+        let own = CallRecord(id: "20270115-090000", platform: .inPerson, bundleID: "", start: t0, end: t0 + 600, status: .written)
+        XCTAssertEqual(o.settle(arrived: Outbox.arrived([own])), [])
+        XCTAssertEqual(o.entries.map(\.id), ["20270115-090000"])
+    }
 }

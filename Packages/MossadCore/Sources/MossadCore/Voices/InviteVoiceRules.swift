@@ -168,7 +168,7 @@ public struct InviteRoster: Sendable, Equatable {
             }
             let written = g.name ?? g.email.flatMap(Self.name(fromAddress:))
             let fits = p == nil ? voiced.filter { v in written.map { Self.fits($0, v.name) } ?? false }.map(\.name) : []
-            var label = p.map { ($0.name, SourceKind.voiceNaming) } ?? Self.label(of: g, among: live)
+            var label = p.map { ($0.name, SourceKind.voiceNaming) } ?? Self.label(of: g, among: live, all: people)
             // A name that is the name of another saved voice is not proof of who it is.
             if p == nil, let l = label, voiced.contains(where: { PersonNames.key($0.name) == PersonNames.key(l.0) }) { label = nil }
             voiceless.append(Voiceless(guest: g, label: label?.0, source: label?.1 ?? .calendar, fits: fits))
@@ -216,14 +216,15 @@ public struct InviteRoster: Sendable, Equatable {
 
     /// A saved person's name on a sure match, else the invite's name in the order first, family, else a
     /// "first.last" address as a name. Never the address itself: a speaker's name shows in the note and the summary.
-    static func label(of g: CallInvite.Guest, among people: [Person]) -> (String, SourceKind)? {
+    /// `all` holds the merged people too, so an id of one finds the person it was merged into.
+    static func label(of g: CallInvite.Guest, among people: [Person], all: [Person]? = nil) -> (String, SourceKind)? {
         // A person who refused this address is not who it is, and their name is no label for a stranger with it.
         let refused = people.filter { refuses($0, g.email) }
         if let written = g.name ?? g.email.flatMap(name(fromAddress:)),
            PersonDirectory.existing(name: written, email: nil, among: refused.map { PersonDirectory.Person(name: $0.displayName, email: nil) }) != nil {
             return nil
         }
-        if let raw = g.personID, let p = people.first(where: { $0.id == canonical(PersonID(rawValue: raw), in: people) }), !refuses(p, g.email), backs(p, g) {
+        if let raw = g.personID, let p = people.first(where: { $0.id == canonical(PersonID(rawValue: raw), in: all ?? people) }), !refuses(p, g.email), backs(p, g) {
             return p.displayName.contains("@") ? nil : (p.displayName, .voiceNaming)
         }
         let directory = people.filter { !$0.isOwner && !refuses($0, g.email) }.flatMap { p in
@@ -235,7 +236,10 @@ public struct InviteRoster: Sendable, Equatable {
             return hit.contains("@") ? nil : (hit, .voiceNaming)
         }
         // The owner's own word for the person: "Mom" is a name here, though it is no name of an invite.
-        if g.byOwner, let name = g.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty { return (name, .owner) }
+        // An address is never a name; "Carter, Sam" is "Sam Carter".
+        if g.byOwner, let name = g.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            return name.contains("@") ? nil : (natural(name) ?? name, .owner)
+        }
         if let name = g.name.flatMap(natural) { return (name, .calendar) }
         return g.email.flatMap(name(fromAddress:)).map { ($0, .address) }
     }
@@ -286,6 +290,9 @@ public enum InviteVoiceRules {
     public static let inferenceDoubt: Float = 0.55
     /// The clear speech a voice named from the invite needs before it is learned.
     public static let inferenceSpeech: TimeInterval = 20
+    /// On one track, the clear speech a voice needs to count as a person left: a short voice (a split of a key, a
+    /// recorded announcement) neither gets the name nor stops it.
+    public static let oneTrackSpeech: TimeInterval = 10
 
     public struct Voice: Sendable, Equatable {
         public var key: String
@@ -373,6 +380,7 @@ public enum InviteVoiceRules {
             let guest = roster.voiceless[0]
             let left = voices.filter { v in
                 guard otherSide(v.key) else { return false }
+                if roster.oneTrack, !v.fingerprint || (v.seconds ?? 0) < oneTrackSpeech { return false }
                 switch verdicts[v.key] {
                 case .named, .inferred: return false
                 default: return true

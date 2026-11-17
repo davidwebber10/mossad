@@ -1764,4 +1764,49 @@ final class PipelineTests: XCTestCase {
         r = try load(id)
         XCTAssertEqual(r.status, .written)
     }
+
+    func testAPhoneCallNeverEnrolsTheOwnersVoice() async throws {
+        transcriber.result = [.me: [Utterance(track: .me, speakerLabel: "A", start: 0, end: 10, text: "Hello."),
+                                    Utterance(track: .me, speakerLabel: "B", start: 11, end: 35, text: "Hello, it is me.")], .them: []]
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        try writeSegments(dir.appendingPathComponent("me.caf"), total: 40, [(0, 10, 200), (11, 35, 400)])
+        try writeSegments(dir.appendingPathComponent("them.caf"), total: 40, [])
+        var r = try load(id)
+        r.platform = .phoneCall
+        r.bundleID = PhoneRecording.bundleID
+        try r.save(to: dir)
+        await pipeline().process(id)
+        XCTAssertNil(library.owner, "the other person may talk more: no owner from a phone call")
+        XCTAssertEqual(try load(id).status, .written)
+    }
+
+    func testAPhoneCallSkipsTheCallTrackInTheProgress() async throws {
+        let id = try makeRecord()
+        var r = try load(id)
+        r.platform = .phoneCall
+        try r.save(to: paths.callDirectory(id))
+        let seen = Locked<[ProcessingProgress?]>([])
+        let notifications = notifications
+        let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { notifications.records.append($0) },
+                         ownerName: "Avery Lane", onProgress: { _, progress in seen.withLock { $0.append(progress) } })
+        await p.process(id)
+        XCTAssertTrue(seen.withLock { $0 }.contains { $0?.tracks[.them] == .skipped })
+    }
+
+    func testARecordWithAPlatformThisBuildDoesNotKnowWaitsUnprocessed() async throws {
+        let id = try makeRecord()
+        let file = paths.callDirectory(id).appendingPathComponent(CallRecord.fileName)
+        let text = try String(contentsOf: file, encoding: .utf8)
+        try text.replacingOccurrences(of: #""platform":"meet""#, with: #""platform":"fax""#).write(to: file, atomically: true, encoding: .utf8)
+        await pipeline().process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.platform, .unknown)
+        XCTAssertEqual(r.status, .recorded)
+        XCTAssertEqual(r.attempts, 0)
+        XCTAssertNil(r.failureReason)
+        XCTAssertEqual(transcriber.calls.count, 0)
+        XCTAssertTrue(try String(contentsOf: file, encoding: .utf8).contains(#""platform":"fax""#))
+    }
 }

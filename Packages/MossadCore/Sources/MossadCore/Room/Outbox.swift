@@ -136,11 +136,11 @@ public struct Outbox: Equatable, Sendable {
         return done
     }
 
-    /// The ids of the meetings that can be a recording from this iPhone: an in-person meeting or a phone call. Ids are
-    /// start times, and a call on the Mac can start in the same second. A Mac from before phone calls makes a phone
-    /// call an in-person meeting, so that counts too.
+    /// The ids of the meetings that can be a recording from this iPhone: an in-person meeting or a phone call made from
+    /// one. Ids are start times, and the Mac's own recording can start in the same second. A Mac from before phone
+    /// calls makes a phone call an in-person meeting, so that counts too.
     public static func arrived(_ meetings: [CallRecord]) -> Set<String> {
-        Set(meetings.lazy.filter(\.platform.isOneTrack).map(\.id))
+        Set(meetings.lazy.filter { $0.platform.isOneTrack && $0.bundleID == PhoneRecording.bundleID }.map(\.id))
     }
 
     /// The recordings to recover at launch: entries still `recording` that are not the one recording now, and audio

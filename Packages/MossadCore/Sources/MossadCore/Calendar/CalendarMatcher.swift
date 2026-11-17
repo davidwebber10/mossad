@@ -231,9 +231,6 @@ public enum CalendarMatcher {
         if let meetingID {
             let id = meetingID.lowercased()
             candidates = timed.filter { text($0).contains(id) }
-        } else if platform == .phoneCall || platform == .unknown {
-            // A phone call takes an event only by its own rule (`phoneCallEvent`); an unknown platform none.
-            candidates = []
         } else if platform == .inPerson {
             // In a room there is no link to match: the overlapping event without a call link is the meeting.
             let callMarkers = Platform.callApps.flatMap(linkMarkers)
@@ -249,36 +246,62 @@ public enum CalendarMatcher {
 
     /// The event of a phone call: an overlapping event with no call link that invites exactly one person besides
     /// the owner, and, with a hint, only when that person is the hint's on a sure match. Nil otherwise. An event with
-    /// no participants is never taken: its people are not known apart, and it is often the owner's own block.
+    /// no participants is never taken: its people are not known apart, and it is often the owner's own block. With
+    /// no hint, events that name different people are no answer.
     public static func phoneCallEvent(start: Date, end: Date, in events: [CalendarEventInfo], hint: PersonHint?, people: [Person]) -> CalendarEventInfo? {
         func overlap(_ e: CalendarEventInfo) -> TimeInterval { min(end, e.end).timeIntervalSince(max(start, e.start)) }
         let callMarkers = Platform.callApps.flatMap(linkMarkers)
-        let candidates = events.filter { e in
-            let text = (e.text.removingPercentEncoding ?? e.text).lowercased()
-            guard !e.isAllDay, overlap(e) > 0, !callMarkers.contains(where: { text.contains($0) }) else { return false }
-            let guests = e.participants.filter { $0.isSelf != true && $0.isPerson }
-            guard guests.count == 1 else { return false }
-            return hint.map { isPerson(guests[0], of: $0, people: people) } ?? true
+        let owner = people.first { $0.isOwner && $0.isLive }
+        // The owner's own entry, by the calendar's flag or by the owner's address or name in the people store.
+        func isOwner(_ i: Invitee) -> Bool {
+            if i.isSelf == true { return true }
+            guard let owner else { return false }
+            if let email = i.email.map(EmailIdentity.normalized), InviteRoster.addresses(of: owner).contains(email) { return true }
+            guard let name = i.name else { return false }
+            let key = PersonNames.key(name)
+            return PersonNames.key(owner.displayName) == key || owner.forms.contains { PersonNames.key($0.text) == key }
         }
-        return candidates.max { overlap($0) < overlap($1) }
+        var found: [(event: CalendarEventInfo, guest: Invitee)] = []
+        for e in events {
+            let text = (e.text.removingPercentEncoding ?? e.text).lowercased()
+            guard !e.isAllDay, overlap(e) > 0, !callMarkers.contains(where: { text.contains($0) }) else { continue }
+            let guests = e.participants.filter { !isOwner($0) && $0.isPerson }
+            guard guests.count == 1, hint.map({ isPerson(guests[0], of: $0, people: people) }) ?? true else { continue }
+            found.append((e, guests[0]))
+        }
+        if hint == nil {
+            let who = Set(found.map { $0.guest.email.map(EmailIdentity.normalized) ?? PersonNames.key($0.guest.name ?? "") })
+            guard who.count <= 1 else { return nil }
+        }
+        return found.max { overlap($0.event) < overlap($1.event) }?.event
     }
 
-    /// Whether an invited person is the hint's on a sure match: a picked person by an address of theirs, their id,
-    /// or their whole name; a typed name by the whole name. A first name alone is a guess and joins nobody.
+    /// Whether an invited person is the hint's on a sure match: the picked person, or the one saved person with the
+    /// hint's whole name, by an address of theirs, their id, or their whole name at an address that is no one
+    /// else's; a typed name with no saved person by the whole name. A first name alone is a guess and joins nobody.
     static func isPerson(_ guest: Invitee, of hint: PersonHint, people: [Person]) -> Bool {
         func sameName(_ a: String?, _ b: String) -> Bool {
             guard let a else { return false }
             return PersonDirectory.existing(name: a, email: nil, among: [PersonDirectory.Person(name: b, email: nil)]) != nil
         }
+        let live = people.filter(\.isLive)
+        let email = guest.email.map(EmailIdentity.normalized)
+        var person: Person?
         if let raw = hint.personID {
             let id = InviteRoster.canonical(PersonID(rawValue: raw), in: people)
-            if let person = people.first(where: { $0.id == id && $0.isLive }) {
-                if let email = guest.email.map(EmailIdentity.normalized), InviteRoster.addresses(of: person).contains(email) { return true }
-                if let other = guest.personID, InviteRoster.canonical(PersonID(rawValue: other), in: people) == id { return true }
-                return sameName(guest.name, person.displayName)
-            }
+            person = live.first { $0.id == id }
         }
-        return sameName(hint.name, guest.name ?? "") && guest.name != nil
+        if person == nil {
+            let named = live.filter { !$0.isOwner && sameName(hint.name, $0.displayName) }
+            if named.count == 1 { person = named[0] }
+        }
+        guard let person else { return sameName(hint.name, guest.name ?? "") && guest.name != nil }
+        if let email, InviteRoster.addresses(of: person).contains(email) { return true }
+        if let other = guest.personID, InviteRoster.canonical(PersonID(rawValue: other), in: people) == person.id { return true }
+        if let email, InviteRoster.refuses(person, email) || live.contains(where: { $0.id != person.id && InviteRoster.addresses(of: $0).contains(email) }) {
+            return false
+        }
+        return sameName(guest.name, person.displayName)
     }
 }
 
