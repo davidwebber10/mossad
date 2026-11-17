@@ -1078,6 +1078,10 @@
       "answer": "Yes. It shows your meetings, chat, people, analytics, and the coach. It records meetings in a room for your Mac to write up, and it turns a recorded phone call into a meeting. It syncs through iCloud or your own server. It is not in the App Store; build it from the source with Xcode."
     },
     {
+      "question": "Can I keep work and personal apart?",
+      "answer": "Yes. Add a profile for each, on your Mac and your iPhone. Each profile has its own meetings, people, voices, keys, sync, and connection for AI apps, and you change from one to the other with one click. A meeting that went to the wrong profile moves to the right one."
+    },
+    {
       "question": "How do updates work?",
       "answer": "Mossad checks the latest GitHub release and offers each new version. It installs an update only when its signature matches the key built into the app, and an update that you accept during a call waits until the call ends. Settings lets you turn automatic checks and installs on or off."
     },
