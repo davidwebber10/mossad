@@ -100,6 +100,7 @@ enum WorkerEntry {
         // The proofs of a move, on a made-up registry only: the end of the process at a state of the ledger or the marker.
         if madeUp {
             setup.proofStop = env["MOSSAD_PROOF_MOVE_STOP"] ?? env["MOSSAD_PROOF_INTAKE_STOP"] ?? (env["MOSSAD_PROOF_INTAKE_REFUSE"] == "1" ? "refuse" : nil)
+            setup.proofHold = env["MOSSAD_PROOF_COPY_HOLD"].flatMap(Double.init)
         }
         #endif
         let worker = ProfileWorker(setup)
@@ -110,6 +111,13 @@ enum WorkerEntry {
         #if DEBUG
         // `MOSSAD_PROOF_MOVE=<profile id>`: after `MOSSAD_PROOF_MOVE_AFTER` seconds (20 when not given), the one written
         // meeting of this folder moves to that profile.
+        // `MOSSAD_PROOF_CANCEL_AFTER=<seconds>`: the owner's Cancel of this folder's move that is not done.
+        if madeUp, let after = env["MOSSAD_PROOF_CANCEL_AFTER"].flatMap(Double.init) {
+            Task {
+                try? await Task.sleep(for: .seconds(after))
+                await worker.proofCancel()
+            }
+        }
         if madeUp, let target = env["MOSSAD_PROOF_MOVE"] {
             let after = env["MOSSAD_PROOF_MOVE_AFTER"].flatMap(Double.init) ?? 20
             Task {

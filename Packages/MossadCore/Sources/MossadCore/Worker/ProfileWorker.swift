@@ -24,6 +24,8 @@ public actor ProfileWorker {
         /// The DEBUG proofs: the process ends when a move's ledger says "copied", or a take-in says "takingIn"; "refuse"
         /// makes the take-in's rename into `Audio` fail as on another volume, after its first half.
         public var proofStop: String? = nil
+        /// The DEBUG proof of a Cancel during a long copy: the copy waits this long at its first file.
+        public var proofHold: TimeInterval? = nil
 
         public init(paths: Paths, settings: ServiceSettings, key: @escaping @Sendable (APIKey) -> String?, google: any GoogleSecrets,
                     remember: @escaping @Sendable (String, Double) -> Void, hasICloud: Bool, madeUpRegistry: Bool,
@@ -154,9 +156,16 @@ public actor ProfileWorker {
             removeFolder: { await pipeline.removeMoved(callID: $0, target: $1) })
         var stop: @Sendable (String) throws -> Void = { _ in }
         #if DEBUG
-        if let proof = setup.proofStop {
-            stop = { _ in
-                guard Self.proofStops(proof, paths: paths) else { return }
+        let proof = setup.proofStop, hold = setup.proofHold
+        if proof != nil || hold != nil {
+            let once = ProofOnce()
+            stop = { label in
+                // The proof of a Cancel during a long copy: the copy waits at its first file.
+                if let hold, label.hasPrefix("copy "), once.first() {
+                    Log.info("Proof: the copy is held for \(Int(hold)) s")
+                    Thread.sleep(forTimeInterval: hold)
+                }
+                guard let proof, Self.proofStops(proof, paths: paths) else { return }
                 Log.info("Worker: stops for the proof at \(proof)")
                 Log.flush()
                 exit(0)
@@ -182,6 +191,19 @@ public actor ProfileWorker {
     }
 
     #if DEBUG
+    final class ProofOnce: @unchecked Sendable {
+        private let lock = NSLock()
+        private var done = false
+        func first() -> Bool { lock.withLock { defer { done = true }; return !done } }
+    }
+
+    /// The DEBUG proof of the owner's Cancel: cancels the move of this folder that is not done, as the menu would.
+    public func proofCancel() async {
+        guard let out = MoveOut.all(setup.paths).moves.first(where: { $0.state != .done }) else { return Log.info("Proof: no move to cancel") }
+        let answer = await moveSource.cancelMove(out.callID)
+        Log.info("Proof: the owner's Cancel of \(out.callID): \(answer)")
+    }
+
     /// The proof's state on disk: a ledger of this folder that says "copied", or a claimed marker in its `Incoming`
     /// that says "takingIn".
     static func proofStops(_ proof: String?, paths: Paths) -> Bool {
