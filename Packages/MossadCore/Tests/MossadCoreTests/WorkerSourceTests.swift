@@ -39,10 +39,11 @@ final class WorkerSourceTests: XCTestCase {
             if let r = line.range(of: #"func ([A-Za-z]+)"#, options: .regularExpression), line.contains("func ") {
                 function = String(line[r].dropFirst(5))
             }
-            if line.contains("calendar.events(") { reads.append(function) }
+            if line.contains("calendar.events(") || line.contains("calendar.read(") { reads.append(function) }
             if line.contains("calendar.canRead()") { checks.append(function) }
         }
         XCTAssertEqual(reads, ["invite"])
-        XCTAssertEqual(Set(checks), ["matchInvite", "matchUnknownInvites"])
+        // The answer of a read decides; `canRead()` only says whether the launch looks at all.
+        XCTAssertEqual(Set(checks), ["matchUnknownInvites"])
     }
 }

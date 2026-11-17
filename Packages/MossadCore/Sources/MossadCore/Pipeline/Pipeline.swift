@@ -829,10 +829,10 @@ public actor Pipeline {
     @discardableResult
     private func matchInvite(_ r: inout CallRecord) async -> Bool {
         detail(r.id, "Finding the calendar invite")
-        let found = await invite(for: r)
+        let (found, read) = await invite(for: r)
         guard let found else {
             // No invite, or a calendar that could not be read: then "no invite" is not known, and the record says so.
-            r.inviteUnknown = await calendar.canRead() ? nil : true
+            r.inviteUnknown = read.known ? nil : true
             return false
         }
         r.setInvite(found.event)
@@ -841,16 +841,17 @@ public actor Pipeline {
     }
 
     /// The invite of a call by the rules of its platform, or nil.
-    private func invite(for r: CallRecord) async -> (event: CalendarEventInfo, sure: Bool)? {
-        let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
+    private func invite(for r: CallRecord) async -> (found: (event: CalendarEventInfo, sure: Bool)?, read: CalendarRead) {
+        let read = await calendar.read(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
+        let events = read.events
         if r.platform == .phoneCall {
             // Only the event of its one person; the owner's typed title stays, as `customTitle` wins over the invite's.
             guard let event = CalendarMatcher.phoneCallEvent(start: r.start, end: r.end, in: events, hint: r.personHint,
-                                                             people: library.identity?.people.people ?? []) else { return nil }
-            return (event, true)
+                                                             people: library.identity?.people.people ?? []) else { return (nil, read) }
+            return ((event, true), read)
         }
-        guard let match = CalendarMatcher.match(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) else { return nil }
-        return (match.event, match.sure)
+        guard let match = CalendarMatcher.match(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) else { return (nil, read) }
+        return ((match.event, match.sure), read)
     }
 
     /// Looks again for the invite of each written meeting marked `inviteUnknown` that ended in the last `days` days,
@@ -861,9 +862,10 @@ public actor Pipeline {
         let since = now().addingTimeInterval(-Double(days) * 86_400)
         var matched = 0
         for r in ProcessingQueue(paths: paths).allRecords() where r.inviteUnknown == true && r.status == .written && r.end >= since {
-            let found = await invite(for: r)
-            // The read itself failed: what it gave is not an answer.
-            guard await calendar.canRead() else { return matched }
+            let (found, read) = await invite(for: r)
+            // A read that failed, Google's too (offline, or slower than the wait): no match is no answer, and the mark
+            // stays for the next launch, within the days.
+            if found == nil, !read.known || read.google == .failed { continue }
             guard var saved = edit(r.id, { record in
                 record.inviteUnknown = nil
                 if let found { record.setInvite(found.event) }
@@ -872,6 +874,7 @@ public actor Pipeline {
             save(&saved, dir: paths.callDirectory(r.id))
             if found != nil { matched += 1 }
         }
+        if matched > 0 { Log.info("Calendar: \(matched) meetings got their invite at launch") }
         return matched
     }
 

@@ -202,11 +202,29 @@ public protocol CalendarSource: Sendable {
     func events(from: Date, to: Date) async -> [CalendarEventInfo]
     /// False when a calendar that this source should read could not be read: then "no event" is not known.
     func canRead() async -> Bool
+    /// One read with its own answer: what it gave, whether "no event" is known, and how Google went.
+    func read(from: Date, to: Date) async -> CalendarRead
+}
+
+/// The answer of one read, so two reads at one time never share how the other went.
+public struct CalendarRead: Sendable {
+    public var events: [CalendarEventInfo]
+    /// "No event" is an answer. The window app's sources always say so, as before.
+    public var known: Bool
+    public var google: CalendarSnapshot.Access.Read
+    public init(events: [CalendarEventInfo], known: Bool, google: CalendarSnapshot.Access.Read = .no) {
+        self.events = events
+        self.known = known
+        self.google = google
+    }
 }
 
 extension CalendarSource {
     /// Every source of the window app reads what it can: an empty list is an answer.
     public func canRead() async -> Bool { true }
+    public func read(from: Date, to: Date) async -> CalendarRead {
+        CalendarRead(events: await events(from: from, to: to), known: await canRead())
+    }
 }
 
 public enum CalendarMatcher {

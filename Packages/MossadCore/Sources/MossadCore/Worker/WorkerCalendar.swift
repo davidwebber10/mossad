@@ -36,13 +36,23 @@ public final class WorkerCalendar: CalendarSource, @unchecked Sendable {
     private let mac: Mac
     private let merged: MergedCalendarSource
 
+    /// A worker has no owner who waits for its read, so Google gets longer than the window app's 2 s.
+    static let googleWaitLimit: Duration = .seconds(20)
+    var googleWait: Duration { merged.waitLimit }
+
     public init(mac: Mac, macSource: CalendarSource, google: GoogleCalendarSource?) {
         self.mac = mac
-        merged = MergedCalendarSource(mac: mac == .readable ? macSource : Nothing(), google: { google })
+        merged = MergedCalendarSource(mac: mac == .readable ? macSource : Nothing(), google: { google }, waitLimit: Self.googleWaitLimit)
     }
 
     public func events(from: Date, to: Date) async -> [CalendarEventInfo] {
         await merged.events(from: from, to: to)
+    }
+
+    /// "Known" by this read's own Google answer, never by another call's.
+    public func read(from: Date, to: Date) async -> CalendarRead {
+        let r = await merged.read(from: from, to: to)
+        return CalendarRead(events: r.events, known: Self.known(mac: mac, google: r.google), google: r.google)
     }
 
     public func canRead() async -> Bool {
