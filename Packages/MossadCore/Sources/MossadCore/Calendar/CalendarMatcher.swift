@@ -246,6 +246,40 @@ public enum CalendarMatcher {
         // A personal room has one id for all its meetings: only an event at the call's time is surely the call's.
         return (best, overlap(best) > 0 && (meetingID != nil || candidates.count == 1))
     }
+
+    /// The event of a phone call: an overlapping event with no call link that invites exactly one person besides
+    /// the owner, and, with a hint, only when that person is the hint's on a sure match. Nil otherwise. An event with
+    /// no participants is never taken: its people are not known apart, and it is often the owner's own block.
+    public static func phoneCallEvent(start: Date, end: Date, in events: [CalendarEventInfo], hint: PersonHint?, people: [Person]) -> CalendarEventInfo? {
+        func overlap(_ e: CalendarEventInfo) -> TimeInterval { min(end, e.end).timeIntervalSince(max(start, e.start)) }
+        let callMarkers = Platform.callApps.flatMap(linkMarkers)
+        let candidates = events.filter { e in
+            let text = (e.text.removingPercentEncoding ?? e.text).lowercased()
+            guard !e.isAllDay, overlap(e) > 0, !callMarkers.contains(where: { text.contains($0) }) else { return false }
+            let guests = e.participants.filter { $0.isSelf != true && $0.isPerson }
+            guard guests.count == 1 else { return false }
+            return hint.map { isPerson(guests[0], of: $0, people: people) } ?? true
+        }
+        return candidates.max { overlap($0) < overlap($1) }
+    }
+
+    /// Whether an invited person is the hint's on a sure match: a picked person by an address of theirs, their id,
+    /// or their whole name; a typed name by the whole name. A first name alone is a guess and joins nobody.
+    static func isPerson(_ guest: Invitee, of hint: PersonHint, people: [Person]) -> Bool {
+        func sameName(_ a: String?, _ b: String) -> Bool {
+            guard let a else { return false }
+            return PersonDirectory.existing(name: a, email: nil, among: [PersonDirectory.Person(name: b, email: nil)]) != nil
+        }
+        if let raw = hint.personID {
+            let id = InviteRoster.canonical(PersonID(rawValue: raw), in: people)
+            if let person = people.first(where: { $0.id == id && $0.isLive }) {
+                if let email = guest.email.map(EmailIdentity.normalized), InviteRoster.addresses(of: person).contains(email) { return true }
+                if let other = guest.personID, InviteRoster.canonical(PersonID(rawValue: other), in: people) == id { return true }
+                return sameName(guest.name, person.displayName)
+            }
+        }
+        return sameName(hint.name, guest.name ?? "") && guest.name != nil
+    }
 }
 
 /// An event store made before Calendar access was granted can stay blind after the grant

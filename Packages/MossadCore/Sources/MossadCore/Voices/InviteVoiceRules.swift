@@ -182,7 +182,7 @@ public struct InviteRoster: Sendable, Equatable {
     }
 
     /// The addresses that are this person's own: not one the owner rejected, and not one shared with others.
-    private static func addresses(of p: Person) -> Set<String> {
+    static func addresses(of p: Person) -> Set<String> {
         Set(p.emails.filter { $0.state != .rejected && !$0.shared }.map { EmailIdentity.normalized($0.address) })
     }
 
@@ -201,7 +201,7 @@ public struct InviteRoster: Sendable, Equatable {
         return PersonDirectory.existing(name: name, email: nil, among: [PersonDirectory.Person(name: p.displayName, email: nil)]) != nil
     }
 
-    private static func canonical(_ id: PersonID, in people: [Person]) -> PersonID {
+    static func canonical(_ id: PersonID, in people: [Person]) -> PersonID {
         var current = id
         var seen: Set<PersonID> = []
         while seen.insert(current).inserted, let next = people.first(where: { $0.id == current })?.mergedInto { current = next }

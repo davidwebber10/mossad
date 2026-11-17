@@ -573,6 +573,44 @@ final class PipelineTests: XCTestCase {
         XCTAssertNil(r.fromInvite)
     }
 
+    /// A phone call as `importAudio` makes it, with the person and the title the owner gave.
+    private func makeImportedPhoneCall() throws -> String {
+        let id = try makeRecord()
+        var r = try load(id)
+        r.platform = .phoneCall
+        r.bundleID = PhoneRecording.bundleID
+        r.customTitle = "Renewal terms"
+        r.personHint = PersonHint(name: "Sam Carter")
+        r.attendees = ["Sam Carter"]
+        r.invitees = [Invitee(name: "Sam Carter", email: nil)]
+        try r.save(to: paths.callDirectory(id))
+        return id
+    }
+
+    func testAPhoneCallTakesTheEventOfItsOnePersonAndKeepsTheTypedTitle() async throws {
+        let id = try makeImportedPhoneCall()
+        let event = CalendarEventInfo(title: "Sam and Avery", start: start, end: start.addingTimeInterval(1800),
+                                      attendees: ["Avery Lane", "Sam Carter"], text: "", isAllDay: false,
+                                      participants: [Invitee(name: "Avery Lane", email: "avery@example.com", isSelf: true),
+                                                     Invitee(name: "Sam Carter", email: "sam@example.com")])
+        await pipeline(calendar: FakeCalendar(events: [event])).process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.calendarTitle, "Sam and Avery")
+        XCTAssertEqual(r.title, "Renewal terms")
+        XCTAssertEqual(r.invitees?.count, 2)
+        XCTAssertEqual(r.personHint, PersonHint(name: "Sam Carter"))
+    }
+
+    func testAPhoneCallDuringTheOwnersOwnBlockGetsNoEvent() async throws {
+        let id = try makeImportedPhoneCall()
+        let lunch = CalendarEventInfo(title: "Lunch", start: start, end: start.addingTimeInterval(3600), attendees: [], text: "", isAllDay: false)
+        await pipeline(calendar: FakeCalendar(events: [lunch])).process(id)
+        let r = try load(id)
+        XCTAssertNil(r.calendarTitle)
+        XCTAssertEqual(r.attendees, ["Sam Carter"])
+        XCTAssertEqual(r.title, "Renewal terms")
+    }
+
     func testRestorePreviousTranscriptBringsBackTheOldOne() async throws {
         let id = try makeRecord()
         let p = pipeline()

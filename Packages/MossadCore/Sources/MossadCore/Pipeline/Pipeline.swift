@@ -823,6 +823,13 @@ public actor Pipeline {
     private func matchInvite(_ r: inout CallRecord) async -> Bool {
         detail(r.id, "Finding the calendar invite")
         let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
+        if r.platform == .phoneCall {
+            // Only the event of its one person; the owner's typed title stays, as `customTitle` wins over the invite's.
+            guard let event = CalendarMatcher.phoneCallEvent(start: r.start, end: r.end, in: events, hint: r.personHint,
+                                                             people: library.identity?.people.people ?? []) else { return false }
+            r.setInvite(event)
+            return true
+        }
         guard let match = CalendarMatcher.match(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) else { return false }
         r.setInvite(match.event)
         return match.sure
