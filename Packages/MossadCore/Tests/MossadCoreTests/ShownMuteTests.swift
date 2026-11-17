@@ -29,23 +29,6 @@ final class ShownMuteTests: XCTestCase {
         XCTAssertTrue(ShownMute.mutedWhenLastSeen.shows)
     }
 
-    /// The line under a recording: paused wins, then the mute words.
-    func testRecordingLine() {
-        XCTAssertEqual(ShownMute.none.recordingLine(elapsed: "12:04", paused: false), "Recording 12:04")
-        XCTAssertEqual(ShownMute.muted.recordingLine(elapsed: "12:04", paused: false), "Recording 12:04 · muted")
-        XCTAssertEqual(ShownMute.mutedWhenLastSeen.recordingLine(elapsed: "12:04", paused: false),
-                       "Recording 12:04 · muted when last seen")
-        XCTAssertEqual(ShownMute.muted.recordingLine(elapsed: "12:04", paused: true), "Recording 12:04 · paused")
-    }
-
-    /// The same note on a line of its own, where the sidebar is too narrow for one line.
-    func testNoteOnItsOwnLine() {
-        XCTAssertNil(ShownMute.none.note(paused: false))
-        XCTAssertEqual(ShownMute.muted.note(paused: false), "Muted")
-        XCTAssertEqual(ShownMute.mutedWhenLastSeen.note(paused: false), "Muted when last seen")
-        XCTAssertEqual(ShownMute.none.note(paused: true), "Paused")
-    }
-
     /// The banner on the live page and in the menu bar panel.
     func testBanner() {
         XCTAssertNil(ShownMute.none.banner(platform: .meet))

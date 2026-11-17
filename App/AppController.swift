@@ -85,6 +85,12 @@ final class AppController: ObservableObject {
             let was = if case .recording = oldValue { true } else { false }
             if was != isRecording { workers?.setRecording(isRecording) }
             callFlag.set(isRecording)
+            // The Now card's id, made once per change: the sidebar reads it at each of its updates.
+            if case .recording(_, let since) = status {
+                if nowStart?.since != since { nowStart = NowCall(id: CallRecorder.callID(for: since), since: since) }
+            } else {
+                nowStart = nil
+            }
             let room = if case .recording(.inPerson, _) = status { true } else { false }
             detection.isSuspended = room
             // With detection suspended, the room's mic gets its own stall check.
@@ -107,6 +113,8 @@ final class AppController: ObservableObject {
     /// A preview's made-up call for the sidebar's Now card (`MOSSAD_NOW`). Nothing records, and the menu bar does
     /// not show a recording.
     @Published private(set) var previewNow: NowCall?
+    /// The call that records now with the id of its start (`nowCall` prefers the live record's own id).
+    private(set) var nowStart: NowCall?
     /// The sub-step each call is in while processing, such as "AssemblyAI is transcribing".
     @Published private(set) var stepDetails: [String: String] = [:]
     /// Each call's progress while it is processed, for the progress card.
@@ -1238,6 +1246,7 @@ final class AppController: ObservableObject {
         }
         status = .idle
         isPaused = false
+        shownMute = .none
         stopLive()
         updater.callEnded()
         summarizeLiveChats()
@@ -1282,8 +1291,9 @@ final class AppController: ObservableObject {
 
     /// Development hooks for screenshots, in a preview only, with nothing recorded or sent:
     /// `MOSSAD_LIVE=<live.json>` shows those lines and some audio levels for a meeting saved as recording,
-    /// `MOSSAD_MUTED=1` shows the muted note (`last`: muted when last seen), `MOSSAD_NOW=<call id>` shows the
-    /// sidebar's Now card for that meeting (`MOSSAD_NOW_MINUTES` long so far, without a recording), and
+    /// `MOSSAD_MUTED=1` shows the muted note (`last`: muted when last seen), `MOSSAD_PAUSED=1` the paused state,
+    /// `MOSSAD_NOW=<call id>` shows the sidebar's Now card for that meeting (`MOSSAD_NOW_MINUTES` long so far,
+    /// without a recording), and
     /// `MOSSAD_PROGRESS=upload|queued|summarizing` shows that progress for each meeting being processed.
     /// `--show-recording` shows the recording state (MOSSAD_RECORDING_PLATFORM=inPerson|zoom|teams|meet and
     /// MOSSAD_RECORDING_SECONDS pick it), and `--show-muted` the muted state.
@@ -1308,6 +1318,7 @@ final class AppController: ObservableObject {
             }
         }
         if env["MOSSAD_MUTED"] != nil { shownMute = ShownMute(preview: env["MOSSAD_MUTED"]) }
+        if env["MOSSAD_PAUSED"] == "1" { isPaused = true }
         if let id = env["MOSSAD_NOW"] {
             let minutes = env["MOSSAD_NOW_MINUTES"].flatMap(Double.init) ?? 12
             previewNow = NowCall(id: id, since: Date().addingTimeInterval(-minutes * 60))

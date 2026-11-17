@@ -35,15 +35,6 @@ public enum ShownMute: Equatable, Sendable {
 
     public var title: String? { words.map { $0.prefix(1).uppercased() + $0.dropFirst() } }
 
-    /// "Recording 12:04", then "· paused" or the mute words.
-    public func recordingLine(elapsed: String, paused: Bool) -> String {
-        let note = paused ? "paused" : words
-        return "Recording \(elapsed)" + (note.map { " · \($0)" } ?? "")
-    }
-
-    /// The note of `recordingLine` on a line of its own: "Paused", "Muted", "Muted when last seen".
-    public func note(paused: Bool) -> String? { paused ? "Paused" : title }
-
     public func banner(platform: Platform) -> (lead: String, detail: String)? {
         switch self {
         case .none: nil

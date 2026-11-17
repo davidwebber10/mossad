@@ -8,28 +8,36 @@ extension AppController {
         let since: Date
     }
 
-    /// A call or a room recording on this Mac; in a preview, the made-up one of `MOSSAD_NOW`.
+    /// A call or a room recording on this Mac, also while paused; in a preview, the made-up one of `MOSSAD_NOW`. Its
+    /// id is the live record's own when the list has it: in the repeated hour at the end of daylight time, the id of
+    /// the start can be an older call's.
     var nowCall: NowCall? {
-        if case .recording(_, let since) = status { return NowCall(id: CallRecorder.callID(for: since), since: since) }
-        return previewNow
+        guard let start = nowStart ?? previewNow else { return nil }
+        guard let live = meetings.first(where: { $0.isLive(recordingSince: start.since) }) else { return start }
+        return NowCall(id: live.id, since: start.since)
+    }
+
+    /// The Go menu's "Current Call": the live page, as a click on the card opens it.
+    func openNowCall() {
+        if let id = nowCall?.id { openMeeting(id) }
     }
 }
 
-/// The call that records now, at the top of the sidebar: its title, then the recording dot and the time so far with
-/// "paused" or the mute words. A click opens its live page from any page; the card reads as selected while that
-/// page shows.
+/// The call that records now, at the top of the sidebar: its title, then one state line with the recording dot
+/// (`NowCard.stateLine`), so the card keeps one height. A click opens its live page from any page; the card reads
+/// as selected while that page shows. It never dims with the window: during a call the call app is in front, and
+/// this is where the owner looks for the mute state.
 struct SidebarNowCard: View {
     @EnvironmentObject var controller: AppController
     /// In Calendar mode the Meetings page reports here which meeting it shows full-pane.
     @ObservedObject var navigation: NavigationModel
     let now: AppController.NowCall
-    @Environment(\.appearsActive) private var appearsActive
     @State private var hovering = false
 
     private var record: CallRecord? { controller.meetings.first { $0.id == now.id } }
 
     private var shown: Bool {
-        let part = navigation.part(.meetings)
+        let part = navigation.meetingsPart
         return NowCard.isShown(liveID: now.id, onMeetings: controller.section == .meetings, calendarMode: part?.page == "calendar",
                                selected: controller.selectedMeetingID, openedFullPane: part?.item)
     }
@@ -51,20 +59,12 @@ struct SidebarNowCard: View {
                     HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                         StatusDot(color: controller.isPaused ? Palette.tertiaryMark : Palette.recording, size: 7, pulsing: !controller.isPaused)
                             .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
-                        let time = elapsed(now.since, context.date)
-                        // One line when it fits; else the note goes on a line of its own, never cut in the middle.
-                        ViewThatFits(in: .horizontal) {
-                            Text(controller.shownMute.recordingLine(elapsed: time, paused: controller.isPaused))
-                                .lineLimit(1)
-                            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
-                                Text("Recording \(time)").lineLimit(1)
-                                if let note = controller.shownMute.note(paused: controller.isPaused) { Text(note).lineLimit(2) }
-                            }
-                        }
-                        .monospacedDigit()
+                        Text(NowCard.stateLine(elapsed: elapsed(now.since, context.date), paused: controller.isPaused, mute: controller.shownMute))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .foregroundStyle(stateColor)
                     }
                     .font(.system(size: Rhythm.secondarySize, weight: .medium))
-                    .foregroundStyle(Palette.secondary)
                 }
                 .padding(.horizontal, Chrome.navRowPadding).padding(.vertical, Rhythm.itemGap)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -88,6 +88,11 @@ struct SidebarNowCard: View {
         .onHover { hovering = $0 }
         .contextMenu { if let record { MeetingMenuItems(record: record, deleting: .constant(nil)) } }
         .help("Open the call that records now")
-        .opacity(appearsActive ? 1 : 0.55)
+    }
+
+    /// A mute or a pause is what the owner looks here for, so it is never the card's quietest text.
+    private var stateColor: Color {
+        if controller.isPaused { return Palette.ink }
+        return controller.shownMute.shows ? Palette.accent : Palette.secondary
     }
 }

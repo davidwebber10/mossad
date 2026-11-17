@@ -39,4 +39,15 @@ final class NowCardTests: XCTestCase {
         XCTAssertEqual(NowCard.accessibilityLabel(title: "Budget review", seconds: 3 * 3600 + 120, paused: true, mute: .muted),
                        "Recording now: Budget review, 182 minutes, paused")
     }
+
+    /// One state line, one height: the note takes the place of "Recording", and "Muted when last seen" has no time,
+    /// so it fits the sidebar without a second line.
+    func testStateLine() {
+        XCTAssertEqual(NowCard.stateLine(elapsed: "12:08", paused: false, mute: .none), "Recording 12:08")
+        XCTAssertEqual(NowCard.stateLine(elapsed: "12:08", paused: false, mute: .muted), "Muted · 12:08")
+        XCTAssertEqual(NowCard.stateLine(elapsed: "12:08", paused: false, mute: .mutedWhenLastSeen), "Muted when last seen")
+        XCTAssertEqual(NowCard.stateLine(elapsed: "12:08", paused: true, mute: .none), "Paused · 12:08")
+        XCTAssertEqual(NowCard.stateLine(elapsed: "1:02:08", paused: true, mute: .mutedWhenLastSeen), "Paused · 1:02:08",
+                       "paused says the most: nothing records")
+    }
 }

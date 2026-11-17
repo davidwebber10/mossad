@@ -21,4 +21,16 @@ public enum NowCard {
         let note = paused ? "paused" : mute.words
         return "Recording now: \(title), \(length)" + (note.map { ", \($0)" } ?? "")
     }
+
+    /// The card's one state line. The state takes the place of "Recording", so the card keeps one height: "Paused ·
+    /// 12:08" (nothing records, so it wins), "Muted · 12:08", "Muted when last seen" (no time, so it fits), or
+    /// "Recording 12:08".
+    public static func stateLine(elapsed: String, paused: Bool, mute: ShownMute) -> String {
+        if paused { return "Paused · \(elapsed)" }
+        switch mute {
+        case .none: return "Recording \(elapsed)"
+        case .muted: return "Muted · \(elapsed)"
+        case .mutedWhenLastSeen: return "Muted when last seen"
+        }
+    }
 }
