@@ -404,12 +404,14 @@
             "When you last met each person, and how often",
             "The last meeting's decisions and action items",
             "Your open tasks for these people",
+            "Jot down what you want to raise in any meeting, even one that happens once",
+            "Not raised in a one-on-one? It waits for the next time you see them",
             "Join from the same page",
             "Your next two work days of meetings in the list, and 45 days on the calendar"
           ],
           "icon": "calendar.badge.clock",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Prep/MeetingPrep.swift", "App/UpcomingDetailView.swift", "App/PrepSections.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Prep/MeetingPrep.swift", "App/UpcomingDetailView.swift", "App/PrepSections.swift", "Packages/MossadCore/Sources/MossadCore/Series/MeetingPoints.swift", "App/NextTimeViews.swift"]
         },
         {
           "id": "recurring",
@@ -420,7 +422,7 @@
             "The coach suggests points from open action items, open decisions, and unanswered questions",
             "Add a point from Chat or from another AI app",
             "Points for a person show on that person's page",
-            "Your points sit above the live transcript during the call, so nothing you meant to raise slips by",
+            "Your points sit above the live transcript during the call, in any meeting, so nothing you meant to raise slips by",
             "Tick a point as you raise it, or let Mossad mark it when it hears you",
             "A heads-up near the planned end while points are still open, with no pop-up and no sound",
             "A meeting you missed never closes your points: you see where they came up",
