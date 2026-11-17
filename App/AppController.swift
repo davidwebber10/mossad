@@ -888,6 +888,12 @@ final class AppController: ObservableObject {
         if !inert {
             // A delete of a profile that stopped goes on.
             finishRemovals()
+            // A meeting that a worker finished while it could not read the calendar gets its invite now. With one
+            // profile (no registry file) nothing is read.
+            if WorkerCalendar.looksAgainAtLaunch(registry: profiles.state, macCalendar: .macCalendar, googleCalendar: google.has(.calendar)),
+               let pipeline {
+                Task { if await pipeline.matchUnknownInvites() > 0 { self.refresh() } }
+            }
             // A recovered call whose muted parts are still in its track is held back; the pipeline tries again.
             if !held.isEmpty { notifier.postCaptureProblem(.mutedNotSilenced) }
             if isOn || (offUntilDate.map { $0 <= Date() } ?? false) {

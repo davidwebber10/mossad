@@ -223,6 +223,9 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var failedStep: CallStatus?
     /// Short text for the last error, such as "AssemblyAI key missing"; nil once a step succeeds.
     public var failureReason: String?
+    /// The calendar could not be read when the invite was looked for (a worker), so "no invite" is not known: the
+    /// next launch of the profile's window app looks again. Never written as false.
+    public var inviteUnknown: Bool?
     /// Speaker key (`me:A`, `them:B`) → person name. The name is a label: `speakerPeople` says who it is.
     public var speakerNames: [String: String] = [:]
     /// Speaker key → the id of the person in `people.json`, on a sure match only. Nil in records from before ids,
@@ -401,6 +404,7 @@ extension CallRecord {
         themUtterances = try c.decodeIfPresent([Utterance].self, forKey: .themUtterances)
         failedStep = try c.decodeIfPresent(CallStatus.self, forKey: .failedStep)
         failureReason = try c.decodeIfPresent(String.self, forKey: .failureReason)
+        inviteUnknown = try c.decodeIfPresent(Bool.self, forKey: .inviteUnknown)
         speakerNames = try c.decodeIfPresent([String: String].self, forKey: .speakerNames) ?? [:]
         speakerPeople = try c.decodeIfPresent([String: String].self, forKey: .speakerPeople)
         unknownSpeakers = try c.decodeIfPresent([String].self, forKey: .unknownSpeakers) ?? []

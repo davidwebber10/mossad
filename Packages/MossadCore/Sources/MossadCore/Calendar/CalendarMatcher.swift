@@ -200,6 +200,13 @@ extension CalendarInfo {
 
 public protocol CalendarSource: Sendable {
     func events(from: Date, to: Date) async -> [CalendarEventInfo]
+    /// False when a calendar that this source should read could not be read: then "no event" is not known.
+    func canRead() async -> Bool
+}
+
+extension CalendarSource {
+    /// Every source of the window app reads what it can: an empty list is an answer.
+    public func canRead() async -> Bool { true }
 }
 
 public enum CalendarMatcher {
