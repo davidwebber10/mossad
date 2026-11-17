@@ -69,16 +69,31 @@ extension AppController {
         case .refused(let why): profileProblem = why
         case .go(let save, let arguments):
             let was = read.registry.active
-            if save {
-                var next = read
-                next.registry.setActive(id)
-                do { try next.save(to: file) } catch {
-                    Log.error("Profiles: the switch could not save the list: \(error)")
-                    profileProblem = Self.unreadableProfiles
+            let name = read.registry.profile(id)?.name ?? id
+            // `WorkerSwitch.order`: the workers stop and the target's folder is free before anything is saved or
+            // started, so the new instance never meets its own worker. No second switch starts meanwhile.
+            switching = true
+            Task { @MainActor in
+                guard await workers.stopAll(waitingFor: id, seconds: WorkerSwitch.waitSeconds) else {
+                    Log.error("Profiles: the background work of the other profile did not stop; no switch")
+                    switching = false
+                    workers.resume(recording: isRecording)
+                    profileProblem = WorkerSwitch.refusal(name)
                     return
                 }
+                if save {
+                    var next = read
+                    next.registry.setActive(id)
+                    do { try next.save(to: file) } catch {
+                        Log.error("Profiles: the switch could not save the list: \(error)")
+                        switching = false
+                        workers.resume(recording: isRecording)
+                        profileProblem = Self.unreadableProfiles
+                        return
+                    }
+                }
+                startInstance(arguments: arguments + extra, environment: environment, saved: save, was: was, file: file, home: home)
             }
-            startInstance(arguments: arguments + extra, environment: environment, saved: save, was: was, file: file, home: home)
         }
     }
 
@@ -122,6 +137,7 @@ extension AppController {
                 self.switching = false
                 self.hotKeys.resumeAll()
                 self.retakeMacWideLock()
+                self.workers.resume(recording: self.isRecording)
                 self.profileProblem = problem
                 Log.info("Profiles: the switch did not happen; this copy goes on")
             }
@@ -246,19 +262,44 @@ extension AppController {
     func deleteProfile(_ id: String, typed: String) {
         guard changesProfiles else { return }
         profileProblem = nil
+        let first = readProfiles()
+        guard first.canSave else { profileProblem = refusal(first); return }
+        if let problem = ProfileRules.deleteProblem(id, in: first.registry, active: activeProfile.id, typed: typed) {
+            profileProblem = problem
+            return
+        }
+        let name = first.registry.profile(id)?.name ?? id
+        // The profile's worker stops and its folder is free before the delete takes the folder's lock.
+        switching = true
+        Task { @MainActor in
+            let stopped = await workers.stop(id, seconds: WorkerSwitch.waitSeconds)
+            switching = false
+            guard stopped else {
+                workers.resume(recording: isRecording)
+                profileProblem = WorkerSwitch.refusal(name)
+                return
+            }
+            removeProfile(id, typed: typed)
+        }
+    }
+
+    private func removeProfile(_ id: String, typed: String) {
         let read = readProfiles()
-        guard read.canSave else { profileProblem = refusal(read); return }
+        guard read.canSave else { profileProblem = refusal(read); workers.resume(recording: isRecording); return }
         switch ProfileRemoval.start(id, in: read.registry, active: activeProfile.id, typed: typed, home: Self.home) {
         case .refused(let why):
             profileProblem = why
+            workers.resume(recording: isRecording)
         case .go(let lock):
             var next = read
             next.registry.markRemoving(id)
             do { try next.save(to: Self.registryFile) } catch {
                 Log.error("Profiles: the delete could not be saved: \(error)")
                 profileProblem = Self.unreadableProfiles
+                workers.resume(recording: isRecording)
                 return
             }
+            workers.forget(id)
             profiles = readProfiles()
             refreshOtherNoRecord()
             Log.info("Profiles: deleting one")

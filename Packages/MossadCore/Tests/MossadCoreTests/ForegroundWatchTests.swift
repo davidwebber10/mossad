@@ -127,4 +127,18 @@ final class ForegroundWatchTests: XCTestCase {
         func add(_ s: String) { lock.withLock { items.append(s) } }
         var all: [String] { lock.withLock { items } }
     }
+
+    func testAnAppWritesTheFileOnlyWhileItIsTheAppInFront() {
+        let other = ForegroundState(pid: 700, started: nil, recording: false)
+        let mine = ForegroundState(pid: 500, started: nil, recording: true, stopping: true)
+        // After a switch the new app owns the file: the old app's quit does not write `stopping` over it.
+        XCTAssertFalse(ForegroundState.mayWrite(over: .state(other), pid: 500, alive: { _ in true }))
+        // The start of a new app takes the file over, also from an old app that is still quitting after a switch.
+        XCTAssertTrue(ForegroundState.mayWrite(over: .state(other), pid: 500, alive: { _ in true }, takeOver: true))
+        // A file left by an app that ended, or by this app, is written over; so is a missing or unreadable one.
+        XCTAssertTrue(ForegroundState.mayWrite(over: .state(other), pid: 500, alive: { _ in false }))
+        XCTAssertTrue(ForegroundState.mayWrite(over: .state(mine), pid: 500, alive: { _ in true }))
+        XCTAssertTrue(ForegroundState.mayWrite(over: .missing, pid: 500, alive: { _ in true }))
+        XCTAssertTrue(ForegroundState.mayWrite(over: .unreadable, pid: 500, alive: { _ in true }))
+    }
 }

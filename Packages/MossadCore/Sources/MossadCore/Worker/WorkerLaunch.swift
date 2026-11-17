@@ -78,3 +78,24 @@ public enum WorkerLaunch {
     }
     #endif
 }
+
+/// The order of a switch with workers: the target's worker stops and its folder is free before anything is saved or
+/// started, so the new window app never meets its own worker's lock, and a refusal leaves everything as it was.
+public enum WorkerSwitch {
+    public static let waitSeconds: TimeInterval = 5
+    public enum Step: Equatable, Sendable { case stopWorkers, waitForFolder, saveActive, startInstance, quit, resumeWorkers, restoreActive }
+    public static let order: [Step] = [.stopWorkers, .waitForFolder, .saveActive, .startInstance, .quit]
+
+    /// What undoes a step that failed. Nothing after the quit.
+    public static func afterFailure(of step: Step) -> [Step] {
+        switch step {
+        case .waitForFolder, .saveActive: [.resumeWorkers]
+        case .startInstance: [.restoreActive, .resumeWorkers]
+        default: []
+        }
+    }
+
+    public static func refusal(_ name: String) -> String {
+        "Mossad could not stop the background work of \u{201C}\(name)\u{201D}. Try again in a moment."
+    }
+}

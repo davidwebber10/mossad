@@ -13,7 +13,7 @@ final class WorkerManager {
     }
 
     private let identity: AppIdentity
-    private let profiles: [Profile]
+    private var profiles: [Profile]
     private let file: URL
     private let home = FileManager.default.homeDirectoryForCurrentUser
     private let onLines: @MainActor ([String: String]) -> Void
@@ -44,7 +44,7 @@ final class WorkerManager {
         started = true
         self.recording = recording
         Log.info("Workers: starting \(profiles.count) for the other profiles")
-        write { [weak self] in self?.profiles.forEach { self?.launch($0, failures: 0) } }
+        write(takeOver: true) { [weak self] in self?.profiles.forEach { self?.launch($0, failures: 0) } }
         let t = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.readLines() }
         }
@@ -73,6 +73,13 @@ final class WorkerManager {
         stopped.insert(id)
         terminate(id)
         return await waitForFolder(of: id, seconds: seconds)
+    }
+
+    /// A deleted profile: its worker never starts again, also not by `resume`.
+    func forget(_ id: String) {
+        terminate(id)
+        profiles.removeAll { $0.id == id }
+        readLines()
     }
 
     /// After a refused switch or delete: `stopping` false in the file, and the workers start again.
@@ -167,15 +174,20 @@ final class WorkerManager {
     }
 
     /// Writes the state as it is now, in order; `then` runs on the main actor once it is on disk.
-    private func write(then: (@MainActor () -> Void)? = nil) {
+    private func write(takeOver: Bool = false, then: (@MainActor () -> Void)? = nil) {
         let state = foreground()
         fileQueue.async { [file] in
-            Self.save(state, to: file)
+            Self.save(state, to: file, takeOver: takeOver)
             if let then { Task { @MainActor in then() } }
         }
     }
 
-    nonisolated private static func save(_ state: ForegroundState, to file: URL) {
+    nonisolated private static func save(_ state: ForegroundState, to file: URL, takeOver: Bool = false) {
+        guard ForegroundState.mayWrite(over: ForegroundState.read(file), pid: state.pid,
+                                       alive: { ProcessFacts.isAlive(pid: $0.pid, started: $0.started) }, takeOver: takeOver) else {
+            Log.info("Workers: another app is in front now; the foreground file stays as it wrote it")
+            return
+        }
         do { try state.write(to: file) } catch { Log.error("Workers: the foreground file was not written: \(error)") }
     }
 

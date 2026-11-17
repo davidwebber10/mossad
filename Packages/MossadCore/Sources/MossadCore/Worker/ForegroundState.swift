@@ -40,6 +40,14 @@ public struct ForegroundState: Codable, Equatable, Sendable {
         return .state(state)
     }
 
+    /// An app writes the file only while it is the app in front. Its start takes the file over (`takeOver`); any
+    /// later write leaves a file of another app that lives (the new app after a switch) as it is, so an old app's
+    /// quit cannot stop the new app's workers.
+    public static func mayWrite(over read: Read, pid: Int32, alive: (ForegroundState) -> Bool, takeOver: Bool = false) -> Bool {
+        guard !takeOver, case .state(let state) = read, state.pid != pid else { return true }
+        return !alive(state)
+    }
+
     public func write(to file: URL) throws {
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(self).write(to: file, options: .atomic)

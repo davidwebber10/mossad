@@ -125,4 +125,25 @@ final class WorkerLaunchTests: XCTestCase {
         XCTAssertEqual(WorkerLaunch.failures(after: 3, ranSeconds: 600), 0, "a worker that ran 10 minutes starts the count again")
         XCTAssertEqual(WorkerLaunch.failures(after: 1, ranSeconds: 30), 1)
     }
+
+    func testASwitchStopsTheWorkerAndWaitsForItsFolderBeforeTheNewInstanceStarts() {
+        let o = WorkerSwitch.order
+        XCTAssertEqual(o, [.stopWorkers, .waitForFolder, .saveActive, .startInstance, .quit])
+        XCTAssertLessThan(o.firstIndex(of: .waitForFolder)!, o.firstIndex(of: .startInstance)!)
+        XCTAssertLessThan(o.firstIndex(of: .waitForFolder)!, o.firstIndex(of: .saveActive)!)
+        XCTAssertEqual(WorkerSwitch.waitSeconds, 5)
+    }
+
+    func testAWorkerThatDoesNotStopRefusesTheSwitchAndTheOldAppStays() {
+        let after = WorkerSwitch.afterFailure(of: .waitForFolder)
+        XCTAssertEqual(after, [.resumeWorkers])
+        for never in [WorkerSwitch.Step.quit, .startInstance, .saveActive, .restoreActive] { XCTAssertFalse(after.contains(never)) }
+        XCTAssertEqual(WorkerSwitch.refusal("Personal"), "Mossad could not stop the background work of \u{201C}Personal\u{201D}. Try again in a moment.")
+    }
+
+    func testAFailedStartBringsTheWorkersBack() {
+        XCTAssertEqual(WorkerSwitch.afterFailure(of: .startInstance), [.restoreActive, .resumeWorkers])
+        XCTAssertEqual(WorkerSwitch.afterFailure(of: .saveActive), [.resumeWorkers])
+        XCTAssertEqual(WorkerSwitch.afterFailure(of: .quit), [])
+    }
 }
