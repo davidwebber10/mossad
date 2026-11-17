@@ -61,9 +61,11 @@ extension ChatTools {
         let discussed = book.discussed(in: callID)
         let carried = book.visible.filter { $0.isOpen && ($0.carried ?? []).contains(callID) }
         let mentioned = book.mentioned(in: callID)
+        let leftOpen = book.leftOpen(in: callID, record: records.first { $0.id == callID })
         var parts: [String] = []
         if !discussed.isEmpty { parts.append("Your points discussed here:\n" + discussed.map(pointLine).joined(separator: "\n")) }
         if !carried.isEmpty { parts.append("Your points left for next time:\n" + carried.map(pointLine).joined(separator: "\n")) }
+        if !leftOpen.isEmpty { parts.append("Your points for this meeting, still open:\n" + leftOpen.map(pointLine).joined(separator: "\n")) }
         if !mentioned.isEmpty { parts.append("Your open points in these notes:\n" + mentioned.map(pointLine).joined(separator: "\n")) }
         return parts.isEmpty ? nil : parts.joined(separator: "\n")
     }

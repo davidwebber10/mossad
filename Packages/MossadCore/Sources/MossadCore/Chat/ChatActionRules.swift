@@ -1,18 +1,22 @@
 import Foundation
 
 /// Where a point goes when the owner names a person or a meeting: "my and Jeff's next meeting". The next upcoming
-/// meeting with exactly that person (its series when it has one, else a point for the person, shown before that
-/// meeting), else the one series they usually come to, else the person. Two that fit is a question, never a guess.
+/// meeting with exactly that person (its series when it has one, else that one meeting), else the one series they
+/// usually come to, else the person. With a day ("my meeting with Jeff on Thursday"): the one meeting of that day
+/// that Jeff is invited to. Two that fit is a question, never a guess.
 public enum PointTarget {
     public enum Outcome: Equatable, Sendable {
         case series(MeetingSeries, UpcomingMeeting?)
+        /// One meeting that has no series.
+        case meeting(UpcomingMeeting)
         case person(id: String, name: String, UpcomingMeeting?)
         /// Several fit: the owner chooses.
         case choose([String])
         case notFound(String)
     }
 
-    public static func resolve(with words: String, people: [Person], upcoming: [UpcomingMeeting], series: [MeetingSeries], now: Date) -> Outcome {
+    public static func resolve(with words: String, on day: Date? = nil, people: [Person], upcoming: [UpcomingMeeting], series: [MeetingSeries], now: Date,
+                               calendar: Calendar = .current) -> Outcome {
         let q = words.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return .notFound("Say the person or the meeting.") }
         let refs = PersonReferences(people: people)
@@ -20,6 +24,9 @@ public enum PointTarget {
         case .one(let id):
             let name = refs.name(of: id) ?? q
             let owner = people.first { $0.isOwner && $0.isLive }?.id.rawValue
+            if let day {
+                return onDay(day, person: id, name: name, refs: refs, upcoming: upcoming, series: series, now: now, calendar: calendar)
+            }
             return target(person: id, name: name, owner: owner, refs: refs, upcoming: upcoming, series: series, now: now)
         case .several(let names):
             return .choose(names)
@@ -60,12 +67,7 @@ public enum PointTarget {
             let others = u.attendees.filter { a in refs.id(for: a).map(refs.canonical) != owner }
             return others.count == 1 && others.allSatisfy { refs.id(for: $0).map(refs.canonical) == id }
         }
-        if let u = theirs {
-            if let s = SeriesCatalog.series(of: u, in: series) ?? u.seriesID.flatMap({ id in series.first { $0.keys.contains("cal:\(id)") } }) {
-                return .series(s, u)
-            }
-            return .person(id: id, name: name, u)
-        }
+        if let u = theirs { return place(u, in: series) }
         // A series that still meets and is about the two of them; a group or an ended series is not "their" meeting.
         let usual = series.filter { s in
             s.next != nil && s.usualPeople.count <= 2 && s.usualPeople.contains { $0 == name || refs.id(for: $0).map(refs.canonical) == id }
@@ -73,6 +75,28 @@ public enum PointTarget {
         if usual.count == 1 { return .series(usual[0], usual[0].next) }
         if usual.count > 1 { return .choose(usual.map(\.title)) }
         return .person(id: id, name: name, nil)
+    }
+
+    /// An invite's series when it has one, else the invite itself.
+    static func place(_ u: UpcomingMeeting, in series: [MeetingSeries]) -> Outcome {
+        if let s = SeriesCatalog.series(of: u, in: series) ?? u.seriesID.flatMap({ id in series.first { $0.keys.contains("cal:\(id)") } }) {
+            return .series(s, u)
+        }
+        return .meeting(u)
+    }
+
+    /// The meeting of that day that the person is invited to, by the sure rule of the invite (`NextTimeInvite`).
+    static func onDay(_ day: Date, person id: String, name: String, refs: PersonReferences, upcoming: [UpcomingMeeting], series: [MeetingSeries],
+                      now: Date, calendar: Calendar) -> Outcome {
+        let found = upcoming.filter { u in
+            u.end > now && calendar.isDate(u.start, inSameDayAs: day) && NextTimeInvite.personIDs(u.attendees, people: refs).contains(id)
+        }.sorted { $0.start < $1.start }
+        if found.count == 1 { return place(found[0], in: series) }
+        if found.count > 1 {
+            let time = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone).hour().minute()
+            return .choose(found.map { "\($0.title) at \($0.start.formatted(time)) (upcoming_id: \($0.id))" })
+        }
+        return .notFound("No meeting with \(name) on \(day.formatted(Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone).weekday(.wide).month(.abbreviated).day())).")
     }
 }
 
@@ -223,13 +247,21 @@ public struct ChatActionChange: Sendable {
 public enum ChatActionApply {
     public static func run(_ r: ChatActionRequest, on book: inout NextTimeBook, now: Date) -> ChatActionChange? {
         if r.kind == .addPoint {
-            guard let text = r.text?.nonBlank, r.seriesID != nil || r.personID != nil else { return nil }
-            let same = book.visible.filter { $0.isOpen && (r.seriesID != nil ? $0.seriesID == r.seriesID : ($0.seriesID == nil && $0.personID == r.personID)) }
+            guard let text = r.text?.nonBlank, r.seriesID != nil || r.personID != nil || r.meeting != nil else { return nil }
+            let same: [NextTimePoint]
+            if r.seriesID != nil {
+                same = book.visible.filter { $0.isOpen && $0.seriesID == r.seriesID }
+            } else if r.personID != nil {
+                same = book.visible.filter { $0.isOpen && $0.seriesID == nil && $0.personID == r.personID }
+            } else {
+                same = r.meeting.map { book.points(forMeeting: $0) } ?? []
+            }
             var p = NextTimePoint(text: text, personID: r.seriesID == nil ? r.personID : nil, personName: r.seriesID == nil ? r.personName : nil,
                                   rank: (same.map(\.rank).max() ?? 0) + 1, created: now)
             p.seriesID = r.seriesID
             p.seriesKeys = r.seriesKeys
             p.seriesTitle = r.seriesTitle
+            if r.seriesID == nil, r.personID == nil { p.meeting = r.meeting }
             book.points.append(p)
             var undo = ChatActionRequest(.removePoint)
             undo.pointID = p.id

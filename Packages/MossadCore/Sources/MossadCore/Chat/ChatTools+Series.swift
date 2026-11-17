@@ -151,7 +151,7 @@ extension ChatTools {
         }
         if let book {
             let ids = NextTimeInvite.personIDs(meeting.attendees, people: saved)
-            let points = book.points(for: SeriesCatalog.series(of: meeting, in: all), people: ids, canonical: saved.canonical).filter(\.isOpen)
+            let points = book.points(for: SeriesCatalog.series(of: meeting, in: all), meeting: meeting, people: ids, canonical: saved.canonical).filter(\.isOpen)
             if !points.isEmpty { parts.append("Your points:\n" + points.map { "- \($0.text) (point_id: \($0.id.uuidString))" }.joined(separator: "\n")) }
         }
         if let last = prep.lastTime {
@@ -303,14 +303,25 @@ extension ChatTools {
 
     func pointLine(_ p: NextTimePoint) -> String {
         var line = "- \(p.text) (point_id: \(p.id.uuidString)"
-        line += p.seriesTitle.map { ", for the next \($0)" } ?? p.personName.map { ", for the next time you see \($0)" } ?? ""
+        if p.isForMeeting, let m = p.meeting {
+            line += ", for your \(m.title) on \(shortDay(m.start))"
+        } else {
+            line += p.seriesTitle.map { ", for the next \($0)" } ?? p.personName.map { ", for the next time you see \($0)" } ?? ""
+        }
         line += ", saved \(shortDay(p.created)))"
         if let d = p.done {
             line += " | discussed" + (d.callID.map { " in call_id \($0)" } ?? "") + (d.at.map { " at \(MarkdownWriter.timestamp($0))" } ?? "") + " on \(shortDay(d.date))"
             if d.byOwner { line += " (ticked by the owner)" }
             if let q = d.quote { line += ": \u{201C}\(q)\u{201D}" }
         }
-        if let carried = p.carried, !carried.isEmpty, p.isOpen { line += " | carried over \(carried.count) \(carried.count == 1 ? "meeting" : "meetings")" }
+        if p.isOpen, p.isForPerson, let m = p.meeting, let call = m.calls?.last {
+            line += " | not raised in your \(m.title) (call_id: \(call)), so it waits for the next time you see them"
+        } else if let carried = p.carried, !carried.isEmpty, p.isOpen {
+            line += " | carried over \(carried.count) \(carried.count == 1 ? "meeting" : "meetings")"
+        }
+        if p.isOpen, p.isForMeeting, let calls = p.meeting?.calls, let call = calls.last {
+            line += " | not raised in that meeting (call_id: \(call)); still open"
+        }
         if p.isOpen, let m = p.lastMention {
             line += " | came up \(shortDay(m.date)) in a meeting Mossad has only the notes of (call_id: \(m.callID)): \u{201C}\(m.quote)\u{201D}"
         }
@@ -338,7 +349,8 @@ extension ChatTools {
         default: list = list.filter(\.isOpen)
         }
         guard !list.isEmpty else { return "No points match." }
-        list.sort { ($0.isOpen ? 0 : 1, $0.seriesTitle ?? $0.personName ?? "", $0.rank) < ($1.isOpen ? 0 : 1, $1.seriesTitle ?? $1.personName ?? "", $1.rank) }
+        func label(_ p: NextTimePoint) -> String { p.isForMeeting ? p.meeting?.title ?? "" : p.seriesTitle ?? p.personName ?? "" }
+        list.sort { ($0.isOpen ? 0 : 1, label($0), $0.rank) < ($1.isOpen ? 0 : 1, label($1), $1.rank) }
         return list.prefix(limit).map(pointLine).joined(separator: "\n") + (list.count > limit ? "\n(\(list.count - limit) more.)" : "")
     }
 }

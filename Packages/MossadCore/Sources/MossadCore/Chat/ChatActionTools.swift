@@ -183,8 +183,9 @@ public final class ChatActions: @unchecked Sendable {
     public static func definitions(live: Bool) -> [ToolSpec] {
         let light = [
             ToolSpec(name: "add_point",
-                     description: "Saves a point the owner wants to raise later. with: a person (\"Jeff\", a whole name, or an address) for \"my and Jeff's next meeting\": the next meeting of the two of them, else the recurring meeting they usually come to, else the next time the owner sees them. series: a recurring meeting (series_id or title words). person: the next time the owner sees them. Give one. When the answer lists choices, ask the owner which one.",
-                     schema: ["type": "object", "properties": ["text": ["type": "string"], "with": ["type": "string"], "series": ["type": "string"], "person": ["type": "string"]] as [String: Any],
+                     description: "Saves a point the owner wants to raise later. with: a person (\"Jeff\", a whole name, or an address) for \"my and Jeff's next meeting\": the next meeting of the two of them (its recurring meeting when it has one, else that one meeting), else the recurring meeting they usually come to, else the next time the owner sees them. on (YYYY-MM-DD) with with: \"my meeting with Jeff on Thursday\", the one meeting of that day Jeff is invited to. upcoming_id (from upcoming_meetings or prep): that meeting. series: a recurring meeting (series_id or title words). person: the next time the owner sees them. Give one. When the answer lists choices, ask the owner which one.",
+                     schema: ["type": "object", "properties": ["text": ["type": "string"], "with": ["type": "string"], "on": ["type": "string"], "upcoming_id": ["type": "string"],
+                                                              "series": ["type": "string"], "person": ["type": "string"]] as [String: Any],
                               "required": ["text"]]),
             ToolSpec(name: "change_point",
                      description: "Changes one of the owner's points for next time by its point_id (from next_time_points, read_series, prep, or current_call): edit (new text), remove, tick (discussed; during a call, at this moment), or reopen.",
@@ -349,16 +350,31 @@ public final class ChatActions: @unchecked Sendable {
             let words = u.map { "Saved for \(name); it shows before your \($0.title) on \(day($0)): \(text)" } ?? "Saved for the next time you see \(name): \(text)"
             return .success((r, words, "mossad://person/\(id)"))
         }
+        func meeting(_ u: UpcomingMeeting) -> Result<(ChatActionRequest, String, String?), Refusal> {
+            r.meeting = NextTimeMeeting(u, people: NextTimeInvite.personIDs(u.attendees, people: tools.saved))
+            r.upcomingID = u.id
+            return .success((r, "Saved for your \(u.title) on \(day(u)): \(text)", nil))
+        }
         func outcome(_ o: PointTarget.Outcome) -> Result<(ChatActionRequest, String, String?), Refusal> {
             switch o {
             case .series(let s, let u): return series(s, u)
+            case .meeting(let u): return meeting(u)
             case .person(let id, let name, let u): return person(id, name, u)
             case .choose(let options): return .failure(Refusal(text: "Not done: several fit. Ask the owner which one: \(options.joined(separator: "; "))."))
             case .notFound(let why): return .failure(Refusal(text: "Not done: \(why)"))
             }
         }
+        if let id = (input["upcoming_id"] as? String)?.nonBlank {
+            guard let u = catalog.upcoming.first(where: { $0.id == id }) else { return .failure(Refusal(text: "Not done: no upcoming meeting has that upcoming_id.")) }
+            return outcome(PointTarget.place(u, in: catalog.all))
+        }
         if let with = (input["with"] as? String)?.nonBlank {
-            return outcome(PointTarget.resolve(with: with, people: tools.savedPeople, upcoming: catalog.upcoming, series: catalog.all, now: tools.now))
+            var on: Date?
+            if let text = (input["on"] as? String)?.nonBlank {
+                guard let d = ChatTools.date(text) else { return .failure(Refusal(text: "Not done: on is a date as YYYY-MM-DD.")) }
+                on = d
+            }
+            return outcome(PointTarget.resolve(with: with, on: on, people: tools.savedPeople, upcoming: catalog.upcoming, series: catalog.all, now: tools.now))
         }
         if let q = (input["series"] as? String)?.nonBlank {
             if let s = catalog.all.first(where: { $0.id == q || $0.keys.contains(q) }) { return series(s, nil) }

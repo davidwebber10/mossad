@@ -17,6 +17,9 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
     public var textLink: URL?
     /// True when the calendar says that the invite repeats (a Google series id, or an EventKit recurrence rule).
     public var isRecurring = false
+    /// The invite's iCalendar UID, one for the Mac's copy and Google's: a point for this one meeting finds it again
+    /// after a move. Every meeting of a repeated event has the same one.
+    public var uid: String?
 
     /// How far ahead the calendar is read, and what the calendar, the prep pages, and the recurring meetings show, so
     /// a monthly series has its next date. The Meetings list shows the next two work days of it (`listPart`).
@@ -49,7 +52,7 @@ public struct UpcomingMeeting: Identifiable, Equatable, Sendable {
                 let text = e.textLink
                 return UpcomingMeeting(title: e.title, start: e.start, end: e.end, attendees: e.attendees, platform: platform,
                                        link: link, seriesID: e.seriesID, textLink: text == link ? nil : text,
-                                       isRecurring: e.isRecurring || e.seriesID != nil)
+                                       isRecurring: e.isRecurring || e.seriesID != nil, uid: e.iCalUID)
             }
             .prefix(limit).map { $0 }
     }

@@ -88,7 +88,8 @@ public struct NextTimeChecker: Sendable {
 
 /// Which points a written meeting is checked for, and what the check changes. Pure.
 public enum NextTimeRules {
-    /// The open points that `r` can settle: its series' points and the points for a person who spoke in it, each
+    /// The open points that `r` can settle: its series' points, the points of its own meeting when it has no series
+    /// (`NextTimeMeeting.matches`), and the points for a person who spoke in it, each
     /// saved before the meeting ended (a point added during it is read only against the lines after it, in
     /// `apply`). A point the owner reopened from this meeting is left out.
     public static func points(for r: CallRecord, in book: NextTimeBook, series: MeetingSeries?, people: PersonReferences) -> [NextTimePoint] {
@@ -98,6 +99,7 @@ public enum NextTimeRules {
             guard p.isOpen, p.created < r.end, !(p.reopened ?? []).contains(r.id) else { return false }
             if let s = series, p.seriesID != nil, p.belongs(to: s) { return true }
             if p.seriesID == nil, let id = p.personID { return spoke.contains(people.canonical(id)) }
+            if p.isForMeeting, let m = p.meeting { return m.matches(r) }
             return false
         }
     }
@@ -111,8 +113,10 @@ public enum NextTimeRules {
     /// meeting the owner missed, nothing closes and nothing is carried: a found point gets a mention and stays open.
     /// `rejected` are the live marks the owner answered with "Not raised": their lines never close the point.
     /// A point added during the meeting is found only in a line said after it existed, and is never carried by it.
+    /// A point of this one meeting that was not raised stays with it, and in a 1:1 (`onlyOther`) it moves to the
+    /// next time the owner sees that person, remembering this meeting as the one that carried it.
     public static func apply(_ found: [NextTimeChecker.Found], checked: [NextTimePoint], call r: CallRecord, to book: inout NextTimeBook, at date: Date,
-                             rejected: [LivePointMarks.Mark] = []) {
+                             rejected: [LivePointMarks.Mark] = [], onlyOther: (id: String, name: String)? = nil) {
         let missed = ownerMissed(r)
         for p in checked {
             let since = p.created > r.start ? p.created.timeIntervalSince(r.start) : nil
@@ -125,6 +129,15 @@ public enum NextTimeRules {
                     book.mention(p.id, .init(callID: r.id, at: f.at, quote: f.quote, date: r.start), at: date)
                 } else {
                     book.update(p.id, at: date) { $0.done = NextTimePoint.Discussed(callID: r.id, at: f.at, quote: f.quote, date: date, byOwner: false) }
+                }
+            } else if !missed, p.isForMeeting {
+                book.update(p.id, at: date) { q in
+                    let calls = Array(Set((q.meeting?.calls ?? []) + [r.id])).sorted()
+                    q.meeting?.calls = calls
+                    guard let other = onlyOther else { return }
+                    q.personID = other.id
+                    q.personName = other.name
+                    q.carried = (q.carried ?? []) + [r.id]
                 }
             } else if !missed, since == nil, !(p.carried ?? []).contains(r.id), p.seriesID != nil {
                 // A person's point waits for a meeting with them; it is not "carried" by a meeting of no series.
@@ -200,9 +213,10 @@ public actor NextTimeRunner {
                 let found = try await UsageContext.$callID.withValue(r.id) { try await checker.check(points, in: r) }
                 // The marks made during the call: a line the owner rejected never closes its point.
                 let marks = LivePointMarks.load(from: paths.callDirectory(r.id))
+                let other = NextTimeRules.onlyOther(r, owner: owner, directory: directory, ownerEmails: ownerEmails, people: people)
                 // Read again: the owner may have changed a point while the request ran.
                 try NextTimeBook.change(in: paths.nextTime) {
-                    NextTimeRules.apply(found, checked: points, call: r, to: &$0, at: now(), rejected: marks?.rejected ?? [])
+                    NextTimeRules.apply(found, checked: points, call: r, to: &$0, at: now(), rejected: marks?.rejected ?? [], onlyOther: other)
                 }
                 checked += 1
                 if ledger.entries[r.id] != nil { ledger.clear(r.id); ledger.save(to: paths.nextTime) }

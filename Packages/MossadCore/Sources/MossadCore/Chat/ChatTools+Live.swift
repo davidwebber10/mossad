@@ -45,7 +45,7 @@ extension ChatTools {
                                        ownerEmails: [settings.ownerEmail], aliases: SeriesCatalog.aliases(snapshot?.calendarEvents ?? []))
         let names = heard.isEmpty ? Array(Set(r.speakerNames.values)) : heard
         let people = LivePoints.personIDs(attendees: r.attendees, heard: names, people: saved)
-        return LivePoints.list(book, series: series, people: people, callID: r.id, canonical: saved.canonical)
+        return LivePoints.list(book, series: series, people: people, callID: r.id, record: r, canonical: saved.canonical)
     }
 
     func livePoints(_ r: CallRecord, heard: [String]) -> String? {

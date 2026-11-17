@@ -1,7 +1,9 @@
 import Foundation
 
-/// Something the owner wants to raise the next time: at the next meeting of a series, or the next time they see a
-/// person. The owner's own list; the coach's suggestions stay apart (`SeriesSuggestion`) until the owner keeps one.
+/// Something the owner wants to raise the next time: at the next meeting of a series, at one meeting that is not part
+/// of a series, or the next time they see a person. The owner's own list; the coach's suggestions stay apart
+/// (`SeriesSuggestion`) until the owner keeps one. A point is in one list only: its series when it has one, else its
+/// person, else its meeting (`isForMeeting`).
 public struct NextTimePoint: Codable, Equatable, Sendable, Identifiable, Hashable {
     /// Where a point was marked done.
     public struct Discussed: Codable, Equatable, Sendable, Hashable {
@@ -60,6 +62,10 @@ public struct NextTimePoint: Codable, Equatable, Sendable, Identifiable, Hashabl
     /// The meetings the owner missed in which it came up, oldest first. Added to and never rewritten: an older
     /// build that saves the point leaves this out, and the next merge brings it back from the copy that has it.
     public var mentions: [Mention]?
+    /// The one meeting it was saved for, when that meeting had no series. Kept when the point moves to a person or a
+    /// series, as where it came from. An older build that saves the point leaves this out, and the next merge brings
+    /// it back from the copy that has it; until then the older build shows the point in no list, never in a wrong one.
+    public var meeting: NextTimeMeeting?
     /// The suggestion it came from, when the owner kept one.
     public var suggestion: String?
     public var deleted = false
@@ -83,6 +89,8 @@ public struct NextTimePoint: Codable, Equatable, Sendable, Identifiable, Hashabl
     /// The newest meeting the owner missed in which it came up.
     public var lastMention: Mention? { mentions?.max { $0.date < $1.date } }
     public var isForPerson: Bool { personID != nil && seriesID == nil }
+    /// For one meeting with no series, and not moved to a person or a series since.
+    public var isForMeeting: Bool { meeting != nil && seriesID == nil && personID == nil }
 
     public func belongs(to s: MeetingSeries) -> Bool { s.matches(id: seriesID, keys: seriesKeys) }
 }
@@ -178,10 +186,10 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         }
     }
 
-    /// The open points for an upcoming meeting: its series' first, then the ones for each invited person.
-    /// `people` are the saved ids of the invited people.
-    public func points(for series: MeetingSeries?, people: [String], canonical: (String) -> String = { $0 }) -> [NextTimePoint] {
-        let own = series.map { points(of: $0).open } ?? []
+    /// The open points for an upcoming meeting: its series' first, then its own when it is one meeting (`meeting`),
+    /// then the ones for each invited person. `people` are the saved ids of the invited people.
+    public func points(for series: MeetingSeries?, meeting: UpcomingMeeting? = nil, people: [String], canonical: (String) -> String = { $0 }) -> [NextTimePoint] {
+        let own = (series.map { points(of: $0).open } ?? []) + (meeting.map { points(forMeeting: $0) } ?? [])
         var seen = Set(own.map(\.id))
         var theirs: [NextTimePoint] = []
         for id in people { for p in points(forPerson: id, canonical: canonical) where seen.insert(p.id).inserted { theirs.append(p) } }
@@ -210,11 +218,12 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
     /// Adds a point at the end of its list.
     @discardableResult
     public mutating func add(_ text: String, series: MeetingSeries? = nil, personID: String? = nil, personName: String? = nil,
-                             suggestion: String? = nil, at date: Date = Date()) -> NextTimePoint? {
-        guard let text = text.nonBlank, series != nil || personID != nil else { return nil }
-        let list = series.map { points(of: $0).open } ?? personID.map { points(forPerson: $0) } ?? []
+                             meeting: NextTimeMeeting? = nil, suggestion: String? = nil, at date: Date = Date()) -> NextTimePoint? {
+        guard let text = text.nonBlank, series != nil || personID != nil || meeting != nil else { return nil }
+        let list = series.map { points(of: $0).open } ?? personID.map { points(forPerson: $0) } ?? meeting.map { points(forMeeting: $0) } ?? []
         var p = NextTimePoint(text: text, series: series, personID: series == nil ? personID : nil, personName: series == nil ? personName : nil,
                               rank: (list.map(\.rank).max() ?? 0) + 1, created: date)
+        if series == nil, personID == nil { p.meeting = meeting }
         p.suggestion = suggestion
         points.append(p)
         return p
@@ -316,6 +325,8 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         p.carried = p.carried.map { $0.filter { !calls.contains($0) } }.flatMap { $0.isEmpty ? nil : $0 }
         p.reopened = p.reopened.map { $0.filter { !calls.contains($0) } }.flatMap { $0.isEmpty ? nil : $0 }
         p.mentions = p.mentions.map { $0.filter { !calls.contains($0.callID) } }.flatMap { $0.isEmpty ? nil : $0 }
+        let kept = p.meeting?.calls.map { $0.filter { !calls.contains($0) } }.flatMap { $0.isEmpty ? nil : $0 }
+        p.meeting?.calls = kept
         return p != before
     }
 
@@ -349,7 +360,7 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
     }
 
     /// Both devices' changes: the newer copy of each point with the mentions of both copies, every answer, and
-    /// every checked call. A copy saved by an older build has no mentions; the other copy's stay.
+    /// every checked call. A copy saved by an older build has no mentions and no meeting; the other copy's stay.
     public func merged(with other: NextTimeBook) -> NextTimeBook {
         var out = NextTimeBook()
         var byID: [UUID: NextTimePoint] = [:]
@@ -360,8 +371,10 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
                 // heard of the move.
                 if Self.forgotten(old) { continue }
                 if Self.forgotten(p) { byID[p.id] = p; continue }
-                var newer = p.updated > old.updated ? p : old
+                let incomingWins = p.updated > old.updated
+                var newer = incomingWins ? p : old
                 newer.mentions = Self.union(old.mentions, p.mentions)
+                newer.meeting = NextTimeMeeting.merged(newer.meeting, incomingWins ? old.meeting : p.meeting)
                 byID[p.id] = newer
             } else {
                 byID[p.id] = p
