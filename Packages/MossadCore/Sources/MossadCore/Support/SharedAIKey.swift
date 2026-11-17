@@ -42,7 +42,10 @@ public struct SharedAIKey: Codable, Equatable, Sendable {
     }
 
     public func save(profile: String = AppIdentity.current.profile.id) throws {
-        guard AppIdentity.current.writesSharedItems else { return }
+        try SharedItemsGate.perform { try write(profile: profile) }
+    }
+
+    private func write(profile: String) throws {
         let data = try JSONEncoder().encode(self)
         let status = SecItemUpdate(Self.query(profile: profile) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         if status == errSecItemNotFound {
@@ -57,7 +60,6 @@ public struct SharedAIKey: Codable, Equatable, Sendable {
     }
 
     public static func delete(profile: String = AppIdentity.current.profile.id) {
-        guard AppIdentity.current.writesSharedItems else { return }
-        SecItemDelete(query(profile: profile) as CFDictionary)
+        SharedItemsGate.perform { SecItemDelete(query(profile: profile) as CFDictionary) }
     }
 }

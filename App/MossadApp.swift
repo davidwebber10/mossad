@@ -70,11 +70,10 @@ struct MossadEntry {
             if Rehearsal.isOn { print("Mossad Rehearsal has no calls to read."); exit(1) }
             let args = CommandLine.arguments
             // Only the app that holds this profile's folder is in the way; another profile's app may stay open.
-            // The lock is kept until the command ends, so the app cannot start on this folder meanwhile.
-            let folderLock: InstanceLock? = switch args.contains("--go") ? InstanceLock.acquire(root: Paths.live.root) : .failed(0) {
-            case .held(let lock): lock
-            case .taken: { print(PersonaFill.openMessage(identity.profile)); exit(1) }()
-            case .failed: nil
+            // One look, as on main: the lock is let go at once, so an app that starts during the fill still records.
+            if args.contains("--go"), case .taken = InstanceLock.acquire(root: Paths.live.root) {
+                print(PersonaFill.openMessage(identity.profile))
+                exit(1)
             }
             let defaults = UserDefaults.standard
             let typed = (defaults.string(forKey: "ownerName") ?? "").trimmingCharacters(in: .whitespaces)
@@ -86,7 +85,6 @@ struct MossadEntry {
                 let status = await PersonaFill.command(args, paths: .live, owner: owner, plan: PersonaExtractor.plan(provider: provider, chosen: chosen), makeModel: { usage in
                     PersonaExtractor.model(provider: provider, chosen: chosen, key: provider.key.flatMap { Keychain.app.get($0) }, usage: usage, serverURL: server)?.llm
                 }, say: { print($0); fflush(stdout) })
-                withExtendedLifetime(folderLock) {}
                 exit(status)
             }
             dispatchMain()

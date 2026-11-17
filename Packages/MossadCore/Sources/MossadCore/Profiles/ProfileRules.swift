@@ -56,7 +56,19 @@ public enum ProfileRules {
 
     /// The SHA-256 (hex) of the address in lower case: the registry never holds the address itself.
     public static func serverHash(_ address: URL) -> String {
-        SHA256.hash(data: Data(address.absoluteString.lowercased().utf8)).map { String(format: "%02x", $0) }.joined()
+        SHA256.hash(data: Data(serverKey(address).utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// One text for one server however its address is written: no user information, no default port (443 on
+    /// https, 80 on http), no dot at the end of the host, all in lower case.
+    static func serverKey(_ address: URL) -> String {
+        guard var c = URLComponents(url: address, resolvingAgainstBaseURL: false) else { return address.absoluteString.lowercased() }
+        c.user = nil
+        c.password = nil
+        let scheme = c.scheme?.lowercased()
+        if (scheme == "https" && c.port == 443) || (scheme == "http" && c.port == 80) { c.port = nil }
+        if let host = c.host, host.hasSuffix(".") { c.host = String(host.dropLast()) }
+        return (c.url?.absoluteString ?? address.absoluteString).lowercased()
     }
 
     public static func serverOwner(of address: URL, in registry: ProfileRegistry, except id: String) -> Profile? {
@@ -99,6 +111,11 @@ public enum ProfileSwitch {
         if started { return .quit }
         return saved ? .restore(active: active) : .stay
     }
+
+    /// Right before the old instance quits: a call that started after the decision stops the switch.
+    public enum AtQuit: Equatable, Sendable { case quit, refused(String) }
+
+    public static func atQuit(recording: Bool) -> AtQuit { recording ? .refused(refusal) : .quit }
 
     /// The new instance of a switch waits for the old one's locks.
     public static func waitSeconds(_ arguments: [String]) -> TimeInterval { arguments.contains("--switched") ? 10 : 0 }

@@ -113,7 +113,9 @@ struct ModelPicker: View {
 private struct MCPSetup: View {
     private var binary: String { DevHooks.shownBinary(Bundle.main.executablePath ?? "/Applications/Mossad.app/Contents/MacOS/Mossad") }
     /// This profile's server: today's `mossad` and `--mcp` for the first one, `--profile <id>` for another.
-    private var command: MCPCommand { MCPCommand(profile: AppIdentity.current.profile, among: AppIdentity.current.registry.registry.live) }
+    @EnvironmentObject private var controller: AppController
+    /// From the registry as it is now, so a rename shows at once.
+    private var command: MCPCommand { MCPCommand(profile: controller.activeProfile, among: controller.profiles.registry.live) }
     private var claudeCode: String { command.claudeCode(binary: binary) }
     private var desktop: String { command.desktop(binary: binary) }
 

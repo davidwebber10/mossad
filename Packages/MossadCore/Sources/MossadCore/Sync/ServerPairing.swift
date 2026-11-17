@@ -51,7 +51,10 @@ public enum ServerPairing {
     }
 
     public static func share(_ c: ServerConnection, profile: String = AppIdentity.current.profile.id) throws {
-        guard AppIdentity.current.writesSharedItems else { return }
+        try SharedItemsGate.perform { try write(c, profile: profile) }
+    }
+
+    private static func write(_ c: ServerConnection, profile: String) throws {
         let data = try JSONEncoder().encode(c)
         let status = SecItemUpdate(query(profile: profile) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         if status == errSecItemNotFound {
@@ -66,8 +69,7 @@ public enum ServerPairing {
     }
 
     public static func unshare(profile: String = AppIdentity.current.profile.id) {
-        guard AppIdentity.current.writesSharedItems else { return }
-        SecItemDelete(query(profile: profile) as CFDictionary)
+        SharedItemsGate.perform { SecItemDelete(query(profile: profile) as CFDictionary) }
     }
 }
 

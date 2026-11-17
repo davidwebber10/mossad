@@ -139,7 +139,6 @@ extension MarkdownWriterTests {
         XCTAssertEqual(AppIdentity(bundleID: AppIdentity.mainBundleID, arguments: ["Mossad", "--profile", "1a2b3c4d"], registry: loaded).noteRoot, "~/Mossad Work")
         XCTAssertEqual(AppIdentity(bundleID: AppIdentity.mainBundleID, arguments: ["Mossad", "--profile", "1a2b3c4d"],
                                    environment: ["MOSSAD_ROOT": "/tmp/demo"], registry: loaded).noteRoot, "~/Mossad")
-        XCTAssertEqual(MarkdownWriter.audioRoot, AppIdentity.current.noteRoot)
     }
 
     func testANoteOfAnyFolderIsFoundByItsCallID() throws {

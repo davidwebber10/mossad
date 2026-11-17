@@ -8,16 +8,18 @@ extension AppController {
     private static var registryFile: URL { ProfileRegistry.fileURL(home: home) }
     static let unreadableProfiles = "The list of profiles could not be read. Mossad did not change it."
 
-    /// This process's profile; in a preview, the made-up registry's active one.
+    /// This process's profile as the registry has it now (a rename shows at once); in a preview, the made-up
+    /// registry's active one.
     var activeProfile: Profile {
-        AppIdentity.current.isPreview ? profiles.registry.activeProfile : AppIdentity.current.profile
+        if AppIdentity.current.isPreview { return profiles.registry.activeProfile }
+        return profiles.registry.profile(AppIdentity.current.profile.id) ?? AppIdentity.current.profile
     }
 
     /// The switcher's menu; nil with one profile.
     var profileMenu: ProfileMenu? { ProfileMenu(profiles.registry, active: activeProfile.id, recording: isRecording) }
 
     /// Only the real app changes the real registry: never a preview, an inert copy, or a run on a made-up registry.
-    private var changesProfiles: Bool { !isInert && !AppIdentity.current.isPreview && !AppIdentity.current.madeUpRegistry }
+    private var changesProfiles: Bool { !isInert && AppIdentity.current.mayChangeRegistry }
 
     /// The file as it is now, read again before each change: another instance may have written it since launch.
     private func readProfiles() -> ProfileRegistry.Loaded {
@@ -57,14 +59,28 @@ extension AppController {
         Log.info("Profiles: switching")
         Task {
             var started = false
+            var newInstance: NSRunningApplication?
             do {
                 let app = try await NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config)
                 started = app.processIdentifier != ProcessInfo.processInfo.processIdentifier && !app.isTerminated
+                if started { newInstance = app }
             } catch {
                 Log.error("Profiles: the new instance did not start: \(error)")
             }
             switch ProfileSwitch.afterStart(started: started, saved: saved, was: was) {
             case .quit:
+                // A call that started after the decision: the new instance goes, `active` comes back, no quit.
+                if case .refused(let why) = ProfileSwitch.atQuit(recording: isRecording) {
+                    newInstance?.terminate()
+                    if saved {
+                        var back = readProfiles()
+                        back.registry.setActive(was)
+                        if back.canSave { try? back.save(to: Self.registryFile) }
+                    }
+                    profiles = readProfiles()
+                    profileProblem = why
+                    return
+                }
                 NSApp.terminate(nil)
             case .restore(let active):
                 var back = readProfiles()
@@ -88,8 +104,9 @@ extension AppController {
         let taken = Set(((try? FileManager.default.contentsOfDirectory(atPath: Self.home.path)) ?? []).map { $0.lowercased() })
         var next = read
         let profile = next.registry.add(name: name, color: color, takenFolders: taken)
+        let folder = profile.rootURL(home: Self.home)
         do {
-            try FileManager.default.createDirectory(at: profile.rootURL(home: Self.home), withIntermediateDirectories: false)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
         } catch {
             Log.error("Profiles: the folder of a new profile could not be made: \(error)")
             profileProblem = "The folder for this profile could not be made."
@@ -100,6 +117,8 @@ extension AppController {
         do { try next.save(to: Self.registryFile) } catch {
             Log.error("Profiles: the list could not be saved: \(error)")
             profileProblem = Self.unreadableProfiles
+            // The folder this Add made goes again, only while it is still empty.
+            if (try? FileManager.default.contentsOfDirectory(atPath: folder.path))?.isEmpty == true { try? FileManager.default.removeItem(at: folder) }
             return
         }
         Log.info("Profiles: added one")
@@ -132,7 +151,9 @@ extension AppController {
         ProfileRules.serverOwner(of: address, in: profiles.registry, except: activeProfile.id)
     }
 
-    /// This profile's server in the registry, as a hash. Only when a registry file exists and the hash changed.
+    /// This profile's server in the registry, as a hash. Only when a registry file exists and the hash changed. A
+    /// newer or `partial` file, or an inert copy, saves nothing: that profile then has a server and no hash, and the
+    /// rule of one server for each profile cannot see it until the file can be saved.
     func noteServer(_ address: URL?) {
         guard changesProfiles else { return }
         let read = readProfiles()

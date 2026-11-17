@@ -31,7 +31,7 @@ extension AppController {
     }()
 
     /// Whether this copy may write or delete the iCloud Keychain items: only once the launch decided, and never inert.
-    var writesSharedItems: Bool { Self.hasICloud && launchDecided && !isInert }
+    var writesSharedItems: Bool { SharedItemsGate.appMayWrite(iCloud: Self.hasICloud, launchDecided: launchDecided, inert: isInert) }
 
     /// Puts the chosen AI provider, model, and key in iCloud Keychain for the iPhone, or removes them.
     func updateSharedAIKey() {

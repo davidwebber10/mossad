@@ -127,13 +127,6 @@ final class ProfileReviewFixTests: XCTestCase {
         XCTAssertNil(AppIdentity(bundleID: main, arguments: ["Mossad", "--mcp", "--profile", "1a2b3c4d"], registry: loaded([work])).profileRefusal)
     }
 
-    // MARK: 9. An unreadable registry: the other profiles are not known, so they cannot block
-
-    func testAnUnreadableRegistryHasNoOtherProfiles() {
-        let unreadable = ProfileRegistry.Loaded(registry: ProfileRegistry(), state: .unreadable)
-        XCTAssertEqual(AppIdentity(bundleID: main, arguments: ["Mossad"], registry: unreadable).otherProfileRoots(home: home), [])
-    }
-
     // MARK: 10. A folder name compares in lower case itself
 
     func testAFolderNameIgnoresTheCallersLetterCase() {

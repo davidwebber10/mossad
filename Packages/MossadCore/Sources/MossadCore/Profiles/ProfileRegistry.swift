@@ -42,10 +42,13 @@ public struct ProfileRegistry: Codable, Equatable, Sendable {
     public struct Loaded: Equatable, Sendable {
         public var registry: ProfileRegistry
         public var state: State
+        /// The names of the entries left out (`partial`), for the sentence in Settings.
+        public var leftOut: [String] = []
 
-        public init(registry: ProfileRegistry, state: State) {
+        public init(registry: ProfileRegistry, state: State, leftOut: [String] = []) {
             self.registry = registry
             self.state = state
+            self.leftOut = leftOut
         }
 
         public var canSave: Bool { state == .none || state == .read }
@@ -64,7 +67,9 @@ public struct ProfileRegistry: Codable, Equatable, Sendable {
         }
         let (registry, leftOut) = decoded.cleaned(home: home)
         let state: State = decoded.version > currentVersion ? .newer : leftOut ? .partial : .read
-        return Loaded(registry: registry, state: state)
+        let kept = Set(registry.profiles.map(\.id))
+        let names = decoded.profiles.filter { !$0.isDefault && !kept.contains($0.id) }.map(\.name)
+        return Loaded(registry: registry, state: state, leftOut: names)
     }
 
     /// `default` first, always there, always on `~/Mossad`; an entry with a bad or repeated id, or with a root that is

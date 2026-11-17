@@ -14,13 +14,30 @@ extension CloudKitStore {
 
     public struct ZoneRefused: Error {}
 
+    public enum ZoneDeletion: Equatable, Sendable { case deleted, tryAgain }
+    public struct ZoneNotDeleted: Error {}
+
+    /// iCloud's answer for the one zone: a success, or a zone that is not there, is deleted; anything else, or no
+    /// answer, is tried again at the next launch.
+    public static func zoneDeletion(_ result: Result<Void, any Error>?) -> ZoneDeletion {
+        switch result {
+        case .success: .deleted
+        case .failure(let error as CKError) where error.code == .zoneNotFound: .deleted
+        default: .tryAgain
+        }
+    }
+
     /// Deletes a deleted profile's zone. A zone that is not there is a success.
     public static func deleteZone(named name: String) async throws {
         guard mayDelete(zone: name) else { throw ZoneRefused() }
+        let id = zoneID(named: name)
+        let result: Result<Void, any Error>?
         do {
-            _ = try await CKContainer(identifier: containerID).privateCloudDatabase.modifyRecordZones(saving: [], deleting: [zoneID(named: name)])
-        } catch let error as CKError where error.code == .zoneNotFound {
-            return
+            let (_, deleted) = try await CKContainer(identifier: containerID).privateCloudDatabase.modifyRecordZones(saving: [], deleting: [id])
+            result = deleted[id]
+        } catch {
+            result = .failure(error)
         }
+        guard zoneDeletion(result) == .deleted else { throw ZoneNotDeleted() }
     }
 }

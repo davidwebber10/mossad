@@ -212,6 +212,12 @@ struct ServerSetupSheet: View {
 
     private func start() {
         guard let url = foundAddress, let hello else { return }
+        // The list of profiles can change while the sheet is open: another profile may own this server now.
+        if let owner = controller.serverOwner(of: url) {
+            foundAddress = nil
+            addressCheck = .failed(ProfileRules.serverRefusal(owner))
+            return
+        }
         started = true
         controller.connectServer(ServerConnection(address: url, secret: secret), hello: hello, syncThere: syncThere)
     }

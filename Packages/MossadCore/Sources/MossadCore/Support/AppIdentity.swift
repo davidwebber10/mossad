@@ -160,6 +160,10 @@ extension AppIdentity {
     /// made-up registry.
     public var writesSharedItems: Bool { !isPreview && !madeUpRegistry }
 
+    /// Whether this copy may write the real registry: a copy that takes profiles, on the real file. Never a preview,
+    /// Rehearsal, a `MOSSAD_ROOT` run, or a made-up registry. (An inert copy is stopped by the app.)
+    public var mayChangeRegistry: Bool { takesProfiles && !madeUpRegistry }
+
     /// The folder a note's `audio:` line names: a profile's `root` as written, else the fixed `~/Mossad` of before
     /// (also for Rehearsal and a `MOSSAD_ROOT` run).
     public var noteRoot: String {
