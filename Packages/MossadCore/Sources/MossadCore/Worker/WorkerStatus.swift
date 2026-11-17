@@ -31,8 +31,11 @@ public struct WorkerStatus: Codable, Equatable, Sendable {
     }
 
     /// The first that applies: a key that is missing, the meetings that fail (the kind of the newest), the backup, the sync.
-    public static func make(records: [CallRecord], missing: Set<ServiceSettings.MissingKey>, backupFailed: Int, syncFailed: Bool, now: Date) -> WorkerStatus {
-        let inWork = records.filter { ProcessingStep(status: $0.status) != nil }
+    /// `incoming`: the meetings that another profile moved here and that wait in `Incoming`, which count in work.
+    public static func make(records: [CallRecord], incoming: Int = 0, missing: Set<ServiceSettings.MissingKey>, backupFailed: Int,
+                            syncFailed: Bool, now: Date) -> WorkerStatus {
+        // A meeting whose move waits is not in work here: nothing processes it.
+        let inWork = records.filter { ProcessingStep(status: $0.status) != nil && $0.moveTo == nil }
         var failure: Failure?
         let waiting = (missing.contains(.transcription) ? inWork.filter { $0.status == .recorded }.count : 0)
             + (missing.contains(.notes) ? inWork.filter { $0.status == .identified }.count : 0)
@@ -40,7 +43,7 @@ public struct WorkerStatus: Codable, Equatable, Sendable {
         if failure == nil {
             let week = now.addingTimeInterval(-7 * 86_400)
             let failing: [(end: Date, kind: Kind)] = records.compactMap { r in
-                if ProcessingStep(status: r.status) != nil, r.attempts > 0, let step = UsageStats.Step(failedAt: r.status) {
+                if ProcessingStep(status: r.status) != nil, r.moveTo == nil, r.attempts > 0, let step = UsageStats.Step(failedAt: r.status) {
                     return (r.end, Kind(step))
                 }
                 if r.status == .failed, let at = r.failedStep, r.end >= week, let step = UsageStats.Step(failedAt: at) {
@@ -54,7 +57,7 @@ public struct WorkerStatus: Codable, Equatable, Sendable {
         }
         if failure == nil, backupFailed > 0 { failure = Failure(kind: .backup, count: backupFailed) }
         if failure == nil, syncFailed { failure = Failure(kind: .sync, count: 0) }
-        return WorkerStatus(written: now, inWork: inWork.count, failure: failure)
+        return WorkerStatus(written: now, inWork: inWork.count + max(0, incoming), failure: failure)
     }
 
     public static func url(root: URL) -> URL { Paths(root: root).worker.appendingPathComponent(fileName) }

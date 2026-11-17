@@ -618,6 +618,13 @@ public final class CallRecorder: @unchecked Sendable {
         edit { $0.generatedTitle = title }
     }
 
+    /// The profile the call that records now is for, or nil for this one. Saved at once, so a crash keeps it; a
+    /// pause, a resume, and the end keep it with the record.
+    public func setMoveTarget(_ profile: String?, forCall id: String) {
+        guard let r = record, r.id == id, r.moveTo != profile else { return }
+        edit { $0.moveTo = profile }
+    }
+
     /// Stops recording and deletes everything for the current call.
     public func skip() {
         guard let r = record else { return }

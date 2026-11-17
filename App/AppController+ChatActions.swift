@@ -89,6 +89,12 @@ extension AppController {
         let request = action.request
         // The riskier class never runs during a call.
         if request.kind.needsClick, request.kind != .batch, isRecording { return }
+        // A meeting that moves takes no change: the card says so and is not done.
+        if [.nameVoice, .renameMeeting, .addTag, .removeTag].contains(request.kind), let callID = request.callID,
+           let r = meetings.first(where: { $0.id == callID }), r.moveTo != nil {
+            let text = MoveShow.refusesCommand(r, name: profileName(r.moveTo), me: activeProfile.id) ?? MoveWords.moving(to: MoveWords.otherProfile)
+            return updateAction(chatID, messageID, actionID) { $0.state = .failed; $0.summary += " (\(text))" }
+        }
         actionsInWork.insert(actionID)
         let host = chatActionHost, paths = paths, pipeline = pipeline
         let people = library.identity?.people.people ?? PeopleStore.peek(in: paths.people) ?? []

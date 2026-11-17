@@ -6,8 +6,12 @@ import MossadCore
 /// only. The installed copy runs none of them, except `--open-window`, which only opens a page.
 @MainActor
 enum DevHooks {
-    /// Hooks of the profiles' workers: `MOSSAD_PROOF_WORKERS`, `MOSSAD_PROOF_CALL` (in `WorkerEntry`), and in a preview
-    /// `MOSSAD_WORKER_LINES`.
+    /// Hooks of the profiles' workers: `MOSSAD_PROOF_WORKERS`, `MOSSAD_PROOF_CALL`, the move's `MOSSAD_PROOF_MEETING`,
+    /// `MOSSAD_PROOF_MOVE` (with `MOSSAD_PROOF_MOVE_AFTER`), `MOSSAD_PROOF_MOVE_STOP=copied`, and
+    /// `MOSSAD_PROOF_INTAKE_STOP=takingIn`, `MOSSAD_PROOF_INTAKE_REFUSE=1`, `MOSSAD_PROOF_COPY_HOLD=<seconds>` with
+    /// `MOSSAD_PROOF_CANCEL_AFTER=<seconds>` (in `WorkerEntry`, on a made-up registry only),
+    /// and in a preview
+    /// `MOSSAD_WORKER_LINES`, and the move's `MOSSAD_MOVE`, `MOSSAD_MOVE_ENDED`, `MOSSAD_MOVE_LINE`, `MOSSAD_MOVE_SHEET`, `MOSSAD_CALL_FOR`.
     /// `--ui-preview` opens the UI on $MOSSAD_ROOT with no detection, recording, or processing, so the screens can
     /// be checked while the installed copy records a call.
     static let preview = CommandLine.arguments.contains("--ui-preview")
@@ -94,6 +98,12 @@ enum DevHooks {
                 DispatchQueue.main.async { c.openAskPanelPreview() }
                 return
             }
+            // `CallPanel` in a preview: the panel's part for a call that records, for the made-up call of
+            // `MOSSAD_CALL_FOR`, in a window of its own. Nothing records.
+            if preview, name == "CallPanel" {
+                DispatchQueue.main.async { c.openCallPanelPreview() }
+                return
+            }
             // `--open-window Onboarding` opens setup alone; MOSSAD_ONBOARDING_STEP picks the step in a preview.
             if name == "Onboarding" {
                 DispatchQueue.main.async { c.openOnboarding() }
@@ -112,6 +122,7 @@ enum DevHooks {
                 return parts.count == 2 ? (parts[0], parts[1]) : nil
             }, uniquingKeysWith: { $1 })
         }
+        if preview { moveHooks(c) }
         if preview, let sheet = env["MOSSAD_PROFILE_SHEET"] {
             let other = c.profiles.registry.live.first { !$0.isDefault }?.id
             let chosen: ProfileSheet? = switch sheet {
@@ -139,6 +150,62 @@ enum DevHooks {
     }
 
     private static let launch = Date()
+
+    /// The move's states, shown from made-up values; nothing moves in a preview.
+    /// `MOSSAD_MOVE="<call id>=moving|copying|slow|slow:notSetUp|slow:unreachable|cancelling|removing|notFinished:<kind>"` (more with `;`):
+    /// a made-up ledger of a move to the first other profile of `MOSSAD_PROFILES` (started 0 s ago, or 120 s for `slow`;
+    /// `copying` at 42%; `removing` waits at the backup step).
+    /// `MOSSAD_MOVE_ENDED="<call id>=<reason>"`: a move of a call marked during its recording that ended (its row is held).
+    /// `MOSSAD_CALL_FOR=<profile id>|back|here` (with `MOSSAD_ASK_CALL`): the choice of "This call is for".
+    /// `MOSSAD_MOVE_LINE=<text>`: the line above the list. `MOSSAD_MOVE_SHEET=<call id>`: the confirmation for the first target.
+    private static func moveHooks(_ c: AppController) {
+        guard let to = c.moveTargets.first else { return }
+        func pairs(_ key: String) -> [(String, String)] {
+            (env[key] ?? "").split(separator: ";").compactMap { pair in
+                let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
+                return parts.count == 2 ? (parts[0], parts[1]) : nil
+            }
+        }
+        for (id, state) in pairs("MOSSAD_MOVE") {
+            let parts = state.split(separator: ":").map(String.init)
+            var m = MoveOut(callID: id, to: to.id, started: Date().addingTimeInterval(parts[0] == "slow" ? -120 : 0))
+            switch parts[0] {
+            case "copying": m.state = .copying; c.moveProgress[id] = 0.42
+            case "cancelling": m.state = .cancelling
+            case "notFinished":
+                // The target took the meeting and a part after its file check keeps failing (`:voices|record|chats|failed`).
+                m.state = .waiting
+                m.targetWaits = parts.count > 1 ? MoveMarker.TakeInWait(rawValue: parts[1]) ?? .failed : .record
+            case "removing":
+                m.state = .removing
+                m.removed = ["voices", "people", "coach", "books", "shares"]
+                m.because = .backupNotDone
+                m.waitsAt = MoveOut.Step.backup.rawValue
+            default: m.state = .waiting
+            }
+            if parts.count > 1, parts[0] != "notFinished" { c.moveReach[to.id] = parts[1] == "notSetUp" ? .notSetUp : parts[1] == "unreachable" ? .unreachable : .notRunning }
+            c.moves[id] = m
+        }
+        for (id, why) in pairs("MOSSAD_MOVE_ENDED") {
+            c.moveEnded[id] = MoveEnded(callID: id, to: to.id, why: MovePlan.Cancel(rawValue: why) ?? .refusedIDTaken, afterCall: true, at: Date())
+        }
+        callFor(c)
+        if let text = env["MOSSAD_MOVE_LINE"] { c.moveLine = MoveShow.Line(text: text, since: Date(), lasts: 3600) }
+        if let id = env["MOSSAD_MOVE_SHEET"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                if let r = c.meetings.first(where: { $0.id == id }) { c.askMove(r, to: to) }
+            }
+        }
+    }
+
+    /// `MOSSAD_CALL_FOR=<profile id>|back|here` with `MOSSAD_ASK_CALL=<call id>`, in a preview: the choice of "This call
+    /// is for" for that made-up call, and the reason the live transcript is off. Nothing records.
+    static func callFor(_ c: AppController) {
+        guard preview, let pick = env["MOSSAD_CALL_FOR"], let callID = env["MOSSAD_ASK_CALL"] else { return }
+        let choice: MoveAfterCall.Choice = pick == "here" ? .here : pick == "back" ? .backHere : .other(pick)
+        c.callChoice = (callID, choice)
+        c.liveOff = MoveAfterCall.liveOff(choice)
+    }
 
     /// `MOSSAD_ASK_POINTS=open|closed` in a preview: the quick panel's points row shown open or closed, without
     /// the owner's saved choice.

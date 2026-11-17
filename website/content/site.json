@@ -844,11 +844,14 @@
             "A recording from your iPhone gets its notes while the Mac is in another profile",
             "On your iPhone, each profile has its own meetings, and you change profile in Settings",
             "A phone call that you share goes to the profile you pick",
+            "A meeting that went to the wrong profile moves to the right one, with its recording, its notes, and the chats about that meeting alone",
+            "During a call you can say that it is for the other profile, and that profile writes the notes",
+            "When the call goes on as a new recording, your choice is kept; when Mossad is not sure it is the same call, it holds the recording until you choose",
             "With one profile, nothing changes"
           ],
           "icon": "person.2.crop.square.stack",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Profiles/ProfileRegistry.swift", "Packages/MossadCore/Sources/MossadCore/Support/AppIdentity.swift", "App/ProfileSwitcher.swift", "App/ProfileSettings.swift", "Packages/MossadCore/Sources/MossadCore/Worker/ProfileWorker.swift", "PhoneApp/PhoneProfiles.swift", "PhoneApp/ProfilesScreen.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/PhoneProfileBook.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Profiles/ProfileRegistry.swift", "Packages/MossadCore/Sources/MossadCore/Support/AppIdentity.swift", "App/ProfileSwitcher.swift", "App/ProfileSettings.swift", "Packages/MossadCore/Sources/MossadCore/Worker/ProfileWorker.swift", "PhoneApp/PhoneProfiles.swift", "PhoneApp/ProfilesScreen.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/PhoneProfileBook.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/MovePlan.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/MoveAfterCall.swift", "App/AppController+Moves.swift"]
         }
       ]
     },

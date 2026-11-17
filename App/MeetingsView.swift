@@ -95,6 +95,7 @@ struct MeetingsView: View {
         } message: {
             Text("Mossad deletes the note, the transcript, and the audio. Voices it learned from this call stay.")
         }
+        .moveConfirmation(controller)
         .sheet(item: $merging) { r in MergeSheet(record: r) }
         .onReceive(NotificationCenter.default.publisher(for: .mergeMeeting)) { note in
             merging = controller.meetings.first { $0.id == note.object as? String }
@@ -359,7 +360,8 @@ extension CallRecord: @retroactive Identifiable {
         case .recording: .recording
         case .failed: .failed
         case .written: unknownSpeakers.isEmpty ? nil : .needsNames
-        default: .processing
+        // A call that waits to move (or is held for the owner) is not processed here.
+        default: moveTo == nil ? .processing : nil
         }
     }
 
@@ -457,6 +459,7 @@ struct MeetingMenuItems: View {
                 NotificationCenter.default.post(name: .mergeMeeting, object: record.id)
             }
             .disabled(!record.canDelete)
+            MoveMenuItems(controller: controller, record: record)
             Divider()
             Button("Delete…", systemImage: "trash", role: .destructive) { deleting = record }.disabled(!record.canDelete)
         }

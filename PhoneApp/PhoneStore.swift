@@ -544,6 +544,8 @@ final class PhoneStore {
 
     func answer(_ question: String, history: [ChatMessage], about callID: String? = nil,
                 onStep: @escaping @Sendable (String) -> Void) async throws -> String {
+        // Before any request: the Mac would not keep a chat about a meeting that moves, so nothing is sent or billed.
+        if let off = MoveShow.phoneChatOff(about: callID, in: meetings) { return off }
         guard let llm = languageModel else { throw NoSharedKey() }
         return try await ChatAgent(llm: llm, ownerName: owner).answer(question, history: history, records: meetings, paths: paths,
                                                                       about: callID, onStep: onStep).text

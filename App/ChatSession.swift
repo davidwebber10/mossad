@@ -67,6 +67,8 @@ final class ChatSession: ObservableObject {
         guard !q.isEmpty else { return }
         guard !running else { queued = q; return }
         guard isQuick || record != nil else { return }
+        // A meeting that moves to another profile: nothing is sent; the question goes back to the field.
+        if controller.chatOff(record?.id ?? callID) != nil { returned = q; return }
         var current = chat ?? {
             var c = Chat(title: Chat.title(from: q))
             c.callID = callID
@@ -150,7 +152,8 @@ final class ChatSession: ObservableObject {
             pendingText = nil
             task = nil
             let callRecords = record.map { controller.isRecording(callID: $0.id) } ?? true
-            switch ChatRunRules.next(queued: queued, failed: failed, stopped: stopped, callRecords: callRecords) {
+            let off = controller.chatOff(record?.id ?? callID) != nil
+            switch ChatRunRules.next(queued: queued, failed: failed, stopped: stopped, callRecords: callRecords, off: off) {
             case .nothing: break
             case .send(let next):
                 queued = nil

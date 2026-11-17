@@ -27,6 +27,8 @@ final class WorkerManager {
     private var children: [String: Child] = [:]
     private var restarts: [String: Task<Void, Never>] = [:]
     private var gaveUp: Set<String> = []
+    /// The workers that ended because their profile's setup is not done.
+    private var setupNotDone: Set<String> = []
     /// The workers that a stop ended: none of them starts again until `resume`.
     private var stopped: Set<String> = []
     private var stopping = false
@@ -192,6 +194,7 @@ final class WorkerManager {
     private func ended(_ id: String, process: Process, exit code: Int32) {
         guard let child = children[id], child.process === process else { return }
         children[id] = nil
+        if code == WorkerLaunch.Exit.setupNotDone.rawValue { setupNotDone.insert(id) } else { setupNotDone.remove(id) }
         let failures = WorkerLaunch.failures(after: child.failures, ranSeconds: Date().timeIntervalSince(child.started))
         Log.info("Workers: \(id) ended (exit \(code))")
         decide(id, exit: code, failures: failures)
@@ -212,6 +215,13 @@ final class WorkerManager {
                 write(.restart) { [weak self] in self?.launch(profile, failures: failures + 1) }
             }
         }
+    }
+
+    /// Why a meeting moved to this profile may wait, as far as the window app can tell from its worker.
+    func reach(_ id: String) -> MoveShow.Reach {
+        if setupNotDone.contains(id) { return .notSetUp }
+        if gaveUp.contains(id) || children[id] == nil { return .notRunning }
+        return .open
     }
 
     private func terminate(_ id: String) {

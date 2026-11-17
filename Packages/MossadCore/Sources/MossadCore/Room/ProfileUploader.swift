@@ -163,7 +163,8 @@ public final class ProfileUploader {
         case .off?, nil: return nil
         }
         if let engine, engine.key == key { return engine }
-        let sync = CloudSync(paths: paths, store: make())
+        // The iPhone moves no meeting: nothing of it is ever leaving.
+        let sync = CloudSync(paths: paths, store: make(), leaving: { [] })
         engine = (key, sync)
         return engine
     }

@@ -63,7 +63,7 @@ struct ChatView: View {
                 exchange
             }
         }
-        .floatingComposer(composer)
+        .floatingComposer(field)
         .environment(\.openURL, OpenURLAction { url in
             if controller.openLink(url) { return .handled }
             return ChatThread.opens(url) ? .systemAction : .discarded
@@ -136,6 +136,11 @@ struct ChatView: View {
         ]
     }
 
+    /// The field, or the sentence in its place while the open chat's meeting moves to another profile.
+    @ViewBuilder private var field: some View {
+        if let off = controller.chatOff(current.callID) { MoveChatOff(text: off) } else { composer }
+    }
+
     private var composer: some View {
         FloatingComposer(prompt: current.messages.isEmpty ? "Ask about your meetings" : "Ask a follow-up", text: $question,
                          focused: $focused, send: { send() })
@@ -178,7 +183,7 @@ struct ChatView: View {
 
     private func send(again: ChatMessage? = nil) {
         let q = (again?.text ?? question).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty, running == nil else { return }
+        guard !q.isEmpty, running == nil, controller.chatOff(current.callID) == nil else { return }
         // The quick panel's chat, or the chat of the call that records: one writer for the file, the session that
         // the panel and the live Chat tab use. A question asked while it answers waits for that answer.
         if let session = controller.session(answering: current, create: true) {

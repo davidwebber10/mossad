@@ -25,6 +25,11 @@ public enum ReferenceBackup {
         try? FileManager.default.removeItem(at: folder(paths).appendingPathComponent("calls/\(callID).json"))
     }
 
+    /// Takes away the copy of a note: for a meeting that left this profile.
+    public static func forget(note path: String, paths: Paths) {
+        try? FileManager.default.removeItem(at: folder(paths).appendingPathComponent("notes/\(URL(fileURLWithPath: path).lastPathComponent)"))
+    }
+
     /// Keeps a copy of one file before its first change, under `name` in the backup folder. True when the copy is
     /// there, or when there is no file to copy.
     @discardableResult

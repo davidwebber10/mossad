@@ -272,7 +272,7 @@ private struct StatusRow<Dot: View, Action: View>: View {
 
 /// While a call records: the red pulse, "Recording · In person · 12:41", who has spoken, Stop, the live
 /// talk-share strip, then pause, bookmark, and skip.
-private struct RecordingStatus: View {
+struct RecordingStatus: View {
     @EnvironmentObject var controller: AppController
     @Environment(\.dismiss) private var dismiss
     let platform: Platform
@@ -288,9 +288,11 @@ private struct RecordingStatus: View {
                 VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     TimelineView(.periodic(from: since, by: 1)) { context in
                         Text("\(controller.isPaused ? "Paused" : "Recording") · \(platform.displayName) · \(elapsed(since, context.date))")
-                            .fontWeight(.semibold).monospacedDigit().lineLimit(1)
+                            // The middle goes first, so the time stays whole at the panel's width.
+                            .fontWeight(.semibold).monospacedDigit().lineLimit(1).truncationMode(.middle)
                     }
-                    PanelVoicesLine(model: controller.live, platform: platform, title: controller.recordingTitle)
+                    PanelVoicesLine(model: controller.live, platform: platform, title: controller.recordingTitle,
+                                    names: controller.liveOff != .forOtherProfile && controller.liveOff != .afterOtherProfile)
                 }
                 .accessibilityElement(children: .combine)
                 Spacer(minLength: 6)
@@ -305,6 +307,8 @@ private struct RecordingStatus: View {
             }
             CallControls(compact: true, showsStop: false)
                 .padding(.horizontal, 12).padding(.bottom, 8)
+            // With two profiles or more: which profile this call is for (`MoveAfterCall`).
+            if let menu = controller.callForMenu { CallForRow(menu: menu).padding(.horizontal, 12).padding(.bottom, Rhythm.itemGap) }
             PanelRow(action: {
                 dismiss()
                 // After the menu's own panel closes, so it does not take the keyboard back from the quick panel.
@@ -327,6 +331,8 @@ private struct PanelVoicesLine: View {
     @ObservedObject var model: LiveTranscriptModel
     let platform: Platform
     let title: String?
+    /// False for a call for another profile: the names stop with the live transcript.
+    let names: Bool
 
     var body: some View {
         Text(text).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(2)
@@ -337,6 +343,7 @@ private struct PanelVoicesLine: View {
         let (total, unnamed) = model.roomVoices
         let voices = total == 0 ? nil
             : "\(total) \(total == 1 ? "speaker" : "speakers") so far" + (unnamed == 0 ? "" : ", \(unnamed) not yet named")
+        guard names else { return title ?? "" }
         if platform == .inPerson { return voices ?? "Voices get names as Mossad knows them" }
         return title ?? voices ?? "Mossad names voices it knows"
     }

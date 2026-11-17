@@ -76,11 +76,15 @@ final class AppController: ObservableObject {
         }
     }
 
+    /// Whether a call records, for the move's look off the main actor.
+    let callFlag = RecordingFlag()
+
     @Published private(set) var status: Status = .idle {
         // An in-person recording owns the mic until Stop; the call scan every 2 s would be thrown away.
         didSet {
             let was = if case .recording = oldValue { true } else { false }
             if was != isRecording { workers?.setRecording(isRecording) }
+            callFlag.set(isRecording)
             let room = if case .recording(.inPerson, _) = status { true } else { false }
             detection.isSuspended = room
             // With detection suspended, the room's mic gets its own stall check.
@@ -163,6 +167,11 @@ final class AppController: ObservableObject {
     var liveCoverage = LiveCoverage()
     /// Why this call has no live transcript; nil when it runs. The live chat and the quick panel say it.
     @Published var liveOff: LiveOffReason?
+    /// "This call is for": the choice of the call that records now (`MoveAfterCall`); nil is `.here`.
+    @Published var callChoice: (callID: String, choice: MoveAfterCall.Choice)?
+    /// The carry of the owner's choice from a call to a new recording of it (`MoveAfterCall.Book`): read back at a
+    /// launch, decided at each start before any send, kept again at each end.
+    var carry = MoveAfterCall.Book()
     var liveOffReason: String? { liveOff?.text }
     /// The live chat of each call, so an answer that runs survives a change of tab or of view (the Chat tab and
     /// the quick panel show the same one).
@@ -422,8 +431,29 @@ final class AppController: ObservableObject {
     private(set) var mode: RunMode = .full
     /// The workers of the other profiles; nothing with one profile.
     private(set) var workers: WorkerManager!
-    /// The switcher's second line of each other profile, from its worker's status file.
-    @Published var workerLines: [String: String] = [:]
+    /// The switcher's second line of each other profile, from its worker's status file. A change can mean that a
+    /// worker took in a meeting that this profile moved: the moves are looked at.
+    @Published var workerLines: [String: String] = [:] {
+        didSet { if workerLines != oldValue { checkMoves() } }
+    }
+    /// The look at the moves of this profile (`AppController+Moves`); nothing with one profile.
+    var moveLook = MoveLook()
+    /// This profile's moves that are not done, by call id, read by the look; empty with one profile.
+    @Published var moves: [String: MoveOut] = [:]
+    /// The share of a copy made, by call id, for a long recording.
+    @Published var moveProgress: [String: Double] = [:]
+    /// "Moved to Work", or the sentence of a refusal, above the list for a short time.
+    @Published var moveLine: MoveShow.Line?
+    /// The reasons a move left for the owner, until each line was on the screen.
+    @Published var moveNotices = MoveNotices()
+    /// Why a move ended that the owner has not seen yet, or that holds a call marked during its recording.
+    @Published var moveEnded: [String: MoveEnded] = [:]
+    /// A start after the call that was refused, with its words: the call is held, and only the owner tries again.
+    @Published var moveRefused: [String: String] = [:]
+    /// Why each other profile cannot take a meeting in now, as far as the app can tell.
+    @Published var moveReach: [String: MoveShow.Reach] = [:]
+    /// The confirmation of "Move to" that is open.
+    @Published var moveRequest: MoveRequest?
     /// Set once the launch knows whether this copy is inert. Before it, and in an inert copy, the iCloud Keychain
     /// items the iPhone reads are neither written nor deleted.
     private(set) var launchDecided = false
@@ -782,7 +812,7 @@ final class AppController: ObservableObject {
                 // Recorder commands go straight from the detection queue to the capture queue, so they keep
                 // the detector's order relative to the process updates below. The UI follows on the main actor.
                 CaptureQueue.queue.async { self.capture(event, processIDs: ids, meetingID: meetingID, recorder: recorder) }
-                Task { @MainActor in self.show(event) }
+                Task { @MainActor in self.show(event, meetingID: meetingID) }
             }
             detection.onUnconfirmed = { @Sendable [weak self] call in
                 Task { @MainActor in
@@ -867,9 +897,9 @@ final class AppController: ObservableObject {
         let paths = paths, recovers = mode.does(.recover)
         Task.detached(priority: .userInitiated) { [weak self] in
             // Before detection starts: a call that starts during a slow launch must not look like a crashed one.
-            let held = recovers ? ProcessingQueue(paths: paths).recoverInterrupted() : []
+            let (held, recovered) = recovers ? ProcessingQueue(paths: paths).recoverInterruptedCalls() : ([], [])
             let records = Self.previewFailures(MeetingIndex(paths: paths).all())
-            await self?.finishLaunch(records, held: held, inert: inert)
+            await self?.finishLaunch(records, held: held, recovered: Set(recovered), inert: inert)
         }
         Log.info("Mossad started")
         // The launch used to block when a record could not be read from a volume that does not answer, and that was
@@ -890,7 +920,7 @@ final class AppController: ObservableObject {
         if meetingsLoaded { work() } else { waitingForLaunch.append(work) }
     }
 
-    private func finishLaunch(_ records: [CallRecord], held: [String], inert: Bool) {
+    private func finishLaunch(_ records: [CallRecord], held: [String], recovered: Set<String>, inert: Bool) {
         meetings = records
         meetingsLoaded = true
         reportMacWideStrays()
@@ -910,6 +940,11 @@ final class AppController: ObservableObject {
         if !inert {
             // A delete of a profile that stopped goes on.
             finishRemovals()
+            // A move of this profile goes on, and a meeting moved here is taken in: with two profiles or more only.
+            checkMoves()
+            startMoveLook()
+            // A call marked for another profile that a quit or a crash ended: a new recording of it keeps the choice.
+            carry.launched(records, recovered: recovered, now: Date())
             // A recovered call whose muted parts are still in its track is held back; the pipeline tries again.
             if !held.isEmpty { notifier.postCaptureProblem(.mutedNotSilenced) }
             if isOn || (offUntilDate.map { $0 <= Date() } ?? false) {
@@ -1218,8 +1253,7 @@ final class AppController: ObservableObject {
             }
             // The stopped record goes into the list at once, so its row stops saying "recording".
             Task { @MainActor in self.update(record); self.refresh() }
-            // Utility: the next call may start in the same minute, and the call app comes first.
-            Task(priority: .utility) { @MainActor in await self.track { await self.pipeline.process(record.id) } }
+            Task { @MainActor in self.endOfCall(record) }
         }
         isMuted = false
         status = .idle
@@ -1227,7 +1261,7 @@ final class AppController: ObservableObject {
         stopLive()
         updater.callEnded()
         summarizeLiveChats()
-        forgetLiveCall()
+        forgetLiveCall(end: Date())
     }
 
     /// Quit during a call: closes the tracks and saves the call as recorded, so the next launch processes it.
@@ -1322,6 +1356,7 @@ final class AppController: ObservableObject {
             refresh()
             return live
         }
+        guard !refusedForMove(callID) else { return nil }
         await pipeline.addBookmark(callID: callID, offset: offset)
         refresh()
         return offset
@@ -1336,7 +1371,7 @@ final class AppController: ObservableObject {
                     done.resume(returning: recorder.currentRecord?.id == callID && recorder.setBookmarkNote(at: offset, note))
                 }
             }
-            if !live { await pipeline.setBookmarkNote(callID: callID, offset: offset, note: note) }
+            if !live, !refusedForMove(callID) { await pipeline.setBookmarkNote(callID: callID, offset: offset, note: note) }
             refresh()
         }
     }
@@ -1350,6 +1385,8 @@ final class AppController: ObservableObject {
         status = .recording(.inPerson, since: start)
         isPaused = false
         isMuted = false
+        // A room has no link and no call app: nothing carries, and the decision is made before the live transcript.
+        carryChoice(to: MoveAfterCall.Call(callID: CallRecorder.callID(for: start), platform: .inPerson, bundleID: nil, meetingID: nil, start: start))
         let recorder = recorder
         CaptureQueue.queue.async {
             do {
@@ -1386,7 +1423,7 @@ final class AppController: ObservableObject {
     }
 
     /// Opens one streaming session per track. Billed while open, so only while recording and not paused.
-    private func startLive(reset: Bool) {
+    func startLive(reset: Bool) {
         stopLive()
         if reset { live.reset() } else { live.newSession() }
         if reset {
@@ -1394,6 +1431,11 @@ final class AppController: ObservableObject {
             liveCoverage = LiveCoverage()
         }
         guard case .recording(_, let since) = status else { return }
+        // The carry of this call was decided before anything is sent (`show(.started)`, `recordInPerson`).
+        assert(AppIdentity.current.isPreview || carry.decided == CallRecorder.callID(for: since), "the carry of this call is not decided yet")
+        // A call for another profile, or one taken back from it: the streams never open again for it.
+        let choice = self.choice(forCall: CallRecorder.callID(for: since))
+        guard MoveAfterCall.allows(.liveTranscript, choice) else { liveOff = MoveAfterCall.liveOff(choice); return }
         guard liveTranscriptEnabled else { liveOff = .setting; return }
         guard let key = keychain.get(.assemblyai) else { liveOff = .noKey; return }
         // The two audio streams take about half a megabit of upload. On a network the owner marked to save data
@@ -1454,6 +1496,7 @@ final class AppController: ObservableObject {
     /// Once per call, after about 5 minutes of live transcript, asks a small model for a provisional title so the
     /// menu and the list show it while the call runs. The summary's title replaces it.
     private func startLiveTitling(callID: String) {
+        guard MoveAfterCall.allows(.liveTitle, choice(forCall: callID)) else { return }
         let chosen = aiProvider.resolvedModel(aiModel)
         let key = aiProvider.key.flatMap { keychain.get($0) }
         guard key != nil || !aiProvider.requiresKey, let model = aiProvider.smallModel ?? (chosen.isEmpty ? nil : chosen) else { return }
@@ -1462,7 +1505,7 @@ final class AppController: ObservableObject {
         liveTitling?.cancel()
         liveTitling = Task { [weak self] in
             try? await Task.sleep(for: .seconds(300))
-            guard !Task.isCancelled, let self, self.isRecording(callID) else { return }
+            guard !Task.isCancelled, let self, self.isRecording(callID), MoveAfterCall.allows(.liveTitle, self.choice(forCall: callID)) else { return }
             // A calendar title or the owner's title wins, so no model call is spent on a title nobody shows.
             let recorder = self.recorder
             let hasTitle = await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in
@@ -1484,7 +1527,11 @@ final class AppController: ObservableObject {
 
     /// After the call: the namer, the events around the call, and the chat runs are not needed any more. A chat
     /// answer still on its way keeps its own session and saves its chat.
-    private func forgetLiveCall() {
+    private func forgetLiveCall(end: Date) {
+        // The choice stays for a new recording of the same call. A second end of the same call (the detector's, after
+        // Stop) keeps what the first one kept.
+        carry.ended(choice: carry.call.flatMap { c in callChoice.flatMap { $0.callID == c.callID ? $0.choice : nil } }, at: end)
+        callChoice = nil
         liveNamer = nil
         liveCalendar = nil
         liveChatSessions = [:]
@@ -1549,7 +1596,7 @@ final class AppController: ObservableObject {
         }
     }
 
-    private func stopLive() {
+    func stopLive() {
         liveRestart?.cancel()
         liveRestart = nil
         live.save()
@@ -1668,6 +1715,7 @@ final class AppController: ObservableObject {
     }
 
     func applyNames(callID: String, names: [String: String], emails: [String: String] = [:]) {
+        guard !refusedForMove(callID) else { return }
         Task {
             await pipeline.applyNames(callID: callID, names: names, emails: emails)
             refresh()
@@ -1676,6 +1724,7 @@ final class AppController: ObservableObject {
 
     /// The owner's own title; nil or blank goes back to the automatic one.
     func setTitle(callID: String, _ title: String?) {
+        guard !refusedForMove(callID) else { return }
         Task {
             await pipeline.setTitle(callID: callID, title)
             refresh()
@@ -1683,6 +1732,7 @@ final class AppController: ObservableObject {
     }
 
     func setTags(callID: String, _ tags: [String]) {
+        guard !refusedForMove(callID) else { return }
         Task {
             await pipeline.setTags(callID: callID, tags)
             refresh()
@@ -1692,7 +1742,7 @@ final class AppController: ObservableObject {
     /// Deletes one shared screen of a meeting: its picture, its entry in the frames list, and its line in the
     /// transcript. The note is written again.
     func deleteScreen(callID: String, file: String) {
-        guard !isSecondCopy else { return }
+        guard !isSecondCopy, !refusedForMove(callID) else { return }
         Task {
             await pipeline.deleteScreen(callID: callID, file: file)
             // After the file is gone, so a decode that was on its way cannot put the picture back in memory.
@@ -1732,10 +1782,18 @@ final class AppController: ObservableObject {
         guard let llm = languageModel else { throw MissingAPIKey(service: aiProvider.displayName) }
         // The chat's `remember` tool writes the coach's profile.
         defer { coachVersion += 1 }
-        return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: meetings, paths: paths,
+        // The call that records now carries the owner's choice from memory, as every other gate reads it: the list's
+        // copy of its record gets the mark only after the recorder's write and a refresh.
+        let records = meetings.map { r -> CallRecord in
+            guard r.status == .recording, let to = choice(forCall: r.id).moveTo else { return r }
+            var m = r
+            m.moveTo = to
+            return m
+        }
+        return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: records, paths: paths,
                                                                           about: callID, personaTraits: personasOn,
                                                                           actions: isInert ? nil : chatActionHost, earlier: earlier, questionID: questionID,
-                                                                          onAction: onAction,
+                                                                          onAction: onAction, liveOff: liveOff,
                                                                           onStep: onStep)
     }
 
@@ -1780,6 +1838,8 @@ final class AppController: ObservableObject {
     func deleteMeeting(_ callID: String) {
         guard !isSecondCopy else { return }
         Task {
+            // A meeting whose move waits: the move is cancelled first when it still can be; else nothing changes.
+            guard await cancelMoveBeforeDelete(callID) else { return }
             // The pipeline first: it refuses a call that is still processing, and then the cloud copy must stay.
             // It gives back the record from disk, which has the archive key even when the list here is older.
             if let removed = await pipeline.remove(callID: callID) {
@@ -1913,20 +1973,23 @@ final class AppController: ObservableObject {
     }
 
     func transcribeAgain(_ id: String, speakers: Int?) {
+        guard !refusedForMove(id) else { return }
         Task(priority: .utility) { await track { await self.pipeline.transcribeAgain(id, speakers: speakers) } }
     }
 
     func restorePreviousTranscript(_ id: String) {
+        guard !refusedForMove(id) else { return }
         Task(priority: .utility) { await track { await self.pipeline.restorePreviousTranscript(id) } }
     }
 
     func regenerateSummary(_ id: String) {
+        guard !refusedForMove(id) else { return }
         Task(priority: .utility) { await track { await self.pipeline.regenerateSummary(id) } }
     }
 
     /// Joins the meetings into the earliest one and opens it.
     func mergeMeetings(_ ids: [String]) {
-        guard !isSecondCopy else { return }
+        guard !isSecondCopy, !ids.contains(where: refusedForMove) else { return }
         Task {
             let merged = await pipeline.merge(callIDs: ids)
             refresh()
@@ -1969,6 +2032,7 @@ final class AppController: ObservableObject {
     }
 
     func retry(_ callID: String) {
+        guard !refusedForMove(callID) else { return }
         Task(priority: .utility) {
             await track { await self.pipeline.retry(callID) }
         }
@@ -2014,8 +2078,36 @@ final class AppController: ObservableObject {
                 return
             }
             Task { @MainActor in self.update(record); self.refresh() }
+            Task { @MainActor in self.endOfCall(record) }
+        }
+    }
+
+    /// The end of a kept call: processed here, or moved as "recorded" to the profile it is for, or held for the owner.
+    func endOfCall(_ record: CallRecord) {
+        // The owner's latest choice, in memory, is read after the recorder's last write: a choice in the same instant as
+        // the end that missed the record is written now, before anything else reads the mark.
+        let latest: MoveAfterCall.Choice? = if let c = callChoice, c.callID == record.id { c.choice } else { carry.keptChoice(of: record.id) }
+        let settled = MoveAfterCall.settled(record, latest: latest)
+        if settled.moveTo != record.moveTo {
+            Task { @MainActor in
+                // The pipeline refuses nothing here but a call in flight, which an ended call is not yet.
+                _ = await pipeline.setMoveTarget(callID: record.id, settled.moveTo)
+                refresh()
+                endOfCall(settled)
+            }
+            return
+        }
+        switch MoveAfterCall.atEnd(record, latest: latest, targets: moveTargets.map(\.id)) {
+        case .process:
             // Utility: the next call may start in the same minute, and the call app comes first.
             Task(priority: .utility) { @MainActor in await self.track { await self.pipeline.process(record.id) } }
+        case .move(let to):
+            moveAfterCall(record.id, to: to)
+        case .hold:
+            // A guess is held with its reason saved (`MoveEnded`, `.notSure`): the row asks the owner.
+            checkMoves()
+        case .nothing:
+            break
         }
     }
 
@@ -2045,22 +2137,26 @@ final class AppController: ObservableObject {
     /// Call starts whose recording failed, by start time, until the UI has seen them.
     private var failedStarts: Set<Date> = []
 
-    private func show(_ event: DetectorEvent) {
+    private func show(_ event: DetectorEvent, meetingID: String?) {
         if case .recording(.inPerson, _) = status { return }
         switch event {
-        case .started(let platform, _, let at):
+        case .started(let platform, let bundleID, let at):
             notifier.clearUnconfirmed()
             // The failure can arrive first: a recording that did not start must not show as one.
             if failedStarts.remove(at) != nil { return }
             status = .recording(platform, since: at)
             isPaused = false
             isMuted = false
+            // Before the live transcript and any other send, from the detector's own values: the same call going on
+            // keeps the owner's choice, for sure or as a guess.
+            carryChoice(to: MoveAfterCall.Call(callID: CallRecorder.callID(for: at), platform: platform, bundleID: bundleID,
+                                               meetingID: meetingID, start: at))
             startLive(reset: true)
-        case .ended:
+        case .ended(let at, _):
             failedStarts.removeAll()
             updater.callEnded()
             summarizeLiveChats()
-            forgetLiveCall()
+            forgetLiveCall(end: at)
             status = .idle
             isPaused = false
             isMuted = false
@@ -2122,6 +2218,7 @@ final class AppController: ObservableObject {
     }
 
     private func runHousekeeping() async {
+        checkMoves()
         consumeBackupMoveRequest()
         lookAgainForInvites()
         await track { await self.pipeline.runPending() }
@@ -2353,6 +2450,11 @@ final class LiveTranscriptModel: ObservableObject {
         var snapshot = pending
         snapshot.clock = clock?()
         saves.async { try? snapshot.save(to: url) }
+    }
+
+    /// Deletes the saved file after any save on its way, so nothing puts it back.
+    func removeFile(_ url: URL) {
+        saves.async { try? FileManager.default.removeItem(at: url) }
     }
 
     func reset() {

@@ -185,6 +185,32 @@ public final class VoiceLibrary: @unchecked Sendable {
         }
     }
 
+    /// Takes back every sample that one call taught, by the samples' own call id, whatever the person's name is now (a
+    /// rename or a merge since does not hide one). For a meeting that left this profile. Needs the samples' own record;
+    /// without it nothing changes.
+    public func forgetSamples(ofCall callID: String) throws {
+        try lock.withLock {
+            guard let attached else { return }
+            let mine = attached.samples.samples.filter { $0.callID == callID }
+            guard !mine.isEmpty else { return }
+            var changed: [Int] = []
+            for i in storage.indices {
+                guard let person = attached.people.id(forVoiceName: storage[i].name, isOwner: storage[i].isOwner) else { continue }
+                let gone = mine.filter { $0.personID == person }.map(\.vector)
+                guard storage[i].embeddings.contains(where: { gone.contains($0) }) else { continue }
+                storage[i].embeddings.removeAll { gone.contains($0) }
+                if storage[i].embeddings.isEmpty { storage[i].provisional = nil; storage[i].provisionalStart = nil }
+                changed.append(i)
+            }
+            if !changed.isEmpty {
+                try save()
+                for i in changed { attached.sync(storage[i], among: storage) }
+            }
+            // A sample whose voice is gone from the library already (a deleted voice) goes too.
+            try attached.samples.change { $0.removeAll { $0.callID == callID } }
+        }
+    }
+
     /// The first address of a person, as the edit sheet sets it. A blank one clears the first address; the others
     /// stay. An address the person has already becomes the first, and none goes. An address another person has
     /// stays theirs: the answer says whose, and nothing changes. A name with no profile gets one without voice

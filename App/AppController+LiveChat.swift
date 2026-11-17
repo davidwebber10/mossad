@@ -65,6 +65,8 @@ extension AppController {
     func liveChatAnswer(_ question: String, history: [ChatMessage], record: CallRecord, earlier: [ChatActionRecord] = [],
                         questionID: UUID = UUID(), onAction: (@Sendable (ChatActionRecord) -> Void)? = nil,
                         onStep: @escaping @Sendable (String) -> Void, onText: @escaping @Sendable (String) -> Void) async throws -> ChatReply {
+        // A call for another profile: nothing of it goes to this profile's provider (the panel says why).
+        guard MoveAfterCall.allows(.liveChat, choice(forCall: record.id)) else { throw LiveOffError(reason: MoveAfterCall.liveOff(choice(forCall: record.id)) ?? .forOtherProfile) }
         guard let llm = liveChatLLM else { throw MissingAPIKey(service: aiProvider.displayName) }
         let small = liveSummaryLLM ?? llm
         let snapshot = live.snapshot, owner = ownerName, records = meetings, paths = paths, cache = liveSummaries
@@ -110,9 +112,17 @@ extension AppController {
             let found = await Task.detached(priority: .utility) { store.all().filter { ids.contains($0.id) } }.value
             for chat in found {
                 guard let callID = chat.callID else { continue }
+                // The chats of a call for another profile go with it; they are not summarized here.
+                guard MoveAfterCall.allows(.chatSummary, choice(forCall: callID)) else { continue }
                 let kept = FileManager.default.fileExists(atPath: paths.callDirectory(callID).appendingPathComponent(CallRecord.fileName).path)
                 if kept { summarizeChat(chat.id) } else { forgetLiveChats(callID: callID) }
             }
         }
     }
+}
+
+/// A live chat answer refused because of the call's choice of profile: its words are the reason's.
+struct LiveOffError: LocalizedError {
+    let reason: LiveOffReason
+    var errorDescription: String? { reason.text }
 }

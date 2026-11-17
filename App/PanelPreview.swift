@@ -22,6 +22,31 @@ extension AppController {
     }
 }
 
+extension AppController {
+    /// A preview's look at the panel's part for a call that records, for the made-up call of `MOSSAD_CALL_FOR`: the
+    /// status, the controls, and "This call is for". Nothing records. Never in a normal run.
+    func openCallPanelPreview() {
+        DevHooks.callFor(self)
+        let since = Date().addingTimeInterval(-1500)
+        let content = PanelPreviewBackdrop {
+            RecordingStatus(platform: .meet, since: since)
+                .environmentObject(self)
+                .frame(width: 320)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, 6)
+                .mossadGlass(cornerRadius: 18)
+                .shadow(color: .black.opacity(0.28), radius: 20, y: 16)
+        }
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 760), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        w.title = "Call panel preview"
+        w.isReleasedWhenClosed = false
+        w.contentView = NSHostingView(rootView: content)
+        w.center()
+        w.orderBack(nil)
+        panelPreviewWindow = w
+    }
+}
+
 private struct PanelPreviewBackdrop<Content: View>: View {
     @Environment(\.colorScheme) private var scheme
     @ViewBuilder let content: Content
@@ -62,6 +87,9 @@ extension AppController {
         model.track(self)
         let state = env["MOSSAD_ASK_STATE"] ?? ""
         if state == "off" { model.previewOff = .setting }
+        // `MOSSAD_CALL_FOR`: the made-up call is for another profile, or was taken back.
+        DevHooks.callFor(self)
+        if let off = liveOff, off.chatOff { model.previewOff = off }
         if state == "ended" {
             model.previewEnded = true
             model.track(self)

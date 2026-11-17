@@ -54,7 +54,8 @@ public final class CloudArchive: @unchecked Sendable {
     public func sync(keepLocalDays: Int?, now: Date = Date(), pipeline: Pipeline, holdLeftovers: Bool = false) async -> Report {
         var report = Report()
         await retryDeletes()
-        for r in ProcessingQueue(paths: paths).allRecords() where r.status == .written {
+        // A meeting whose move waits is not uploaded: its backup copy would outlive the removal's backup step.
+        for r in ProcessingQueue(paths: paths).allRecords() where r.status == .written && r.moveTo == nil {
             let dir = paths.callDirectory(r.id)
             let local = Recording.url(in: dir)
             let size = Self.size(local)
@@ -130,6 +131,35 @@ public final class CloudArchive: @unchecked Sendable {
 
     static func size(_ file: URL) -> Int64? {
         ((try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? NSNumber)?.int64Value
+    }
+
+    /// The archived recording of a record as a file in `folder`, checked: the size the record names, and its SHA-256
+    /// when the record has one. Nil when the place is not set up here, does not answer, or gave another file. The
+    /// caller removes the file. `download` is the place's own download; a test gives its own.
+    public func fetch(_ r: CallRecord, into folder: URL,
+                      download: ((any ArchiveBackend, String) async throws -> URL)? = nil) async -> URL? {
+        guard let object = r.archived, let place = place(of: object) else { return nil }
+        let session = session
+        guard let file = try? await (download ?? { place, key in try await place.download(key, session: session) })(place, object.key) else { return nil }
+        let ok = await Task.detached(priority: .utility) { () -> Bool in
+            guard let size = r.cloudSize, Self.size(file) == size else { return false }
+            if let hash = r.cloudHash { return (try? FileHash.sha256(of: file)) == hash }
+            return true
+        }.value
+        guard ok else {
+            try? FileManager.default.removeItem(at: file)
+            return nil
+        }
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let to = folder.appendingPathComponent(Recording.fileName)
+            try? FileManager.default.removeItem(at: to)
+            try FileManager.default.moveItem(at: file, to: to)
+            return to
+        } catch {
+            try? FileManager.default.removeItem(at: file)
+            return nil
+        }
     }
 
     /// The place that holds an object, when it is set up here. A file on a server is held only by the server with
@@ -230,24 +260,45 @@ public final class CloudArchive: @unchecked Sendable {
         (try? JSONDecoder().decode([ArchivedObject].self, from: Data(contentsOf: file))) ?? []
     }
 
-    private static func changeDeletes(in file: URL, _ change: (inout [ArchivedObject]) -> Void) {
+    /// True when the list on disk is as asked (also when nothing changed).
+    @discardableResult
+    private static func changeDeletes(in file: URL, _ change: (inout [ArchivedObject]) -> Void) -> Bool {
         deletesLock.withLock {
             var list = pendingDeletes(in: file)
             let before = list
             change(&list)
-            guard list != before else { return }
+            guard list != before else { return true }
             try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if list.isEmpty { try? FileManager.default.removeItem(at: file) } else { try? JSONEncoder().encode(list).write(to: file, options: .atomic) }
+            if list.isEmpty { return (try? FileManager.default.removeItem(at: file)) != nil }
+            return (try? JSONEncoder().encode(list).write(to: file, options: .atomic)) != nil
         }
     }
 
-    /// Remembers the backup copies of a deleted meeting when no place is set up to remove them from now.
-    public static func rememberDeletes(of r: CallRecord, paths: Paths) {
-        let file = paths.sync.appendingPathComponent("backup-deletes.json")
-        for object in Set([r.archived].compactMap { $0 } + (r.cloudLeftovers ?? [])) { rememberDelete(object, in: file) }
+    /// The `backup` step of a move: each copy removed now, or remembered for the next pass. A remembered delete counts as
+    /// done only once it is saved in `backup-deletes.json`; the next backup pass then removes it (`retryDeletes`), as for
+    /// the delete of a meeting. False when a copy could be neither: the step is not done.
+    public func deleteForMove(_ r: CallRecord) async -> Bool {
+        var ok = true
+        for object in Set([r.archived].compactMap { $0 } + (r.cloudLeftovers ?? [])) {
+            if let place = place(of: object), await place.remove(object.key) { continue }
+            Log.error("The backup copy of \(r.id) could not be removed yet. Mossad tries again")
+            ok = Self.rememberDelete(object, in: deletesFile) && ok
+        }
+        return ok
     }
 
-    static func rememberDelete(_ object: ArchivedObject, in file: URL) {
+    /// Remembers the backup copies of a deleted meeting when no place is set up to remove them from now.
+    /// False when one could not be saved.
+    @discardableResult
+    public static func rememberDeletes(of r: CallRecord, paths: Paths) -> Bool {
+        let file = paths.sync.appendingPathComponent("backup-deletes.json")
+        var ok = true
+        for object in Set([r.archived].compactMap { $0 } + (r.cloudLeftovers ?? [])) { ok = rememberDelete(object, in: file) && ok }
+        return ok
+    }
+
+    @discardableResult
+    static func rememberDelete(_ object: ArchivedObject, in file: URL) -> Bool {
         changeDeletes(in: file) { if !$0.contains(object) { $0.append(object) } }
     }
 

@@ -17,6 +17,15 @@ public actor ProfileWorker {
         public var macCalendarAuthorized: @Sendable () -> Bool
         public var callRecords: @Sendable () -> Bool
         public var now: @Sendable () -> Date
+        /// This profile's id: a moved meeting is taken in only when its marker is addressed to it.
+        public var profileID: String = "default"
+        /// Where another profile's folder is now: `MoveRules.target` with the registry read again at each call.
+        public var target: @Sendable (String) -> MoveRules.TargetPlace = { _ in .unknown }
+        /// The DEBUG proofs: the process ends when a move's ledger says "copied", or a take-in says "takingIn"; "refuse"
+        /// makes the take-in's rename into `Audio` fail as on another volume, after its first half.
+        public var proofStop: String? = nil
+        /// The DEBUG proof of a Cancel during a long copy: the copy waits this long at its first file.
+        public var proofHold: TimeInterval? = nil
 
         public init(paths: Paths, settings: ServiceSettings, key: @escaping @Sendable (APIKey) -> String?, google: any GoogleSecrets,
                     remember: @escaping @Sendable (String, Double) -> Void, hasICloud: Bool, madeUpRegistry: Bool,
@@ -95,6 +104,8 @@ public actor ProfileWorker {
     private var changes = 0
     private var digestSent: String?
     private var digestPending: (key: String, parts: [SharedPayload])?
+    private let moveSource: MoveSource
+    private let moveIntake: MoveIntake
     /// The start dates this worker set, once each, so a later pass does not move them.
     private var personaSince: Double?
     private var commitmentsSince: Double?
@@ -124,7 +135,105 @@ public actor ProfileWorker {
                             // The pipeline ties it to this gate (`ScreenStep.gated(by:)`): while any call records, it reads
                             // one frame at a time at background priority with a rest between frames, as in the window app.
                             screenStep: services.screenReader.map { ScreenStep(reader: $0) })
+        (moveSource, moveIntake) = Self.moves(setup, pipeline: pipeline, library: library, usage: usage, archive: archive)
     }
+
+    /// The two halves of a move in this worker. It goes on with a move of its own profile and never starts one.
+    static func moves(_ setup: Setup, pipeline: Pipeline, library: VoiceLibrary, usage: UsageLog,
+                      archive: CloudArchive?) -> (MoveSource, MoveIntake) {
+        let paths = setup.paths, settings = setup.settings
+        let backs = RunMode.worker.runs(.backup, madeUpRegistry: setup.madeUpRegistry)
+        let actions = MoveRemoval.Actions(
+            forgetPersona: { PersonaStore(paths: paths).delete($0) },
+            coach: { change in
+                var profile = try CoachProfile.load(from: paths.coach)
+                let before = profile
+                change(&profile)
+                if profile != before { try profile.save(to: paths.coach) }
+            },
+            stopShares: { callID in
+                // A share link is marked as stopping; the window app tells the server.
+                var book = ShareBook.load(from: paths.shares)
+                let before = book
+                book.markStopping(callID: callID)
+                if book != before { try? book.save(to: paths.shares) }
+            },
+            backup: { r in
+                // A copy that cannot be removed now is remembered by the archive, and tried again at each pass.
+                // The answer is the real one: a copy neither removed nor remembered leaves the step not done.
+                if backs, let archive { return await archive.deleteForMove(r) }
+                return CloudArchive.rememberDeletes(of: r, paths: paths)
+            },
+            removeFolder: { await pipeline.removeMoved(callID: $0, target: $1) })
+        var stop: @Sendable (String) throws -> Void = { _ in }
+        #if DEBUG
+        let proof = setup.proofStop, hold = setup.proofHold
+        if proof != nil || hold != nil {
+            let once = ProofOnce()
+            stop = { label in
+                // The proof of a Cancel during a long copy: the copy waits at its first file.
+                if let hold, label.hasPrefix("copy "), once.first() {
+                    Log.info("Proof: the copy is held for \(Int(hold)) s")
+                    Thread.sleep(forTimeInterval: hold)
+                }
+                guard let proof, Self.proofStops(proof, paths: paths) else { return }
+                Log.info("Worker: stops for the proof at \(proof)")
+                Log.flush()
+                exit(0)
+            }
+        }
+        #endif
+        let source = MoveSource(MoveSource.Setup(
+            paths: paths, profileID: setup.profileID, pipeline: pipeline, library: library, ownerName: { settings.ownerName },
+            target: setup.target,
+            fetch: { r, folder in
+                guard backs, let archive else { return nil }
+                return await archive.fetch(r, into: folder)
+            },
+            usage: { usage.events(forCall: $0).events }, actions: actions, now: setup.now, stop: stop),
+            calling: setup.callRecords)
+        var rename: @Sendable (String, String) -> Int32 = MoveFiles.exclusive
+        #if DEBUG
+        // The proof of a refusal after the first half: the rename into `Audio` meets "another volume".
+        if setup.proofStop == "refuse" { rename = { from, to in to.hasPrefix(paths.audio.path + "/") ? EXDEV : MoveFiles.exclusive(from, to) } }
+        #endif
+        let intake = MoveIntake(paths: paths, me: setup.profileID, library: library, ownerName: { settings.ownerName },
+                                voiceFingerprints: { settings.voiceFingerprints }, stop: stop, rename: rename)
+        return (source, intake)
+    }
+
+    #if DEBUG
+    final class ProofOnce: @unchecked Sendable {
+        private let lock = NSLock()
+        private var done = false
+        func first() -> Bool { lock.withLock { defer { done = true }; return !done } }
+    }
+
+    /// The DEBUG proof of the owner's Cancel: cancels the move of this folder that is not done, as the menu would.
+    public func proofCancel() async {
+        guard setup.madeUpRegistry else { return Log.info("Proof: only on a made-up registry") }
+        guard let out = MoveOut.all(setup.paths).moves.first(where: { $0.state != .done }) else { return Log.info("Proof: no move to cancel") }
+        let answer = await moveSource.cancelMove(out.callID)
+        Log.info("Proof: the owner's Cancel of \(out.callID): \(answer)")
+    }
+
+    /// The proof's state on disk: a ledger of this folder that says "copied", or a claimed marker in its `Incoming`
+    /// that says "takingIn".
+    static func proofStops(_ proof: String?, paths: Paths) -> Bool {
+        switch proof {
+        case "copied":
+            return MoveOut.all(paths).moves.contains { $0.state == .copied }
+        case "takingIn":
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: paths.incoming.path)) ?? []
+            return names.contains { name in
+                if case .claimed(let m) = MoveMarker.look(paths.incoming.appendingPathComponent(name)) { return m.intake == .takingIn }
+                return false
+            }
+        default:
+            return false
+        }
+    }
+    #endif
 
     /// The services from the profile's own settings and Keychain.
     static func build(_ setup: Setup, usage: UsageLog) -> Services {
@@ -139,8 +248,8 @@ public actor ProfileWorker {
         return Services(transcriber: s.transcriber(key: key, usage: usage), summarizer: s.summarizer(key: key, usage: usage),
                         embeddings: FluidEmbeddingProvider(), calendar: WorkerCalendar(mac: mac, macSource: macSource, google: google),
                         llm: s.languageModel(key: key, usage: usage),
-                        main: stores.main.map { CloudSync(paths: paths, store: $0.store) },
-                        mirror: stores.mirror.map { CloudSync(paths: paths, store: $0.store) },
+                        main: stores.main.map { CloudSync(paths: paths, store: $0.store, leaving: { MoveOut.syncHeld(paths) }) },
+                        mirror: stores.mirror.map { CloudSync(paths: paths, store: $0.store, leaving: { MoveOut.syncHeld(paths) }) },
                         archive: s.archive(key: key, paths: paths, server: server), screenReader: VisionScreenReader())
     }
 
@@ -172,17 +281,76 @@ public actor ProfileWorker {
             }
             referencesReady = true
         }
+        if await moves() { ran.insert(.takeInMoved) }
         writeStatus()
         ran.insert(.statusFile)
         return ran
     }
 
+    #if DEBUG
+    /// The DEBUG proof: moves the one written meeting of this folder to that profile. A worker never starts a move
+    /// otherwise. It waits up to a minute for the meeting to be written.
+    public func proofMove(to profile: String) async {
+        guard setup.madeUpRegistry else { return Log.info("Proof: only on a made-up registry") }
+        var written: [CallRecord] = []
+        for _ in 0..<30 {
+            written = ProcessingQueue(paths: setup.paths).allRecords().filter { $0.status == .written && $0.moveTo == nil }
+            if written.count == 1 { break }
+            try? await Task.sleep(for: .seconds(2))
+        }
+        guard written.count == 1, let r = written.first else { return Log.info("Proof: no one written meeting to move") }
+        let started = await moveSource.start(r.id, to: profile)
+        Log.info("Proof: the move of \(r.id) to \(profile): \(started)")
+        if await moves() { _ = await pass([.queue], moved: true) }
+    }
+    #endif
+
+    // MARK: Moves
+
+    /// The duty `takeInMoved`: goes on with this profile's own moves, then takes in what waits. True when a meeting
+    /// came in, left, or a move ended. A look that finds nothing reads two folder names and writes nothing.
+    func moves() async -> Bool {
+        guard runs(.takeInMoved) else { return false }
+        // The leftovers of moves to this profile go after a week, also when no move has work.
+        moveIntake.cleanUpHourly()
+        guard referencesReady, MoveRules.hasWork(setup.paths) else { return false }
+        // Its own removals first: a meeting that comes back waits while this profile still removes it.
+        let events = await moveSource.runAll()
+        let ended = events.values.contains { event in
+            switch event {
+            case .moved, .cancelled: true
+            default: false
+            }
+        }
+        // The take-in hashes every file: it waits while a call records, and runs at the lowest priority.
+        let callRecords = setup.callRecords, intake = moveIntake
+        let takeIn = MoveWorkPlan.plan(.takeIn, callRecording: callRecords(), worker: true)
+        let taken = takeIn == .hold ? [] : ((try? await HeavyWork.run(priority: takeIn.priority) {
+            intake.run(held: { MoveWorkPlan.plan(.takeIn, callRecording: callRecords(), worker: true) == .hold })
+        }) ?? [])
+        for (callID, event) in events.sorted(by: { $0.key < $1.key }) {
+            switch event {
+            case .moved: Log.info("Worker: a meeting moved to another profile")
+            case .cancelled(let why): Log.info("Worker: a move ended without moving (\(callID), \(why.rawValue))")
+            default: break
+            }
+        }
+        for callID in taken { Log.info("Worker: a meeting moved here from another profile (\(callID))") }
+        return ended || !taken.isEmpty
+    }
+
     // MARK: A pass
 
     public func pass(_ work: [WorkerPace.Work]) async -> Pass {
+        await pass(work, moved: moves())
+    }
+
+    /// A pass after the look at the moves: the queue also runs when a meeting came in or left.
+    private func pass(_ work: [WorkerPace.Work], moved: Bool) async -> Pass {
         var pass = Pass()
         let before = Self.stamp(setup.paths)
-        if work.contains(.queue) { await queueDuties(&pass) }
+        if moved { pass.ran.insert(.takeInMoved) }
+        if work.contains(.queue) || moved { await queueDuties(&pass) }
         if work.contains(.sync), !calling, runs(.sync) {
             await sync(&pass)
             if pass.received > 0 { await queueDuties(&pass) }
@@ -343,7 +511,16 @@ public actor ProfileWorker {
                     Log.info("Worker: a pass changed meetings; \(done.received) changes from other devices")
                 }
             }
-            try? await Task.sleep(for: .seconds(sleep))
+            // Sleeps of 15 s at most, with a look at the moves after each: two folder listings when nothing waits.
+            var slept: TimeInterval = 0
+            while slept < sleep, !Task.isCancelled {
+                let piece = min(MoveRules.look, sleep - slept)
+                try? await Task.sleep(for: .seconds(piece))
+                slept += piece
+                guard MoveRules.hasWork(setup.paths), await moves() else { continue }
+                let done = await pass([.queue], moved: true)
+                if done.changed { pace.changed() }
+            }
         }
     }
 
@@ -355,7 +532,8 @@ public actor ProfileWorker {
 
     static func writeStatus(paths: Paths, settings: ServiceSettings, key: (APIKey) -> String?, failures: Failures, now: Date) {
         let f = failures.values
-        let status = WorkerStatus.make(records: ProcessingQueue(paths: paths).allRecords(), missing: settings.missingKeys(key: key),
+        let status = WorkerStatus.make(records: ProcessingQueue(paths: paths).allRecords(), incoming: MoveIntake.waitingCount(paths),
+                                       missing: settings.missingKeys(key: key),
                                        backupFailed: f.backup, syncFailed: f.sync, now: now)
         do { try status.save(root: paths.root) } catch { Log.error("Worker: the status was not saved: \(error)") }
     }

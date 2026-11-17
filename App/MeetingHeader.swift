@@ -107,7 +107,7 @@ struct MeetingHeader: View {
 
     @ViewBuilder
     private var banner: some View {
-        if let step = ProcessingStep(status: record.status), record.summary != nil {
+        if let step = ProcessingStep(status: record.status), record.summary != nil, record.moveTo == nil {
             ProcessingCard(record: record, step: step).padding(.top, Space.l)
         } else if record.status == .failed {
             ErrorCard(error: failure, retryTitle: "Retry now", retry: { controller.retry(record.id) }, note: "The audio is saved.")

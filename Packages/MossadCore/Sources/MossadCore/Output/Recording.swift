@@ -41,7 +41,7 @@ public enum Recording {
         ((try? FileManager.default.contentsOfDirectory(at: audioRoot, includingPropertiesForKeys: nil)) ?? []).filter { dir in
             // The file check first: nearly every call has its recording, and then its record is not read at all.
             guard !FileManager.default.fileExists(atPath: url(in: dir).path),
-                  let r = try? RecordCache.shared.record(in: dir), r.status == .written else { return false }
+                  let r = try? RecordCache.shared.record(in: dir), r.status == .written, r.moveTo == nil else { return false }
             // A recording that lives in the archive, or whose tracks are gone (the 30 day rule), cannot be made
             // again here. Listing it gave one false error line for each such meeting at each pass.
             guard !hasBackup(r) else { return false }

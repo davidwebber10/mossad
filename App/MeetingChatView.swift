@@ -30,7 +30,7 @@ struct MeetingChatView: View {
                     if running { ChatAnswering(steps: steps, callID: record.id).id("running") }
                     if let error { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
                     // Questions not asked yet, under the last answer.
-                    if !messages.isEmpty, !running, !followUps.isEmpty { chips(followUps) }
+                    if !messages.isEmpty, !running, !followUps.isEmpty, controller.chatOff(record.id) == nil { chips(followUps) }
                 }
                 // Room for the floating composer, as the canvas leaves 80 pt under the last answer.
                 .detailColumn(top: top, bottom: 80)
@@ -38,7 +38,7 @@ struct MeetingChatView: View {
             .onChange(of: messages.count) { _, _ in withAnimation { proxy.scrollTo(messages.last?.id, anchor: .top) } }
             .onChange(of: steps.count) { _, _ in withAnimation { proxy.scrollTo("running", anchor: .bottom) } }
         }
-        .floatingComposer(composer)
+        .floatingComposer(field)
         .environment(\.openURL, OpenURLAction { url in
             if let link = ChatLink.parse(url), link.callID == record.id, let at = link.at {
                 seek(at)
@@ -57,7 +57,8 @@ struct MeetingChatView: View {
             Text("Ask about this meeting").font(.system(size: Rhythm.leadSize, weight: .medium))
             Text("Claude reads this meeting's summary and transcript, and can look at your other meetings when that helps. Times in the answer play the moment.")
                 .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
-            chips(examples).padding(.top, 4)
+            // No question to tap while the meeting moves: the field's sentence says why.
+            if controller.chatOff(record.id) == nil { chips(examples).padding(.top, 4) }
         }
         .frame(maxWidth: ChatThread.answerMax, alignment: .leading)
     }
@@ -88,6 +89,11 @@ struct MeetingChatView: View {
         "Write a short follow-up email from me.",
     ]
 
+    /// The field, or the sentence in its place while the meeting moves to another profile.
+    @ViewBuilder private var field: some View {
+        if let off = controller.chatOff(record.id) { MoveChatOff(text: off) } else { composer }
+    }
+
     private var composer: some View {
         FloatingComposer(prompt: messages.isEmpty ? "Ask about this meeting" : "Ask a follow-up", text: $question,
                          focused: $focused, hasLeading: chat != nil, send: { send() }) {
@@ -116,7 +122,7 @@ struct MeetingChatView: View {
 
     private func send(again: ChatMessage? = nil) {
         let q = (again?.text ?? question).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty, !running else { return }
+        guard !q.isEmpty, !running, controller.chatOff(record.id) == nil else { return }
         var current = chat ?? {
             var c = Chat(title: Chat.title(from: q))
             c.callID = record.id
