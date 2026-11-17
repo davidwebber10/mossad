@@ -146,4 +146,15 @@ final class WorkerLaunchTests: XCTestCase {
         XCTAssertEqual(WorkerSwitch.afterFailure(of: .saveActive), [.resumeWorkers])
         XCTAssertEqual(WorkerSwitch.afterFailure(of: .quit), [])
     }
+
+    func testWorkersStoppedForAnUpdateComeBackWhenTheInstallDoesNotGoOn() {
+        typealias E = WorkerLaunch.UpdateEvent
+        let table: [(Bool, E, Bool)] = [
+            (true, .aborted, true), (true, .cycleEnded, true), (true, .willRelaunch, false),
+            (false, .aborted, false), (false, .cycleEnded, false), (false, .willRelaunch, false),
+        ]
+        for (stopped, event, resumes) in table {
+            XCTAssertEqual(WorkerLaunch.resumesAfter(event, stoppedForInstall: stopped), resumes, "\(stopped) \(event)")
+        }
+    }
 }

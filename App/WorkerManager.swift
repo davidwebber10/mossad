@@ -45,6 +45,11 @@ final class WorkerManager {
         self.recording = recording
         Log.info("Workers: starting \(profiles.count) for the other profiles")
         write(.start) { [weak self] in self?.profiles.forEach { self?.launch($0, failures: 0) } }
+        startTimer()
+    }
+
+    private func startTimer() {
+        guard timer?.isValid != true else { return }
         let t = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.readLines() }
         }
@@ -82,9 +87,11 @@ final class WorkerManager {
         readLines()
     }
 
-    /// After a refused switch or delete: `stopping` false in the file, and the workers start again.
+    /// After a refused switch or delete, or an update that did not install: `stopping` false in the file, and the
+    /// workers start again.
     func resume(recording: Bool) {
         guard started else { return }
+        startTimer()
         stopping = false
         stopped = []
         self.recording = recording

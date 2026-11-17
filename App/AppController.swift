@@ -227,7 +227,11 @@ final class AppController: ObservableObject {
     /// Checks GitHub releases for new versions; never in an inert copy.
     private(set) lazy var updater = Updater(start: !isInert && !AppIdentity.current.isPreview,
                                             isRecording: { [weak self] in self?.isRecording ?? false },
-                                            beforeInstall: { [weak self] in self?.workers?.quit() })
+                                            beforeInstall: { [weak self] in self?.workers?.quit() },
+                                            afterNoInstall: { [weak self] in
+                                                guard let self else { return }
+                                                self.workers?.resume(recording: self.isRecording)
+                                            })
     /// Whether the main window can be seen. A window on another desktop or behind others keeps its views
     /// alive, so animations check this and stop while it is hidden.
     @Published private(set) var windowVisible = false

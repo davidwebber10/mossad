@@ -60,6 +60,15 @@ public enum WorkerLaunch {
     /// The `failures` of an exit: the count so far, or 0 when the worker ran `longRun` or more.
     public static func failures(after count: Int, ranSeconds: TimeInterval) -> Int { ranSeconds >= longRun ? 0 : count }
 
+    /// What Sparkle says after the app stopped its workers for an install: it aborted (an error, or the owner
+    /// cancelled the authorization), its cycle ended with the app still running, or it relaunches now.
+    public enum UpdateEvent: Sendable { case aborted, cycleEnded, willRelaunch }
+
+    /// The workers come back when the install did not end this app.
+    public static func resumesAfter(_ event: UpdateEvent, stoppedForInstall: Bool) -> Bool {
+        stoppedForInstall && event != .willRelaunch
+    }
+
     /// A worker's whole arguments: nothing else, never a secret.
     public static func arguments(for profile: Profile) -> [String] { ["--profile", profile.id, argument] }
 

@@ -14,6 +14,10 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
     private let isRecording: () -> Bool
     /// Runs right before Sparkle installs and relaunches: the workers of the other profiles stop first.
     private let beforeInstall: () -> Void
+    /// Runs when the install did not end the app after `beforeInstall`: the workers come back.
+    private let afterNoInstall: () -> Void
+    /// `beforeInstall` ran, and Sparkle has not yet relaunched or given up.
+    private var stoppedForInstall = false
     @Published private(set) var canCheck = false
     @Published private(set) var waitingForCall = false
     /// The newer version Sparkle found, for the sidebar's card. Cleared when the owner skips it.
@@ -24,9 +28,10 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
     @Published private(set) var problem: FriendlyError?
     private var observation: AnyCancellable?
 
-    init(start: Bool, isRecording: @escaping () -> Bool, beforeInstall: @escaping () -> Void) {
+    init(start: Bool, isRecording: @escaping () -> Bool, beforeInstall: @escaping () -> Void, afterNoInstall: @escaping () -> Void) {
         self.isRecording = isRecording
         self.beforeInstall = beforeInstall
+        self.afterNoInstall = afterNoInstall
         super.init()
         // Sparkle's hosts keep the standard defaults they find when made: in a profile, the Mac's own domain.
         var macOwn = false
@@ -91,7 +96,7 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
         guard let install = pendingInstall else { return }
         pendingInstall = nil
         waitingForCall = false
-        beforeInstall()
+        stopForInstall()
         install()
     }
 
@@ -107,7 +112,28 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
     nonisolated func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
         Log.error("Update check stopped: \(error)")
         let problem = Self.problem(error)
-        MainActor.assumeIsolated { self.problem = problem; progress.aborted() }
+        MainActor.assumeIsolated { self.problem = problem; progress.aborted(); after(.aborted) }
+    }
+
+    /// Sparkle relaunches the app now: the workers stay stopped, and the quit ends them.
+    nonisolated func updaterWillRelaunchApplication(_ updater: SPUUpdater) {
+        MainActor.assumeIsolated { after(.willRelaunch) }
+    }
+
+    private func stopForInstall() {
+        stoppedForInstall = true
+        beforeInstall()
+    }
+
+    /// An install that stopped the workers and then did not end the app (an error, a cancelled authorization, no
+    /// relaunch) brings them back.
+    private func after(_ event: WorkerLaunch.UpdateEvent) {
+        let resumes = WorkerLaunch.resumesAfter(event, stoppedForInstall: stoppedForInstall)
+        if event == .willRelaunch || resumes { stoppedForInstall = false }
+        if resumes {
+            Log.info("Updates: the install did not go on; the background work starts again")
+            afterNoInstall()
+        }
     }
 
     nonisolated func userDidCancelDownload(_ updater: SPUUpdater) {
@@ -121,7 +147,7 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
     }
 
     nonisolated func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
-        MainActor.assumeIsolated { progress.cycleFinished() }
+        MainActor.assumeIsolated { progress.cycleFinished(); after(.cycleEnded) }
     }
 
     nonisolated func updater(_ updater: SPUUpdater, userDidMake choice: SPUUserUpdateChoice, forUpdate updateItem: SUAppcastItem,
@@ -138,7 +164,7 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
         let handler = InstallHandler(run: installHandler)
         return MainActor.assumeIsolated {
             guard isRecording() else {
-                beforeInstall()
+                stopForInstall()
                 return false
             }
             pendingInstall = handler.run
