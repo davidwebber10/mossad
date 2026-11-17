@@ -198,4 +198,22 @@ final class ForegroundWatchTests: XCTestCase {
         XCTAssertTrue(ForegroundState.mayWrite(over: .missing, pid: 500, alive: { _ in true }))
         XCTAssertTrue(ForegroundState.mayWrite(over: .unreadable, pid: 500, alive: { _ in true }))
     }
+
+    func testWhichWritesOfTheAppTakeTheFileOver() {
+        // The app is the app in front again at its start, after a switch it took back, and before each restart of a
+        // worker: a file of a dead app, a deleted file, or one that a gone new instance left must not stop it.
+        let table: [(ForegroundState.Write, Bool)] = [(.start, true), (.resume, true), (.restart, true), (.change, false), (.quit, false)]
+        for (write, takes) in table { XCTAssertEqual(write.takesOver, takes, "\(write)") }
+        XCTAssertEqual(Set(table.map { $0.0 }), Set(ForegroundState.Write.allCases))
+    }
+
+    func testTheParentOfAChildIsThisProcess() throws {
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        child.arguments = ["5"]
+        try child.run()
+        defer { child.terminate() }
+        XCTAssertEqual(ProcessFacts.parent(of: child.processIdentifier), ProcessInfo.processInfo.processIdentifier)
+        XCTAssertNil(ProcessFacts.parent(of: -1))
+    }
 }

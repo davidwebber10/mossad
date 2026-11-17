@@ -40,6 +40,19 @@ public struct ForegroundState: Codable, Equatable, Sendable {
         return .state(state)
     }
 
+    /// Each write of the app: its start, a `resume` (after a refused or taken-back switch, or a delete), a restart
+    /// of a worker, a change (a call, a stop for a switch), and the quit.
+    public enum Write: CaseIterable, Sendable {
+        case start, resume, restart, change, quit
+        /// The app is the app in front again: the file becomes its own, whoever wrote it last.
+        public var takesOver: Bool {
+            switch self {
+            case .start, .resume, .restart: true
+            case .change, .quit: false
+            }
+        }
+    }
+
     /// An app writes the file only while it is the app in front. Its start takes the file over (`takeOver`); any
     /// later write leaves a file of another app that lives (the new app after a switch) as it is, so an old app's
     /// quit cannot stop the new app's workers.
@@ -65,6 +78,16 @@ public enum ProcessFacts {
         guard sysctl(&name, 4, &info, &size, nil, 0) == 0, size > 0, info.kp_proc.p_pid == pid else { return nil }
         let t = info.kp_proc.p_un.__p_starttime
         return Date(timeIntervalSince1970: Double(t.tv_sec) + Double(t.tv_usec) / 1_000_000)
+    }
+
+    /// The parent of that pid, or nil when no such process lives.
+    public static func parent(of pid: Int32) -> Int32? {
+        guard pid > 0 else { return nil }
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var name: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&name, 4, &info, &size, nil, 0) == 0, size > 0, info.kp_proc.p_pid == pid else { return nil }
+        return info.kp_eproc.e_ppid
     }
 
     /// The pid lives, and its start time is within 1 s of `started` when one is given.

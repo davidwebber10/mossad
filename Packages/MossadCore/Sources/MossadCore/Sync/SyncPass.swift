@@ -20,6 +20,9 @@ public enum SyncPass {
         public var keptDigest: [SharedPayload]?
         /// Makes the digest; nil: no digest in this pass. Asked at most once.
         public var makeDigest: (@Sendable () -> [SharedPayload]?)?
+        /// Whether this pass takes the phone's recording notices, which marks them told. A worker leaves them, so the
+        /// window app of that profile tells the owner.
+        public var tellsRecordings = true
         /// The session of the server's config call: the shared one, or a test's.
         public var session: URLSession = .shared
 
@@ -78,7 +81,7 @@ public enum SyncPass {
                 result.failure = FriendlyError(error, context: .syncing, service: place)
                 Log.error("Sync with \(place) failed: \(error)")
             }
-            result.waiting = (try? await cloud.recordingNotices()) ?? []
+            if inputs.tellsRecordings { result.waiting = (try? await cloud.recordingNotices()) ?? [] }
         }
         if let mirror = inputs.mirror {
             do {

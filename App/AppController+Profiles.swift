@@ -49,6 +49,8 @@ extension AppController {
     /// `MOSSAD_PROFILE_SWITCH=<id>` on a made-up registry: the real mechanics of a switch once, for the proof that a
     /// switch ends with one copy of the other profile. The new instance starts with `--background` and no hook;
     /// `MOSSAD_PROFILE_SWITCH_FAIL=1` gives it an unknown profile, so its start fails.
+    static var proofLateRefusal = false
+
     func proofSwitch(to id: String, file: URL, failing: Bool) {
         guard AppIdentity.current.madeUpRegistry, !AppIdentity.current.isPreview else { return }
         var environment = ProcessInfo.processInfo.environment
@@ -58,6 +60,15 @@ extension AppController {
         runSwitch(to: id, file: file, home: nil, extra: ["--background"] + (failing ? ["--profile", "ffffffff"] : []), environment: environment)
     }
     #endif
+
+    /// A debug proof's refusal at the quit (`MOSSAD_PROFILE_SWITCH_FAIL=late`); never in a release build.
+    private var proofRefusesAtQuit: Bool {
+        #if DEBUG
+        Self.proofLateRefusal
+        #else
+        false
+        #endif
+    }
 
     /// The mechanics of a switch: decide, save `active`, start the new instance, then quit or put `active` back.
     private func runSwitch(to id: String, file: URL, home: URL?, extra: [String], environment: [String: String]) {
@@ -144,8 +155,12 @@ extension AppController {
             switch ProfileSwitch.afterStart(started: newInstance != nil, saved: saved, was: was) {
             case .quit:
                 // A call that started after the decision: the new instance goes, `active` comes back, no quit.
-                if case .refused(let why) = ProfileSwitch.atQuit(recording: isRecording) {
+                if case .refused(let why) = ProfileSwitch.atQuit(recording: isRecording || proofRefusesAtQuit) {
                     newInstance?.terminate()
+                    // The new instance writes `stopping` in the file as it quits: this app takes the file back after it.
+                    if let app = newInstance {
+                        for _ in 0..<100 where !app.isTerminated { try? await Task.sleep(for: .milliseconds(100)) }
+                    }
                     back(why)
                     return
                 }

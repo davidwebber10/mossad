@@ -54,9 +54,12 @@ public actor ProfileWorker {
         public var main: CloudSync?
         public var mirror: CloudSync?
         public var archive: CloudArchive?
+        /// The text of the shared screens, read on this Mac (Vision), as the window app reads it.
+        public var screenReader: ScreenTextReading?
 
         public init(transcriber: Transcribing, summarizer: Summarizing?, embeddings: EmbeddingProvider, calendar: CalendarSource,
-                    llm: (any LanguageModel)?, main: CloudSync?, mirror: CloudSync?, archive: CloudArchive?) {
+                    llm: (any LanguageModel)?, main: CloudSync?, mirror: CloudSync?, archive: CloudArchive?,
+                    screenReader: ScreenTextReading? = nil) {
             self.transcriber = transcriber
             self.summarizer = summarizer
             self.embeddings = embeddings
@@ -65,6 +68,7 @@ public actor ProfileWorker {
             self.main = main
             self.mirror = mirror
             self.archive = archive
+            self.screenReader = screenReader
         }
     }
 
@@ -102,6 +106,9 @@ public actor ProfileWorker {
     private var digestPending: (key: String, parts: [SharedPayload])?
     private let moveSource: MoveSource
     private let moveIntake: MoveIntake
+    /// The start dates this worker set, once each, so a later pass does not move them.
+    private var personaSince: Double?
+    private var commitmentsSince: Double?
 
     public init(_ setup: Setup, services given: Services? = nil) {
         self.setup = setup
@@ -124,7 +131,10 @@ public actor ProfileWorker {
                             onStep: { _ in Self.writeStatus(paths: paths, settings: settings, key: key, failures: failures, now: now()) },
                             titles: { OrgChart.titleLines(for: $0, paths: paths, library: library) },
                             onDiscard: { record in Self.forget(record, paths: paths, archive: archive) },
-                            heavy: HeavyWorkGate(isCallRecording: { callRecords() }, worker: true))
+                            heavy: HeavyWorkGate(isCallRecording: { callRecords() }, worker: true),
+                            // The pipeline ties it to this gate (`ScreenStep.gated(by:)`): while any call records, it reads
+                            // one frame at a time at background priority with a rest between frames, as in the window app.
+                            screenStep: services.screenReader.map { ScreenStep(reader: $0) })
         (moveSource, moveIntake) = Self.moves(setup, pipeline: pipeline, library: library, usage: usage, archive: archive)
     }
 
@@ -237,7 +247,7 @@ public actor ProfileWorker {
                         llm: s.languageModel(key: key, usage: usage),
                         main: stores.main.map { CloudSync(paths: paths, store: $0.store) },
                         mirror: stores.mirror.map { CloudSync(paths: paths, store: $0.store) },
-                        archive: s.archive(key: key, paths: paths, server: server))
+                        archive: s.archive(key: key, paths: paths, server: server), screenReader: VisionScreenReader())
     }
 
     private func runs(_ duty: Duty) -> Bool { RunMode.worker.runs(duty, madeUpRegistry: setup.madeUpRegistry) }
@@ -349,14 +359,11 @@ public actor ProfileWorker {
         if runs(.backup), !calling {
             pass.ran.insert(.backup)
             let archive = services.archive
-            for dir in Recording.missing(audioRoot: paths.audio, hasBackup: { archive?.holds($0) ?? false }) {
-                // A call that starts meanwhile gets the processor; the rest waits for the next pass.
-                guard !calling else { break }
-                Recording.makeIfMissing(in: dir)
-            }
+            Self.makeMissing(Recording.missing(audioRoot: paths.audio, hasBackup: { archive?.holds($0) ?? false }),
+                             calling: { setup.callRecords() }, make: { Recording.makeIfMissing(in: $0) })
             if let archive {
                 // Uploads only: the removal of old local copies waits for the window app, like retention.
-                let report = await archive.sync(keepLocalDays: nil, pipeline: pipeline)
+                let report = await archive.sync(keepLocalDays: Self.keepLocalDays, pipeline: pipeline)
                 failures.set(backup: report.failed.count)
             }
         }
@@ -374,11 +381,13 @@ public actor ProfileWorker {
            let made = PersonaExtractor.model(provider: settings.aiProvider, chosen: settings.aiModel, key: settings.aiProvider.key.flatMap(setup.key),
                                              usage: usage, serverURL: settings.localServerBase) {
             pass.ran.insert(.personas)
-            var since = settings.personaSince
+            // Set once, as the app's `personaSince`: the settings value is from the start, so the actor keeps it.
+            var since = personaSince ?? settings.personaSince
             if since == 0 {
                 since = setup.now().timeIntervalSince1970
                 setup.remember("personaSince", since)
             }
+            personaSince = since
             let usage = usage, callRecords = setup.callRecords
             let out = await PersonaBacklog.run(runner: PersonaRunner(paths: paths, llm: made.llm, owner: settings.ownerName), paths: paths,
                                                owner: settings.ownerName, model: made.name, service: made.service,
@@ -390,11 +399,12 @@ public actor ProfileWorker {
         }
         if runs(.commitments), let llm {
             pass.ran.insert(.commitments)
-            var since = settings.commitmentsSince
+            var since = commitmentsSince ?? settings.commitmentsSince
             if since == 0 {
                 since = setup.now().addingTimeInterval(-14 * 86_400).timeIntervalSince1970
                 setup.remember("commitmentsSince", since)
             }
+            commitmentsSince = since
             _ = await CommitmentRunner(paths: paths, finder: CommitmentFinder(llm: llm, ownerName: settings.ownerName),
                                        since: Date(timeIntervalSince1970: since)).run()
         }
@@ -447,9 +457,8 @@ public actor ProfileWorker {
             }
         }
         let stores = settings.syncStores(server: server, hasICloud: false)
-        let inputs = SyncPass.Inputs(main: main, mirror: mirror, serverIsMain: stores.serverIsMain, place: stores.place, connection: server,
-                                     owner: owner, personasInMCP: personasHere, personas: nil, calling: calling, callStarted: callRecords,
-                                     keptDigest: kept, makeDigest: makeDigest)
+        let inputs = Self.syncInputs(main: main, mirror: mirror, stores: stores, server: server, owner: owner, personasHere: personasHere,
+                                     calling: calling, callStarted: callRecords, kept: kept, makeDigest: makeDigest)
         let result = await SyncPass.run(inputs)
         if result.digestArrived {
             digestSent = key
@@ -521,6 +530,34 @@ public actor ProfileWorker {
     static func stamp(_ paths: Paths) -> [String: String] {
         Dictionary(ProcessingQueue(paths: paths).allRecords().map { ($0.id, "\($0.status.rawValue)|\($0.attempts)|\($0.cloudKey ?? "")") },
                    uniquingKeysWith: { a, _ in a })
+    }
+
+    /// A worker never removes a local recording: that waits for the window app, like retention.
+    static let keepLocalDays: Int? = nil
+
+    /// Makes the missing recordings one at a time, and stops when a call starts: that call gets the processor, and
+    /// the rest waits for the next pass. Returns how many it made.
+    @discardableResult
+    static func makeMissing(_ dirs: [URL], calling: () -> Bool, make: (URL) -> Void) -> Int {
+        var made = 0
+        for dir in dirs {
+            guard !calling() else { break }
+            make(dir)
+            made += 1
+        }
+        return made
+    }
+
+    /// The sync pass of a worker: no personas for the phone (the window app sends them) and no phone notices (the
+    /// window app tells them).
+    static func syncInputs(main: CloudSync?, mirror: CloudSync?, stores: ServiceSettings.SyncStores, server: ServerConnection?,
+                           owner: String, personasHere: Bool, calling: Bool, callStarted: @escaping @Sendable () -> Bool,
+                           kept: [SharedPayload]?, makeDigest: (@Sendable () -> [SharedPayload]?)?) -> SyncPass.Inputs {
+        var inputs = SyncPass.Inputs(main: main, mirror: mirror, serverIsMain: stores.serverIsMain, place: stores.place, connection: server,
+                                     owner: owner, personasInMCP: personasHere, personas: nil, calling: calling, callStarted: callStarted,
+                                     keptDigest: kept, makeDigest: makeDigest)
+        inputs.tellsRecordings = false
+        return inputs
     }
 
     static func hasOpenPoint(_ paths: Paths) -> Bool {

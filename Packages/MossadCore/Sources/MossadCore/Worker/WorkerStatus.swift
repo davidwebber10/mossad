@@ -89,9 +89,12 @@ extension WorkerStatus.Kind {
 
 /// The switcher's line under another profile.
 public enum WorkerStatusLine {
-    public static func text(_ status: WorkerStatus?, running: Bool, gaveUp: Bool) -> String? {
+    /// `since`: when the running worker started. A file written before it is the last worker's: the new one is
+    /// starting, and the line shows nothing until its first write.
+    public static func text(_ status: WorkerStatus?, running: Bool, gaveUp: Bool, since: Date? = nil) -> String? {
         if gaveUp { return "Not running" }
         guard running, let status else { return nil }
+        if let since, status.written < since { return nil }
         if let f = status.failure {
             let one = f.count == 1
             switch f.kind {

@@ -10,7 +10,12 @@ final class WorkerManager {
         let process: Process
         let started: Date
         let failures: Int
+        /// The kernel's start time of the pid, so a kill never reaches a process that took the pid over.
+        let kernelStart: Date?
     }
+
+    /// How long a quit waits for its workers before it kills the ones that did not end.
+    static let quitWait: TimeInterval = 2
 
     private let identity: AppIdentity
     private var profiles: [Profile]
@@ -44,7 +49,23 @@ final class WorkerManager {
         started = true
         self.recording = recording
         Log.info("Workers: starting \(profiles.count) for the other profiles")
-        write(takeOver: true) { [weak self] in self?.profiles.forEach { self?.launch($0, failures: 0) } }
+        let wait = WorkerLaunch.firstStartWait(arguments: CommandLine.arguments)
+        write(.start) { [weak self] in
+            guard let self else { return }
+            for profile in profiles {
+                guard wait > 0 else { launch(profile, failures: 0); continue }
+                // A free folder answers at once; one the old app still holds, as soon as that app is gone.
+                Task { [weak self] in
+                    _ = await self?.waitForFolder(of: profile.id, seconds: wait)
+                    self?.launch(profile, failures: 0)
+                }
+            }
+        }
+        startTimer()
+    }
+
+    private func startTimer() {
+        guard timer?.isValid != true else { return }
         let t = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.readLines() }
         }
@@ -64,15 +85,45 @@ final class WorkerManager {
         stopping = true
         write()
         for (id, _) in children { terminate(id) }
-        return await waitForFolder(of: id, seconds: seconds)
+        return await stopWorker(id, seconds: seconds)
     }
 
     /// SIGTERM to one profile's worker, then waits until its folder lock is free.
     func stop(_ id: String, seconds: TimeInterval) async -> Bool {
         guard started else { return true }
         stopped.insert(id)
-        terminate(id)
-        return await waitForFolder(of: id, seconds: seconds)
+        return await stopWorker(id, seconds: seconds)
+    }
+
+    /// `WorkerLaunch.nextStop`: tell, wait for the folder, kill the worker that did not end, wait once more. A kill
+    /// is safe at any line: each step of a worker saves before the next one, and the next run takes up the rest.
+    private func stopWorker(_ id: String, seconds: TimeInterval) async -> Bool {
+        var step = WorkerLaunch.StopStep.tell
+        while true {
+            switch step {
+            case .tell:
+                terminate(id)
+                step = WorkerLaunch.nextStop(after: step, folderFree: false)
+            case .wait, .waitAgain:
+                step = WorkerLaunch.nextStop(after: step, folderFree: await waitForFolder(of: id, seconds: seconds))
+            case .kill:
+                kill(id)
+                step = WorkerLaunch.nextStop(after: step, folderFree: false)
+            case .done(let outcome):
+                if outcome == .refused { Log.error("Workers: \(id) did not end, also after a kill") }
+                return outcome.letsGo
+            }
+        }
+    }
+
+    /// SIGKILL to this app's own child, only while it is still the process it started.
+    private func kill(_ id: String) {
+        guard let child = children[id], child.process.isRunning else { return }
+        let pid = child.process.processIdentifier
+        guard WorkerLaunch.mayKill(started: child.kernelStart, now: ProcessFacts.startTime(of: pid), parent: ProcessFacts.parent(of: pid),
+                                   me: ProcessInfo.processInfo.processIdentifier) else { return }
+        Log.error("Workers: \(id) did not stop; killed (pid \(pid))")
+        Darwin.kill(pid, SIGKILL)
     }
 
     /// A deleted profile: its worker never starts again, also not by `resume`.
@@ -82,13 +133,16 @@ final class WorkerManager {
         readLines()
     }
 
-    /// After a refused switch or delete: `stopping` false in the file, and the workers start again.
+    /// After a refused switch or delete, or an update that did not install: `stopping` false in the file, and the
+    /// workers start again.
     func resume(recording: Bool) {
         guard started else { return }
+        startTimer()
         stopping = false
         stopped = []
         self.recording = recording
-        write { [weak self] in
+        // This app is the app in front again: a file that a new instance of a taken-back switch left is replaced.
+        write(.resume) { [weak self] in
             guard let self else { return }
             for profile in profiles where children[profile.id] == nil && restarts[profile.id] == nil { launch(profile, failures: 0) }
         }
@@ -102,9 +156,13 @@ final class WorkerManager {
         timer?.invalidate()
         restarts.values.forEach { $0.cancel() }
         let state = foreground()
-        fileQueue.sync { [file] in Self.save(state, to: file) }
+        fileQueue.sync { [file] in Self.save(state, to: file, takeOver: ForegroundState.Write.quit.takesOver) }
         for (id, _) in children { terminate(id) }
         Log.info("Workers: told to stop at quit")
+        // No worker outlives Mossad: a short wait, then a kill for one that did not end (safe, as in `stopWorker`).
+        let deadline = Date().addingTimeInterval(Self.quitWait)
+        while children.values.contains(where: { $0.process.isRunning }), Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
+        for (id, _) in children { kill(id) }
     }
 
     // MARK: - Children
@@ -120,7 +178,8 @@ final class WorkerManager {
         }
         do {
             try process.run()
-            children[id] = Child(process: process, started: Date(), failures: failures)
+            children[id] = Child(process: process, started: Date(), failures: failures,
+                                 kernelStart: ProcessFacts.startTime(of: process.processIdentifier))
             gaveUp.remove(id)
             Log.info("Workers: \(id) started (pid \(process.processIdentifier))")
         } catch {
@@ -149,7 +208,8 @@ final class WorkerManager {
             restarts[id] = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(wait))
                 guard !Task.isCancelled, let self, let profile = profiles.first(where: { $0.id == id }) else { return }
-                launch(profile, failures: failures + 1)
+                // The file first: one that a gone app left, or that was deleted, would stop this try at once.
+                write(.restart) { [weak self] in self?.launch(profile, failures: failures + 1) }
             }
         }
     }
@@ -174,10 +234,10 @@ final class WorkerManager {
     }
 
     /// Writes the state as it is now, in order; `then` runs on the main actor once it is on disk.
-    private func write(takeOver: Bool = false, then: (@MainActor () -> Void)? = nil) {
+    private func write(_ kind: ForegroundState.Write = .change, then: (@MainActor () -> Void)? = nil) {
         let state = foreground()
         fileQueue.async { [file] in
-            Self.save(state, to: file, takeOver: takeOver)
+            Self.save(state, to: file, takeOver: kind.takesOver)
             if let then { Task { @MainActor in then() } }
         }
     }
@@ -196,11 +256,12 @@ final class WorkerManager {
     /// Each other profile's status file, and nothing else of its folder, off the main actor.
     private func readLines() {
         let roots = profiles.map { ($0.id, $0.rootURL(home: home)) }
-        let running = Set(children.keys), gaveUp = gaveUp
+        let running = children.mapValues(\.started), gaveUp = gaveUp
         Task.detached(priority: .utility) {
             var next: [String: String] = [:]
             for (id, root) in roots {
-                if let line = WorkerStatusLine.text(WorkerStatus.peek(root: root), running: running.contains(id), gaveUp: gaveUp.contains(id)) {
+                if let line = WorkerStatusLine.text(WorkerStatus.peek(root: root), running: running[id] != nil, gaveUp: gaveUp.contains(id),
+                                                      since: running[id]) {
                     next[id] = line
                 }
             }

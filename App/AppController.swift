@@ -227,7 +227,11 @@ final class AppController: ObservableObject {
     /// Checks GitHub releases for new versions; never in an inert copy.
     private(set) lazy var updater = Updater(start: !isInert && !AppIdentity.current.isPreview,
                                             isRecording: { [weak self] in self?.isRecording ?? false },
-                                            beforeInstall: { [weak self] in self?.workers?.quit() })
+                                            beforeInstall: { [weak self] in self?.workers?.quit() },
+                                            afterNoInstall: { [weak self] in
+                                                guard let self else { return }
+                                                self.workers?.resume(recording: self.isRecording)
+                                            })
     /// Whether the main window can be seen. A window on another desktop or behind others keeps its views
     /// alive, so animations check this and stop while it is hidden.
     @Published private(set) var windowVisible = false
@@ -914,12 +918,6 @@ final class AppController: ObservableObject {
             // A move of this profile goes on, and a meeting moved here is taken in: with two profiles or more only.
             checkMoves()
             startMoveLook()
-            // A meeting that a worker finished while it could not read the calendar gets its invite now. With one
-            // profile (no registry file) nothing is read.
-            if WorkerCalendar.looksAgainAtLaunch(registry: profiles.state, macCalendar: .macCalendar, googleCalendar: google.has(.calendar)),
-               let pipeline {
-                Task { if await pipeline.matchUnknownInvites() > 0 { self.refresh() } }
-            }
             // A recovered call whose muted parts are still in its track is held back; the pipeline tries again.
             if !held.isEmpty { notifier.postCaptureProblem(.mutedNotSilenced) }
             if isOn || (offUntilDate.map { $0 <= Date() } ?? false) {
@@ -2124,9 +2122,19 @@ final class AppController: ObservableObject {
         }
     }
 
+    /// A meeting that a worker finished while it could not read the calendar gets its invite: at each housekeeping
+    /// (the first runs at launch), so a Google read that failed is tried again within the hour. With one profile (no registry
+    /// file) nothing is read.
+    private func lookAgainForInvites() {
+        guard WorkerCalendar.looksAgainAtLaunch(registry: profiles.state, macCalendar: .macCalendar, googleCalendar: google.has(.calendar)),
+              let pipeline else { return }
+        Task { if await pipeline.matchUnknownInvites() > 0 { self.refresh() } }
+    }
+
     private func runHousekeeping() async {
         checkMoves()
         consumeBackupMoveRequest()
+        lookAgainForInvites()
         await track { await self.pipeline.runPending() }
         let audio = paths.audio, days = deleteRecordings ? max(1, recordingDays) : nil, tracks = max(1, rawTracksDays)
         // Only a backup that this Mac can read counts as "the recording exists": a mark for another server does not.

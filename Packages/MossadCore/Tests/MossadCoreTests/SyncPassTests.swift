@@ -189,6 +189,24 @@ final class SyncPassTests: XCTestCase {
         XCTAssertEqual(result.waiting.map(\.name), ["room-1"])
     }
 
+    func testAWorkersPassLeavesTheNoticesForTheWindowApp() async throws {
+        let paths = temp()
+        let store = LoggingStore()
+        let json = #"{"name":"room-1","firstFailure":0,"attempts":3,"next":0,"reason":"","gaveUp":true}"#
+        var state = SyncState()
+        state.recordings = [try JSONDecoder().decode(PendingRecording.self, from: Data(json.utf8))]
+        try state.save(to: paths.sync, fileName: store.stateFileName)
+        let sync = CloudSync(paths: paths, store: store)
+        var worker = inputs(main: sync, mirror: nil)
+        XCTAssertTrue(worker.tellsRecordings, "the window app's pass tells, as before")
+        worker.tellsRecordings = false
+        let quiet = await SyncPass.run(worker)
+        XCTAssertEqual(quiet.waiting, [])
+        // The window app of that profile tells it at its next pass.
+        let told = await SyncPass.run(inputs(main: sync, mirror: nil))
+        XCTAssertEqual(told.waiting.map(\.name), ["room-1"])
+    }
+
     func testThePassNeverTakesInMeetingsFromAnotherDevice() async throws {
         let other = temp()
         try meeting("m1", in: other)

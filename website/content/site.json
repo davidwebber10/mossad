@@ -841,6 +841,7 @@
             "A call is recorded by the profile you are in, and the menu bar shows which one",
             "An AI app that you connect to one profile never reads the other",
             "The profile you are not in still finishes its meetings and keeps its sync and backup up to date",
+            "A recording from your iPhone gets its notes while the Mac is in another profile",
             "On your iPhone, each profile has its own meetings, and you change profile in Settings",
             "A phone call that you share goes to the profile you pick",
             "With one profile, nothing changes"
