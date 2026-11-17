@@ -291,9 +291,11 @@ public actor ProfileWorker {
             }
         }
         let stores = settings.syncStores(server: server, hasICloud: false)
-        let inputs = SyncPass.Inputs(main: main, mirror: mirror, serverIsMain: stores.serverIsMain, place: stores.place, connection: server,
+        var inputs = SyncPass.Inputs(main: main, mirror: mirror, serverIsMain: stores.serverIsMain, place: stores.place, connection: server,
                                      owner: owner, personasInMCP: personasHere, personas: nil, calling: calling, callStarted: callRecords,
                                      keptDigest: kept, makeDigest: makeDigest)
+        // The phone's notices stay for the window app of this profile: a worker cannot show them.
+        inputs.tellsRecordings = false
         let result = await SyncPass.run(inputs)
         if result.digestArrived {
             digestSent = key

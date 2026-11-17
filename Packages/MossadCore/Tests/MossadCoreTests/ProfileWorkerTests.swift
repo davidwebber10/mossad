@@ -126,4 +126,18 @@ final class ProfileWorkerTests: XCTestCase {
         let pass = await w.pass([.queue, .sync])
         for duty in started.union(pass.ran) { XCTAssertTrue(RunMode.worker.does(duty), "\(duty)") }
     }
+
+    func testAWorkersSyncLeavesThePhonesNoticesUntold() async throws {
+        let store = MemoryStore()
+        let json = #"{"name":"room-1","firstFailure":0,"attempts":3,"next":0,"reason":"","gaveUp":true}"#
+        var state = SyncState()
+        state.recordings = [try JSONDecoder().decode(PendingRecording.self, from: Data(json.utf8))]
+        try state.save(to: paths.sync, fileName: store.stateFileName)
+        let w = try worker(store: store)
+        _ = await w.start()
+        let pass = await w.pass([.sync])
+        XCTAssertTrue(pass.ran.contains(.sync))
+        let left = try await CloudSync(paths: paths, store: store).recordingNotices()
+        XCTAssertEqual(left.map(\.name), ["room-1"])
+    }
 }
