@@ -149,6 +149,12 @@ extension AppIdentity {
         return defaults
     }
 
+    /// The folder a note's `audio:` line names: a profile's `root` as written, else the fixed `~/Mossad` of before
+    /// (also for Rehearsal and a `MOSSAD_ROOT` run).
+    public var noteRoot: String {
+        takesProfiles && !profile.isDefault ? profile.root : "~/Mossad"
+    }
+
     /// The folders of the registry's other live profiles, for the Mac-wide reads (the do-not-record lists). None for a
     /// copy that takes no profiles, and none on a made-up registry, whose `default` would be the owner's real folder.
     public func otherProfileRoots(home: URL) -> [URL] {
