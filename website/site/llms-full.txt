@@ -206,6 +206,7 @@ Ask your meetings a question, here or in the AI app you already use. In Mossad's
   - Your next meetings, the prep for each, recurring meetings, and your points for next time
   - Your tasks, the coach's cards and goal, and your analytics
   - It can save a point for next time; nothing else changes
+  - Each profile has its own connection
 - **MCP for web AI apps.** With your own server, ChatGPT, Claude, and other web AI apps can read your meetings and the people in them after you sign in.
   - Meetings, people, your tasks, your points for next time, the coach's notes, earlier chats, and share links
   - Your recurring meetings with their history and open items, each meeting's numbers, your analytics, bookmarks, and the coach's cards and goal
@@ -216,7 +217,7 @@ Ask your meetings a question, here or in the AI app you already use. In Mossad's
 
 ### iPhone
 
-Your meetings on your phone, and a recorder for the meetings in a room.
+Your meetings on your phone, a recorder for the meetings in a room, and your phone calls as meetings.
 
 - **Your meetings, in your pocket.** Read summaries and transcripts, search, chat, and see people and analytics on your iPhone.
   - The coach's Findings deck and your tasks
@@ -224,6 +225,9 @@ Your meetings on your phone, and a recorder for the meetings in a room.
 - **Record in the room.** Record an in-person meeting on your iPhone, and your Mac writes the note.
   - The recording survives a stopped app
   - The phone deletes a recording only after the Mac has made its meeting
+- **Your phone calls, too.** Share a call recording from Notes to Mossad, and the call becomes a meeting with its note.
+  - Say who was on the call, and Mossad names their voice
+  - A Shortcuts action adds a recording with no screen
 
 ### Sharing with PIN
 
@@ -255,6 +259,18 @@ Your meetings live in a folder on your Mac. Anything more is your choice.
   - Move all backups to another place in one step
 - **iCloud sync.** Meetings go from your Mac to your iPhone through iCloud, with no server to run.
   - Chats, the coach's memory, and tasks sync both ways
+- **Work and personal, kept apart.** Keep work calls and personal calls in separate profiles on your Mac and your iPhone, and change from one to the other with one click.
+  - Each profile has its own keys, people, voices, coach, sync, and backup
+  - A call is recorded by the profile you are in, and the menu bar shows which one
+  - An AI app that you connect to one profile never reads the other
+  - The profile you are not in still finishes its meetings and keeps its sync and backup up to date
+  - A recording from your iPhone gets its notes while the Mac is in another profile
+  - On your iPhone, each profile has its own meetings, and you change profile in Settings
+  - A phone call that you share goes to the profile you pick
+  - A meeting that went to the wrong profile moves to the right one, with its recording, its notes, and the chats about that meeting alone
+  - During a call you can say that it is for the other profile, and that profile writes the notes
+  - When the call goes on as a new recording, your choice is kept; when Mossad is not sure it is the same call, it holds the recording until you choose
+  - With one profile, nothing changes
 
 ### Connect Google, with Gemini notes
 
@@ -363,6 +379,8 @@ Everything stays in your home folder.
 | `~/Mossad/Voices/voices.json` | Saved voice fingerprints and names |
 | `~/Mossad/Logs/mossad.log` | The app log, rotated at 5 MB |
 
+Another profile keeps the same layout in its own folder, such as `~/Mossad Work`.
+
 Audio goes to the transcription provider you chose, and the transcript goes to the AI provider you chose, unless you choose models that run on your Mac. Your meetings, recordings, and names go nowhere else unless you turn on sync, backup, sharing, Google, or the weekly email.
 
 ## Open source
@@ -417,7 +435,11 @@ Yes. Choose a transcription model that runs on your Mac (Parakeet, Whisper, Appl
 
 ### Is there an iPhone app?
 
-Yes. It shows your meetings, chat, people, analytics, and the coach, and it records meetings in a room for your Mac to write up. It syncs through iCloud or your own server. It is not in the App Store; build it from the source with Xcode.
+Yes. It shows your meetings, chat, people, analytics, and the coach. It records meetings in a room for your Mac to write up, and it turns a recorded phone call into a meeting. It syncs through iCloud or your own server. It is not in the App Store; build it from the source with Xcode.
+
+### Can I keep work and personal apart?
+
+Yes. Add a profile for each, on your Mac and your iPhone. Each profile has its own meetings, people, voices, keys, sync, and connection for AI apps, and you change from one to the other with one click. A meeting that went to the wrong profile moves to the right one.
 
 ### How do updates work?
 
