@@ -125,7 +125,8 @@ public struct ChatStore: Sendable {
 
     public func save(_ chat: Chat) throws {
         if let callID = chat.callID, MovePaths.isID(callID),
-           let r = try? CallRecord.load(from: directory.deletingLastPathComponent().appendingPathComponent("Audio").appendingPathComponent(callID)),
+           // From the cache: a save on the main thread decodes the record once, then reads only its file's dates.
+           let r = try? RecordCache.shared.record(in: directory.deletingLastPathComponent().appendingPathComponent("Audio").appendingPathComponent(callID)),
            r.moveTo != nil {
             throw MovingCall()
         }

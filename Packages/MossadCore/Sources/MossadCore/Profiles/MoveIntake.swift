@@ -17,6 +17,8 @@ public struct MoveIntake: Sendable {
     private let now: @Sendable () -> Date
     public static let maxTries = 5
 
+    struct ChatUnreadable: Error {}
+
     /// A part after the file check that failed, with where it waits.
     struct PartFailed: Error { let kind: MoveMarker.TakeInWait; let error: Error }
 
@@ -47,11 +49,44 @@ public struct MoveIntake: Sendable {
 
     static func waiting(_ paths: Paths) -> [String] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: paths.incoming.path)) ?? []
-        return names.filter { !$0.hasSuffix(MoveMarker.partSuffix) && !$0.hasPrefix(".") }.sorted().filter { name in
+        return names.filter { !$0.hasSuffix(MoveMarker.partSuffix) && !$0.hasPrefix(".") && !isLink(paths.incoming.appendingPathComponent($0)) }.sorted().filter { name in
             switch MoveMarker.look(paths.incoming.appendingPathComponent(name)) {
             case .incoming: true
             case .claimed(let m): m.intake == nil || m.intake == .takingIn
             default: false
+            }
+        }
+    }
+
+    /// A symbolic link is never followed: nothing is read or written through it.
+    static func isLink(_ url: URL) -> Bool {
+        (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType == .typeSymbolicLink
+    }
+
+    /// What the first profile normally removes itself: a part, a folder it cancelled, and one this profile refused.
+    public static let leftoverAge: TimeInterval = 7 * 86_400
+
+    /// Removes those leftovers after a week (the first profile may be gone). A folder that waits, is taken in, or was
+    /// taken never goes: the first profile reads its marker before it removes its own meeting.
+    public func cleanUp() {
+        let fm = FileManager.default
+        let names = (try? fm.contentsOfDirectory(atPath: paths.incoming.path)) ?? []
+        let old = now().addingTimeInterval(-Self.leftoverAge)
+        func older(_ url: URL) -> Bool { ((try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date).map { $0 < old } ?? false }
+        for name in names where !name.hasPrefix(".") {
+            let url = paths.incoming.appendingPathComponent(name)
+            if name.hasSuffix(MoveMarker.partSuffix) {
+                if older(url) { try? fm.removeItem(at: url) }
+                continue
+            }
+            guard MovePaths.isID(name) else { continue }
+            switch MoveMarker.look(url) {
+            case .cancelled where older(url.appendingPathComponent(MoveMarker.cancelledName)):
+                try? fm.removeItem(at: url)
+            case .claimed(let m) where m.intake == .refused && older(url.appendingPathComponent(MoveMarker.claimedName)):
+                try? fm.removeItem(at: url)
+            default:
+                break
             }
         }
     }
@@ -100,6 +135,12 @@ public struct MoveIntake: Sendable {
         // The people store follows the voices: without it a learned voice would make no person.
         if voiceFingerprints(), library.identity == nil { return .wait }
         let look = MoveMarker.look(folder(callID))
+        // A link in place of the call folder: refused before anything is read or written through it.
+        if case .claimed(var m) = look, m.intake == nil || m.intake == .takingIn, Self.isLink(callFolder(callID)) {
+            try stop("refuse a link")
+            try refuse(&m, callID, .notWhole)
+            return .refuse(.notWhole)
+        }
         // A part that failed waits longer after each try.
         if case .claimed(let m) = look, m.intake == .takingIn, m.waits != nil,
            !MoveRetry.due(tries: m.tries ?? 0, last: m.lastTry, now: now()) { return .wait }
@@ -162,6 +203,7 @@ public struct MoveIntake: Sendable {
     /// a call records, nothing more is taken in (`MoveWorkPlan`), and the next look goes on.
     @discardableResult
     public func run(held: () -> Bool = { false }) -> [String] {
+        cleanUp()
         var done: [String] = []
         for callID in waiting() {
             for _ in 0..<12 {
@@ -191,8 +233,14 @@ public struct MoveIntake: Sendable {
         let record = try? CallRecord.load(from: callFolder(callID))
         // A decision made again after the first half: the record there is the arrival, so its size is not the marker's.
         let again = m.arrived == true
+        let recordPath = "\(MoveMarker.callFolder)/\(CallRecord.fileName)"
         let whole = !m.files.isEmpty && m.files.allSatisfy { f in
-            (again && f.path == "\(MoveMarker.callFolder)/\(CallRecord.fileName)") || MoveCopy.size(folder(callID).appendingPathComponent(f.path)) == f.size
+            if again && f.path == recordPath { return true }
+            let url = folder(callID).appendingPathComponent(f.path)
+            guard MoveCopy.size(url) == f.size else { return false }
+            // The record and the chats are small and are read here: by their hash too. The audio is hashed in `Audio`.
+            guard f.path == recordPath || f.path.hasPrefix(MoveMarker.chatsFolder + "/") else { return true }
+            return (try? FileHash.sha256(of: url)) == f.sha256
         }
         // An id that is in `Audio` now is taken, also the one chosen before: another meeting took it meanwhile.
         var d = MovePlan.decide(record: record, sizesMatch: whole, id: callID, taken: taken())
@@ -235,7 +283,7 @@ public struct MoveIntake: Sendable {
         } catch {
             m.tries = (m.tries ?? 0) + 1
             if m.tries! >= Self.maxTries {
-                Log.error("Move: the meeting could not be put into Audio; it is refused, and the first profile keeps it: \(error)")
+                Log.error("Move: the meeting could not be put into Audio; it is refused, and the first profile keeps it (\((error as NSError).domain) \((error as NSError).code))")
                 try refuse(&m, callID, .notWhole)
             } else {
                 try m.save(in: folder(callID), claimed: true)
@@ -356,7 +404,10 @@ public struct MoveIntake: Sendable {
         decoder.dateDecodingStrategy = .iso8601
         for (old, new) in (m.chatIDs ?? [:]).sorted(by: { $0.key < $1.key }) where MovePaths.isID(old) {
             let file = folder(callID).appendingPathComponent("\(MoveMarker.chatsFolder)/\(old).json")
-            guard var chat = try? decoder.decode(Chat.self, from: Data(contentsOf: file)), let id = UUID(uuidString: new) else { continue }
+            // Gone: written in a run before, which then removed the copies.
+            guard FileManager.default.fileExists(atPath: file.path) else { continue }
+            // A listed chat that does not read stops the step: `taken` would let the first profile delete it.
+            guard var chat = try? decoder.decode(Chat.self, from: Data(contentsOf: file)), let id = UUID(uuidString: new) else { throw ChatUnreadable() }
             chat.id = id
             chat.callID = f
             for i in chat.messages.indices {

@@ -301,8 +301,9 @@ final class MoveWorkerTests: XCTestCase {
         XCTAssertEqual(r.utterances.count, 6)
         XCTAssertEqual(ChatStore(directory: a.chats).all().filter { $0.callID == callID }.count, 1)
 
-        let wa = try worker(a, me: personal, target: { [work] in $0 == work ? .paths(b) : .gone })
-        let wb = try worker(b, me: work, target: { _ in .unknown })
+        // The proofs run only on a made-up registry (review M16), as `WorkerEntry` starts them.
+        let wa = try worker(a, me: personal, target: { [work] in $0 == work ? .paths(b) : .gone }, madeUp: true)
+        let wb = try worker(b, me: work, target: { _ in .unknown }, madeUp: true)
         _ = await wa.start()
         _ = await wb.start()
         _ = await wa.pass([.queue])

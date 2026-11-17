@@ -211,6 +211,7 @@ public actor ProfileWorker {
 
     /// The DEBUG proof of the owner's Cancel: cancels the move of this folder that is not done, as the menu would.
     public func proofCancel() async {
+        guard setup.madeUpRegistry else { return Log.info("Proof: only on a made-up registry") }
         guard let out = MoveOut.all(setup.paths).moves.first(where: { $0.state != .done }) else { return Log.info("Proof: no move to cancel") }
         let answer = await moveSource.cancelMove(out.callID)
         Log.info("Proof: the owner's Cancel of \(out.callID): \(answer)")
@@ -290,6 +291,7 @@ public actor ProfileWorker {
     /// The DEBUG proof: moves the one written meeting of this folder to that profile. A worker never starts a move
     /// otherwise. It waits up to a minute for the meeting to be written.
     public func proofMove(to profile: String) async {
+        guard setup.madeUpRegistry else { return Log.info("Proof: only on a made-up registry") }
         var written: [CallRecord] = []
         for _ in 0..<30 {
             written = ProcessingQueue(paths: setup.paths).allRecords().filter { $0.status == .written && $0.moveTo == nil }

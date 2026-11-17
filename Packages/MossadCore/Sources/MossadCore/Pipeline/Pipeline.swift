@@ -261,7 +261,8 @@ public actor Pipeline {
     public func backfill(_ id: String) async -> Bool {
         // Saved first, so a retry after a failure keeps the tags too. Old owner tags and old model tags look alike.
         let dir = paths.callDirectory(id)
-        if var r = try? CallRecord.load(from: dir), r.status == .written, !r.tags.isEmpty, r.tagsSetByOwner != true {
+        // A meeting whose move waits is not written here (`regenerateSummary` refuses it too).
+        if var r = try? CallRecord.load(from: dir), r.status == .written, r.moveTo == nil, !r.tags.isEmpty, r.tagsSetByOwner != true {
             r.tagsSetByOwner = true
             try? store(r, dir: dir)
         }
@@ -508,7 +509,8 @@ public actor Pipeline {
     public func refreshLabels(renamed: (old: String, new: String)? = nil) -> Int {
         var changed = 0
         if let refs = references() {
-            for record in ProcessingQueue(paths: paths).allRecords() {
+            // A meeting whose move waits is left as it is: the target names its people again.
+            for record in ProcessingQueue(paths: paths).allRecords() where record.moveTo == nil {
                 // A first look at the record in memory: most runs change nothing, and then no file is read again.
                 guard refs.refresh(record) != record else { continue }
                 let dir = paths.callDirectory(record.id)
@@ -1093,7 +1095,6 @@ public actor Pipeline {
     /// `emails` uses the same speaker keys as `names`; each email is stored on that person's voice profile.
     public func applyNames(callID: String, names: [String: String], emails: [String: String] = [:]) async {
         // A meeting whose move waits keeps its names: nothing is learned from it here either.
-        guard (try? CallRecord.load(from: paths.callDirectory(callID)))?.moveTo == nil else { return }
         let dir = paths.callDirectory(callID)
         guard let current = try? CallRecord.load(from: dir), current.moveTo == nil else { return }
         // The labels the summary used before the names, such as "Speaker A".
