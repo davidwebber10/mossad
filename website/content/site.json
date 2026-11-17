@@ -888,11 +888,13 @@
           "body": "Meetings that Gemini took notes for arrive in Mossad, as meetings of their own or next to your recording.",
           "details": [
             "Every 15 minutes, never during a call",
-            "Meetings you marked do not record stay out"
+            "Meetings you marked do not record stay out",
+            "The people who spoke join your People list with their address, only when your directory leaves no doubt who they are",
+            "A person you deleted or an address you said is not theirs stays gone"
           ],
           "icon": "doc.richtext",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Google/GeminiImport.swift", "Packages/MossadCore/Sources/MossadCore/Google/GeminiNotes.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Google/GeminiImport.swift", "Packages/MossadCore/Sources/MossadCore/Google/GeminiNotes.swift", "Packages/MossadCore/Sources/MossadCore/Google/GeminiPeople.swift"]
         },
         {
           "id": "directory",
