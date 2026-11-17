@@ -14,6 +14,9 @@ enum AnalyticsRoute: Hashable { case people }
 @Observable
 @MainActor
 final class PhoneStore {
+    /// The App and the Shortcuts action use the one store.
+    static let shared = PhoneStore()
+
     private(set) var meetings: [CallRecord] = []
     /// The meetings by day for the list, as small rows made off the main thread when the meetings change.
     private(set) var days: [MeetingDay] = []
@@ -58,6 +61,11 @@ final class PhoneStore {
     var moment: Moment?
     /// A short message for a link that cannot open, such as to a meeting that is not on this iPhone yet.
     var notice: String?
+    /// An audio file that iOS handed over from the share sheet, shown in the import screen until it closes.
+    var incomingAudio: IncomingAudio? = PhoneStore.hook("MOSSAD_IMPORT_AFTER") == nil
+        ? PhoneStore.hook("MOSSAD_IMPORT").map { IncomingAudio(url: URL(fileURLWithPath: $0)) } : nil
+    /// The room recorder's screen is open: the import screen shows over it.
+    var recorderScreenOpen = false
 
     /// The pages open in the Analytics tab; People lives there.
     var analyticsPath = NavigationPath()
@@ -97,13 +105,15 @@ final class PhoneStore {
     private let offline = ProcessInfo.processInfo.environment["MOSSAD_ROOT"] != nil
     /// Every write to a file that a pull also writes (commitments, the coach's memory, chats, reviews), and the
     /// pull itself, run one at a time, so neither saves over what the other merged.
-    @ObservationIgnored private let writes = SerialQueue()
+    @ObservationIgnored let writes = SerialQueue()
+    /// The handed files that an import reads now: the launch's inbox cleanup leaves them.
+    @ObservationIgnored var importing: Set<String> = []
     @ObservationIgnored private var syncTask: (key: String, task: Task<Void, Never>)?
     /// The first read of the outbox and the meetings; a sync and a new recording wait for it.
-    @ObservationIgnored private var launch: Task<Void, Never>?
+    @ObservationIgnored var launch: Task<Void, Never>?
     @ObservationIgnored private var outboxRead: Task<Void, Never>?
     /// Recordings whose parts are being joined now, and whether the recovery pass runs: one of each at a time.
-    @ObservationIgnored private var joining: Set<String> = []
+    @ObservationIgnored var joining: Set<String> = []
     @ObservationIgnored private var recovering = false
     @ObservationIgnored private var loading: Task<Void, Never>?
 
@@ -140,11 +150,21 @@ final class PhoneStore {
         case "search": tab = .search
         default: break
         }
+        #if DEBUG
+        // `MOSSAD_IMPORT_AFTER=<seconds>` hands the `MOSSAD_IMPORT` file over later, as a share while a sheet is open.
+        if let after = Self.hook("MOSSAD_IMPORT_AFTER").flatMap(Double.init), let path = Self.hook("MOSSAD_IMPORT") {
+            Task {
+                try? await Task.sleep(for: .seconds(after))
+                incomingAudio = IncomingAudio(url: URL(fileURLWithPath: path))
+            }
+        }
+        #endif
         // The first frame does not wait for the disk.
         let outboxRead = Task { await readOutbox() }
         self.outboxRead = outboxRead
         launch = Task {
             await outboxRead.value
+            clearOldInbox()
             await load(meetings: true)
             // Joining a long recording takes a while; a sync does not wait for it.
             Task {
@@ -552,16 +572,41 @@ final class PhoneStore {
     var recordingsFolder: URL { paths.root.appendingPathComponent("Recordings") }
     private var outboxFile: URL { recordingsFolder.appendingPathComponent(Outbox.fileName) }
 
-    private func saveOutbox() {
-        // The entry exists from the start of the recording, so a lost write is repaired by the next launch's scan.
-        do { try outbox.save(to: outboxFile) } catch { Log.error("Saving the outbox failed: \(error)") }
-        syncStatus.keepUploads(for: Set(outbox.entries.filter { !$0.isSent }.map(\.id)))
+    /// Returns false when the write failed. A room recording's entry exists from its start, so a lost write is
+    /// repaired by the next launch's scan; an import must know, as the scan would make it a room recording.
+    @discardableResult
+    func saveOutbox() -> Bool {
+        defer { syncStatus.keepUploads(for: Set(outbox.entries.filter { !$0.isSent }.map(\.id))) }
+        do {
+            try outbox.save(to: outboxFile)
+            return true
+        } catch {
+            Log.error("Saving the outbox failed: \(error)")
+            return false
+        }
     }
 
-    /// Removes recordings whose meeting has arrived from the Mac, with their audio. Only an in-person meeting
-    /// counts: ids are start times, and a call on the Mac can start in the same second as a room recording.
+    /// An imported recording's entry, saved before its audio is in the folder. False when it could not be saved:
+    /// then the entry is gone again.
+    func addImported(_ recording: PhoneRecording) -> Bool {
+        outbox.addFinished(recording)
+        guard outbox[recording.id]?.recording == recording, saveOutbox() else {
+            if outbox[recording.id]?.recording == recording { outbox.remove(recording.id) }
+            return false
+        }
+        return true
+    }
+
+    /// Takes back an imported recording whose audio could not be added.
+    func dropImported(_ id: String) {
+        outbox.remove(id)
+        saveOutbox()
+    }
+
+    /// Removes recordings whose meeting has arrived from the Mac, with their audio. Only an in-person meeting or a
+    /// phone call counts: ids are start times, and a call on the Mac can start in the same second as a recording.
     private func settleOutbox() {
-        let done = outbox.settle(arrived: Set(meetings.lazy.filter { $0.platform == .inPerson }.map(\.id)))
+        let done = outbox.settle(arrived: Outbox.arrived(meetings))
         guard !done.isEmpty else { return }
         let dir = recordingsFolder
         for id in done { RoomAudio.delete(id, in: dir) }
@@ -741,8 +786,9 @@ final class PhoneStore {
         let key = engine.key, cloud = engine.sync
         let dir = recordingsFolder
         for listed in outbox.due(store: key, now: Date()) {
-            // Looked at again here: another pass may have sent it while this one uploaded the one before.
-            guard !uploading.contains(listed.id),
+            // Looked at again here: another pass may have sent it while this one uploaded the one before. An import
+            // whose audio is still being added waits in `joining`.
+            guard !uploading.contains(listed.id), !joining.contains(listed.id),
                   let entry = outbox.due(store: key, now: Date()).first(where: { $0.id == listed.id }) else { continue }
             uploading.insert(entry.id)
             let time = BackgroundTime("Upload the room recording")

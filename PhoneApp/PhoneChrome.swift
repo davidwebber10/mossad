@@ -89,6 +89,8 @@ extension Platform {
         case .meet: "Meet"
         case .teams: "Teams"
         case .inPerson: "In person"
+        case .phoneCall: "Phone call"
+        case .unknown: "Not known"
         }
     }
 }

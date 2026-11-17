@@ -23,20 +23,23 @@ public actor CloudKitStore: RecordStore {
         zoneReady = true
     }
 
-    public func save(_ records: [StoredRecord]) async throws -> Set<String> {
-        let ck = records.map { r -> CKRecord in
-            let record = CKRecord(recordType: r.type, recordID: id(r.name))
-            for (key, value) in r.fields {
-                switch value {
-                case .string(let s): record[key] = s
-                case .date(let d): record[key] = d
-                // CloudKit cannot learn a field's type from an empty list.
-                case .strings(let list): record[key] = list.isEmpty ? nil : list
-                }
+    /// A record in this store's own zone: the profile's, never another's.
+    func record(_ r: StoredRecord) -> CKRecord {
+        let record = CKRecord(recordType: r.type, recordID: id(r.name))
+        for (key, value) in r.fields {
+            switch value {
+            case .string(let s): record[key] = s
+            case .date(let d): record[key] = d
+            // CloudKit cannot learn a field's type from an empty list.
+            case .strings(let list): record[key] = list.isEmpty ? nil : list
             }
-            for (key, url) in r.files { record[key] = CKAsset(fileURL: url) }
-            return record
         }
+        for (key, url) in r.files { record[key] = CKAsset(fileURL: url) }
+        return record
+    }
+
+    public func save(_ records: [StoredRecord]) async throws -> Set<String> {
+        let ck = records.map { record($0) }
         let (saved, _) = try await database.modifyRecords(saving: ck, deleting: [], savePolicy: .allKeys, atomically: false)
         var names = Set<String>()
         for (id, result) in saved {
@@ -46,6 +49,28 @@ public actor CloudKitStore: RecordStore {
             }
         }
         return names
+    }
+
+    public func saveOne(_ record: StoredRecord) async throws {
+        do {
+            let (saved, _) = try await database.modifyRecords(saving: [self.record(record)], deleting: [], savePolicy: .allKeys, atomically: false)
+            // By the name alone, as `save` reads its results: the zone's owner can come back in another form.
+            guard let result = saved.first(where: { $0.key.recordName == record.name })?.value else {
+                throw ServerError.http(0, "The recording did not upload.")
+            }
+            if case .failure(let error) = result { throw error }
+        } catch {
+            Log.error("iCloud upload of \(record.name) failed: \(error)")
+            throw Self.isUnknownField(error) ? StoreRefusal.unknownField : error
+        }
+    }
+
+    /// Whether iCloud refused a record for its fields: a production schema without them. Never a failure of the
+    /// network, the quota, the rate, or iCloud's own trouble (code 15, as `FriendlyError` reads it), which keep the
+    /// fields for the next try.
+    static func isUnknownField(_ error: Error) -> Bool {
+        if let ck = error as? CKError, ck.code == .invalidArguments { return true }
+        return String(describing: error).localizedCaseInsensitiveContains("schema")
     }
 
     public func delete(_ names: [String]) async throws -> Set<String> {

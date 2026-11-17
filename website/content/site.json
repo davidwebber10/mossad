@@ -685,7 +685,7 @@
     {
       "id": "iphone",
       "title": "iPhone",
-      "intro": "Your meetings on your phone, and a recorder for the meetings in a room.",
+      "intro": "Your meetings on your phone, a recorder for the meetings in a room, and your phone calls as meetings.",
       "image": "The iPhone Meetings list next to the room recorder.",
       "features": [
         {
@@ -711,6 +711,18 @@
           "icon": "record.circle",
           "comingSoon": false,
           "sources": ["PhoneApp/RoomRecorder.swift", "Packages/MossadCore/Sources/MossadCore/Room/RoomRecording.swift", "Packages/MossadCore/Sources/MossadCore/Room/Outbox.swift", "Packages/MossadCore/Sources/MossadCore/Sync/PhoneRecording.swift"]
+        },
+        {
+          "id": "phone-call-import",
+          "title": "Your phone calls, too",
+          "body": "Share a call recording from Notes to Mossad, and the call becomes a meeting with its note.",
+          "details": [
+            "Say who was on the call, and Mossad names their voice",
+            "A Shortcuts action adds a recording with no screen"
+          ],
+          "icon": "phone",
+          "comingSoon": false,
+          "sources": ["PhoneApp/CallImportScreen.swift", "PhoneApp/AddRecordingIntent.swift", "Packages/MossadCore/Sources/MossadCore/Room/CallImport.swift", "Packages/MossadCore/Sources/MossadCore/Sync/PhoneRecording.swift"]
         }
       ]
     },
@@ -1056,7 +1068,7 @@
     },
     {
       "question": "Is there an iPhone app?",
-      "answer": "Yes. It shows your meetings, chat, people, analytics, and the coach, and it records meetings in a room for your Mac to write up. It syncs through iCloud or your own server. It is not in the App Store; build it from the source with Xcode."
+      "answer": "Yes. It shows your meetings, chat, people, analytics, and the coach. It records meetings in a room for your Mac to write up, and it turns a recorded phone call into a meeting. It syncs through iCloud or your own server. It is not in the App Store; build it from the source with Xcode."
     },
     {
       "question": "How do updates work?",

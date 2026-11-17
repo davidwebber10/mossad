@@ -177,4 +177,90 @@ final class RoomAudioTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: RoomAudio.finished(id, in: dir).path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("\(other).part1.unreadable.caf").path))
     }
+
+    /// The 3 second AAC file that the phone sends.
+    private func aacAudio(_ url: URL) throws -> URL {
+        let file = try AVAudioFile(forWriting: url, settings: PhoneRecording.settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+        let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 48_000)!
+        buffer.frameLength = 48_000
+        for i in 0..<Int(buffer.frameLength) { buffer.floatChannelData![0][i] = sin(Float(i) * 0.05) * 0.3 }
+        try file.write(from: buffer)
+        return url
+    }
+
+    func testAdoptCopiesAnMPEG4FileAsItIs() throws {
+        let dir = temp(), outside = temp(), id = "20270115-090000"
+        let source = try aacAudio(outside.appendingPathComponent("Call with Sam Carter.m4a"))
+        XCTAssertEqual(try RoomAudio.adopt(source, as: id, in: dir, convert: false), 3, accuracy: 0.2)
+        XCTAssertEqual(try Data(contentsOf: RoomAudio.finished(id, in: dir)), try Data(contentsOf: source))
+        XCTAssertEqual(RoomAudio.ids(in: dir), [id])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path), "The source stays")
+    }
+
+    func testAdoptConvertsAnotherFormat() throws {
+        let dir = temp(), outside = temp(), id = "20270115-090000"
+        let source = outside.appendingPathComponent("call.caf")
+        try writeTestAudio(source, seconds: 3, frequency: 440, sampleRate: 44_100)
+        XCTAssertEqual(try RoomAudio.adopt(source, as: id, in: dir, convert: true), 3, accuracy: 0.2)
+        let f = try AVAudioFile(forReading: RoomAudio.finished(id, in: dir))
+        XCTAssertEqual(f.fileFormat.sampleRate, 16_000)
+        XCTAssertEqual(Double(f.length) / f.fileFormat.sampleRate, 3, accuracy: 0.2)
+        XCTAssertEqual(RoomAudio.ids(in: dir), [id])
+    }
+
+    func testAdoptNeverReplacesARecording() throws {
+        let dir = temp(), outside = temp(), id = "20270115-090000"
+        let first = try aacAudio(outside.appendingPathComponent("first.m4a"))
+        try RoomAudio.adopt(first, as: id, in: dir, convert: false)
+        let before = try Data(contentsOf: RoomAudio.finished(id, in: dir))
+        let second = outside.appendingPathComponent("second.caf")
+        try writeTestAudio(second, seconds: 2, frequency: 220)
+        XCTAssertThrowsError(try RoomAudio.adopt(second, as: id, in: dir, convert: true)) { XCTAssertTrue($0 is RoomAudio.Taken, "\($0)") }
+        XCTAssertEqual(try Data(contentsOf: RoomAudio.finished(id, in: dir)), before)
+        try writePart(RoomAudio.part("20270115-100000", 1, in: dir), seconds: 0.1)
+        XCTAssertThrowsError(try RoomAudio.adopt(second, as: "20270115-100000", in: dir, convert: true), "A recording in parts is taken too")
+    }
+
+    func testAdoptLeavesNothingInTheFolderWhenItFails() throws {
+        let dir = temp(), outside = temp()
+        let source = outside.appendingPathComponent("call.m4a")
+        try Data("hello".utf8).write(to: source)
+        XCTAssertThrowsError(try RoomAudio.adopt(source, as: "20270115-090000", in: dir, convert: true))
+        XCTAssertThrowsError(try RoomAudio.adopt(source, as: "20270115-090000", in: dir, convert: false))
+        XCTAssertEqual(RoomAudio.ids(in: dir), [])
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), [])
+    }
+
+    func testAdoptKeepsTheVoiceOnTheSecondChannel() throws {
+        let dir = temp(), outside = temp(), id = "20270115-090000"
+        let source = outside.appendingPathComponent("call.caf")
+        try writeSecondChannelTone(source, seconds: 3)
+        try RoomAudio.adopt(source, as: id, in: dir, convert: true)
+        let f = try AVAudioFile(forReading: RoomAudio.finished(id, in: dir))
+        XCTAssertEqual(f.fileFormat.channelCount, 1)
+        XCTAssertGreaterThan(try peak(of: f), 0.05, "the person on channel 2 is in the file")
+    }
+
+    private func adoptedPeak(_ source: URL) throws -> Float {
+        let dir = temp(), id = "20270115-090000"
+        try RoomAudio.adopt(source, as: id, in: dir, convert: true)
+        return try peak(of: AVAudioFile(forReading: RoomAudio.finished(id, in: dir)))
+    }
+
+    func testAdoptMixesTheTwoChannelsByTheirMean() throws {
+        let outside = temp()
+        let one = outside.appendingPathComponent("one.caf"), both = outside.appendingPathComponent("both.caf")
+        try writeSecondChannelTone(one, seconds: 3, amplitude: 0.9)
+        try writeSecondChannelTone(both, seconds: 3, amplitude: 0.9, both: true)
+        XCTAssertEqual(try adoptedPeak(one), 0.45, accuracy: 0.135, "one side of two is half as loud")
+        let p = try adoptedPeak(both)
+        XCTAssertEqual(p, 0.9, accuracy: 0.09)
+        XCTAssertLessThanOrEqual(p, 1.0, "a mean never clips")
+    }
+
+    func testAdoptKeepsTheLevelOfAMonoFile() throws {
+        let mono = temp().appendingPathComponent("mono.caf")
+        try writeTestAudio(mono, seconds: 3, frequency: 440)
+        XCTAssertEqual(try adoptedPeak(mono), 0.5, accuracy: 0.05)
+    }
 }
