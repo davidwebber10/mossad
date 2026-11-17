@@ -97,7 +97,8 @@ final class MoveMarkedCallTests: XCTestCase {
         XCTAssertThrowsError(try store.save(chat))
         var old = try XCTUnwrap(store.all().first { $0.callID == id })
         old.title = "Renamed"
-        XCTAssertNoThrow(try store.save(old))
+        // Review N6: a chat there already is refused too (`MoveReviewThreeTests`).
+        XCTAssertThrowsError(try store.save(old))
     }
 
     /// I2 and the sync: in the target, a meeting that is still being taken in is never pushed to its store.

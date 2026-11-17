@@ -119,12 +119,12 @@ public struct ChatStore: Sendable {
             .sorted { $0.updated > $1.updated }
     }
 
-    /// A new chat about a meeting whose move waits: the removal would delete it with the meeting, and the other
-    /// profile would never get it. The app says `MoveWords.moving(to:)`.
+    /// A chat about a meeting whose move waits, new or there already: the copy in the other profile was made before
+    /// it, and the removal deletes it with the meeting. The app turns the field off first (`MoveShow.chatOff`).
     public struct MovingCall: Error {}
 
     public func save(_ chat: Chat) throws {
-        if let callID = chat.callID, MovePaths.isID(callID), !FileManager.default.fileExists(atPath: url(chat.id).path),
+        if let callID = chat.callID, MovePaths.isID(callID),
            let r = try? CallRecord.load(from: directory.deletingLastPathComponent().appendingPathComponent("Audio").appendingPathComponent(callID)),
            r.moveTo != nil {
             throw MovingCall()

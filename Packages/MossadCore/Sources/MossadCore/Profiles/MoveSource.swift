@@ -169,6 +169,17 @@ public struct MoveSource: Sendable {
         return answer
     }
 
+    /// "Try again" on a removal that waits: its step runs now, not at the end of its wait.
+    public func tryAgain(_ callID: String) async -> Event {
+        let reset: Bool = await exclusiveWaiting(callID) {
+            guard var out = MoveOut.load(callID, paths: s.paths), out.lastTry != nil else { return false }
+            out.lastTry = nil
+            return (try? out.save(s.paths)) != nil
+        }
+        guard reset else { return .nothing }
+        return await run(callID)
+    }
+
     /// The owner's Cancel: false when it did not happen (`cancelMove` says why).
     public func cancel(_ callID: String) async -> Bool {
         await cancelMove(callID) == .cancelled
@@ -281,9 +292,30 @@ public struct MoveSource: Sendable {
             return .waiting
         case .remove:
             if out.state == .waiting { try save(.removing) }
+            // A step that failed waits longer after each try (`MoveRetry`); "Try again" clears the time of the last.
+            guard MoveRetry.due(tries: out.tries ?? 0, last: out.lastTry, now: s.now()) else { return .waiting }
+            let before = out.nextStep
             let ownerName = s.ownerName()
             try await MoveRemoval.advance(&out, paths: s.paths, library: s.library, ownerName: ownerName, actions: s.actions, now: s.now(), stop: s.stop)
-            return out.nextStep == nil ? .working : .waiting
+            let progressed = out.nextStep != before
+            if progressed { out.tries = nil; out.lastTry = nil; out.waitsAt = nil; out.because = nil; out.waitsSince = nil }
+            guard let waits = out.nextStep else {
+                if progressed { try out.save(s.paths) }
+                return .working
+            }
+            let kind = MoveRemoval.waitKind(waits, library: s.library)
+            if out.waitsAt != waits.rawValue || out.because != kind {
+                // Logged once for each change of where and why, never at each look.
+                Log.info("Move: the removal of \(callID) waits at its \(waits.rawValue) step (\(kind.rawValue))")
+                out.tries = 0
+                out.waitsSince = s.now()
+            }
+            out.tries = (out.tries ?? 0) + 1
+            out.lastTry = s.now()
+            out.waitsAt = waits.rawValue
+            out.because = kind
+            try out.save(s.paths)
+            return .waiting
         case .cleanUp(let removeIncoming):
             if let b = targetPaths, MoveCopy.hasPart(callID, token: out.token, incoming: b.incoming) {
                 try s.stop("remove the part")

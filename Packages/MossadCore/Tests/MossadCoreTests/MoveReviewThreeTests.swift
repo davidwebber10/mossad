@@ -113,4 +113,31 @@ final class MoveReviewThreeTests: XCTestCase {
         XCTAssertTrue(lib.identity!.people.people.contains { $0.id.rawValue == "p-sam" && $0.isLive }, "Sam stays")
         XCTAssertTrue(forgot.ids.isEmpty, "the read of a person who stays is kept")
     }
+
+    /// N6: every save of a chat of a marked meeting is refused, a chat that is there already too, so nothing the owner
+    /// asks after the copy is lost with the removal; the app turns the field off before a request is sent.
+    func testEverySaveOfAChatOfAMarkedMeetingIsRefused() throws {
+        let a = temp()
+        var r = try writtenCall(in: a)
+        let store = ChatStore(directory: a.chats)
+        var chat = Chat(title: "About the budget")
+        chat.callID = id
+        try store.save(chat)
+        r.moveTo = work
+        try r.save(to: a.callDirectory(id))
+        chat.title = "Renamed"
+        XCTAssertThrowsError(try store.save(chat))
+        XCTAssertEqual(try store.load(chat.id)?.title, "About the budget")
+        var free = Chat(title: "No meeting")
+        free.callID = nil
+        XCTAssertNoThrow(try store.save(free))
+    }
+
+    /// The chat field's words for a marked meeting, and none for one with no mark.
+    func testTheChatFieldOfAMarkedMeetingIsOff() {
+        var r = CallRecord(id: id, platform: .zoom, bundleID: "us.zoom.xos", start: t0, end: t0 + 60, status: .written)
+        XCTAssertNil(MoveShow.chatOff(r, name: "Work"))
+        r.moveTo = work
+        XCTAssertEqual(MoveShow.chatOff(r, name: "Work"), "This meeting is moving to Work. Wait, or cancel the move.")
+    }
 }

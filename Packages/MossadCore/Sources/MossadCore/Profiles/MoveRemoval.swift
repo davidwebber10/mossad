@@ -66,6 +66,17 @@ public enum MoveRemoval {
         return peopleToRemove(r, people: identity.people.people, samples: identity.samples.samples, others: others).map(\.id.rawValue)
     }
 
+    /// Why a removal step that did not end waits, as far as this profile can tell.
+    static func waitKind(_ step: MoveOut.Step, library: VoiceLibrary) -> MoveOut.Wait {
+        if library.identity == nil, [.voices, .people].contains(step) { return .peopleNotReady }
+        switch step {
+        case .shares: return .shareNotSaved
+        case .backup: return .backupNotDone
+        case .folder: return .folderNotRemoved
+        default: return .failed
+        }
+    }
+
     /// Every other meeting's record; nil when one cannot be read or `Audio` does not list: that meeting may be one of
     /// the person's, so nobody goes until it reads.
     static func otherRecords(excluding callID: String, paths: Paths) -> [CallRecord]? {

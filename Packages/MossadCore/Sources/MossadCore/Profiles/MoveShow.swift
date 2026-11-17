@@ -54,6 +54,12 @@ public enum MoveShow {
         return name.map(MoveWords.moving(to:)) ?? MoveWords.heldForGone
     }
 
+    /// The chat field of a meeting whose move waits is off, with this sentence, before any request is sent.
+    public static func chatOff(_ r: CallRecord?, name: String?) -> String? {
+        guard let r else { return nil }
+        return refusesCommand(r, name: name)
+    }
+
     public enum Menu: Equatable, Sendable {
         case none
         /// "Move to ▸" with one item for each target id.
@@ -126,4 +132,34 @@ extension MoveWords {
         let base = reason.hasSuffix(stays) ? String(reason.dropLast(stays.count)) : reason
         return base + " Mossad does not process it until you choose."
     }
+}
+
+/// Review N2: how long a step of a move that failed waits before its next try. Pure: the caller gives the time.
+public enum MoveRetry {
+    /// After 1, 2, 3, and 4 or more failed tries. After one the next look tries (the look comes every 15 s).
+    public static let waits: [TimeInterval] = [0, 60, 300, 1800]
+
+    public static func wait(afterTries n: Int) -> TimeInterval { n <= 0 ? 0 : waits[min(n, waits.count) - 1] }
+
+    /// True when the step may run now. No time of a last try ("Try again") is always due.
+    public static func due(tries: Int, last: Date?, now: Date) -> Bool {
+        guard tries > 0, let last else { return true }
+        return now.timeIntervalSince(last) >= wait(afterTries: tries)
+    }
+}
+
+extension MoveWords {
+    /// A removal in this profile that waits after the other profile took the meeting in.
+    public static func removalWaits(to target: String, because: MoveOut.Wait) -> String {
+        let why = switch because {
+        case .peopleNotReady: "and waits for the people list of this profile."
+        case .shareNotSaved: "and waits to stop its share link."
+        case .backupNotDone: "and waits to delete its backup copy."
+        case .folderNotRemoved: "and waits to remove its recording folder."
+        case .failed: "and one step did not work. It tries again."
+        }
+        return "Moved to \(target). Mossad still removes it here, \(why)"
+    }
+
+    public static let tryAgain = "Try again"
 }

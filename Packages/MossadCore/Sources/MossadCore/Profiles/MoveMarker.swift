@@ -158,6 +158,16 @@ public struct MoveOut: Codable, Equatable, Sendable {
     public var cancel: MovePlan.Cancel?
     /// The ids of the people whom only this call made, decided once before the `people` step deletes the first.
     public var people: [String]?
+    /// Review N2: the failed tries of the removal step that waits (`waitsAt`), the last one, why, and since when. Gone
+    /// once the step ends.
+    public var tries: Int?
+    public var lastTry: Date?
+    public var waitsAt: String?
+    public var because: Wait?
+    public var waitsSince: Date?
+
+    /// Why a removal step waits, as far as this profile can tell.
+    public enum Wait: String, Codable, CaseIterable, Sendable { case peopleNotReady, shareNotSaved, backupNotDone, folderNotRemoved, failed }
 
     public init(callID: String, to: String, started: Date, afterCall: Bool = false, token: String = MoveOut.newToken()) {
         version = Self.currentVersion
