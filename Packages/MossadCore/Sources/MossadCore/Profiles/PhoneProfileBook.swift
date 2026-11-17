@@ -239,6 +239,9 @@ public enum PhoneProfileWords {
     }
 
     public static func noProfileNamed(_ name: String) -> String { "Mossad has no profile named “\(name)” on this iPhone." }
+    public static func noneNamed(_ name: String, choices: [String]) -> String {
+        "\(noProfileNamed(name)) Its profiles are \(choices.joined(separator: ", "))."
+    }
     public static func manyNamed(_ name: String, choices: [String]) -> String {
         "More than one profile on this iPhone is named “\(name)”: \(choices.joined(separator: ", ")). Rename one on your Mac."
     }

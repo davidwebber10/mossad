@@ -232,6 +232,28 @@ final class PhoneProfiles {
         FriendlyError(kind: .other, context: .connectingServer, said: sentence, retries: false)
     }
 
+    // MARK: Imports for any profile
+
+    /// The person choices: for the profile that shows, the store's (saved people, named speakers, the owner); for
+    /// another, that profile's own saved people, else a name as typed.
+    func importChoices(_ query: String, for profile: PhoneProfile) -> [CallImport.Choice] {
+        if profile.id == store.context.id { return store.importChoices(query) }
+        return uploader(for: profile)?.importChoices(query, heard: [], owner: "") ?? []
+    }
+
+    func importRefusal(_ draft: CallImport.Draft, from url: URL, for profile: PhoneProfile) async -> CallImport.Refusal? {
+        if profile.id == store.context.id { return await store.importRefusal(draft, from: url) }
+        guard let u = uploader(for: profile) else { return .notSaved }
+        return await u.importRefusal(draft, from: url)
+    }
+
+    /// Into that profile's folder, outbox, and store, whichever profile shows; it is sent at once.
+    func importCall(_ draft: CallImport.Draft, from url: URL, for profile: PhoneProfile) async -> Result<String, CallImport.Refusal> {
+        if profile.id == store.context.id { return await store.importCall(draft, from: url) }
+        guard let u = uploader(for: profile) else { return .failure(.notSaved) }
+        return await u.importCall(draft, from: url)
+    }
+
     func remember(importTarget id: String) {
         book.importTarget = id == Profile.defaultID ? nil : id
         book.save(to: .standard)

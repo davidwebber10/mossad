@@ -41,6 +41,10 @@ struct CallImportScreen: View {
     @State private var adding = false
     /// The import worked: the store already removed the handed file.
     @State private var added = false
+    /// The profile the recording goes to: the last one chosen, the first time the one that shows.
+    @State private var target: PhoneProfile?
+
+    private var chosen: PhoneProfile { target ?? profiles.book.importDefault }
 
     private var draft: CallImport.Draft? {
         file.map { CallImport.Draft(file: $0, title: title, start: start, person: person) }
@@ -75,8 +79,51 @@ struct CallImportScreen: View {
         .onDisappear { discardUnlessAdded() }
     }
 
+    /// Only with two profiles or more: which profile the recording goes to.
+    @ViewBuilder
+    private var profileRow: some View {
+        if profiles.book.showsProfiles {
+            HairlineRow {
+                VStack(alignment: .leading, spacing: Space.s) {
+                    PhoneLabel("Profile")
+                    Menu {
+                        ForEach(profiles.book.listed) { p in
+                            Button {
+                                choose(p)
+                            } label: {
+                                if p.id == chosen.id { Label(p.name, systemImage: "checkmark") } else { Text(p.name) }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: Space.s) {
+                            ProfileDot(color: chosen.color, size: 10)
+                            Text(chosen.name).textRole(.body).foregroundStyle(Palette.ink)
+                            Spacer()
+                            Image(systemName: "chevron.up.chevron.down").font(.footnote).foregroundStyle(Palette.tertiary)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .accessibilityLabel(PhoneProfileWords.label(chosen.name))
+                }
+            }
+        }
+    }
+
+    /// A change of profile: the person goes (an id of one profile never travels in another), the new profile's
+    /// people are read, and the file is checked again against that profile.
+    private func choose(_ p: PhoneProfile) {
+        guard p.id != chosen.id else { return }
+        target = p
+        person = nil
+        Task {
+            await profiles.uploader(for: p)?.loadPeople()
+            if let draft { refusal = await profiles.importRefusal(draft, from: incoming.url, for: p) }
+        }
+    }
+
     @ViewBuilder
     private func rows(_ file: CallImport.File) -> some View {
+        profileRow
         HairlineRow {
             VStack(alignment: .leading, spacing: Space.s) {
                 PhoneLabel("Title")
@@ -111,7 +158,7 @@ struct CallImportScreen: View {
         }
         HairlineRow(divided: false) {
             NavigationLink {
-                CallPersonPicker(person: $person)
+                CallPersonPicker(person: $person, profile: chosen)
             } label: {
                 VStack(alignment: .leading, spacing: Space.s) {
                     PhoneLabel("Who was on the call")
@@ -132,15 +179,19 @@ struct CallImportScreen: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, Space.m)
         }
-        Button {
-            Task { await add() }
-        } label: {
-            if adding { ProgressView().tint(Palette.onAccent) } else { Text("Add to Mossad") }
+        if profiles.uploader(for: chosen) == nil {
+            Text(PhoneProfileWords.cannotOpen).textRole(.secondary).foregroundStyle(Palette.recording).padding(.top, Space.l)
+        } else {
+            Button {
+                Task { await add() }
+            } label: {
+                if adding { ProgressView().tint(Palette.onAccent) } else { Text("Add to Mossad") }
+            }
+            .accessibilityLabel(adding ? "Adding to Mossad" : "Add to Mossad")
+            .buttonStyle(PhoneFillButtonStyle(wide: true))
+            .disabled(adding)
+            .padding(.top, Space.l)
         }
-        .accessibilityLabel(adding ? "Adding to Mossad" : "Add to Mossad")
-        .buttonStyle(PhoneFillButtonStyle(wide: true))
-        .disabled(adding)
-        .padding(.top, Space.l)
     }
 
     private func refused(_ refusal: CallImport.Refusal) -> some View {
@@ -162,11 +213,16 @@ struct CallImportScreen: View {
         start = found.date
         sure = found.sure
         file = f
-        if let draft { refusal = await store.importRefusal(draft, from: url) }
+        #if DEBUG
+        // `MOSSAD_IMPORT_PROFILE=<id>` picks a listed profile for the import.
+        if let id = PhoneStore.hook("MOSSAD_IMPORT_PROFILE"), let p = profiles.book.listed.first(where: { $0.id == id }) { target = p }
+        #endif
+        await profiles.uploader(for: chosen)?.loadPeople()
+        if let draft { refusal = await profiles.importRefusal(draft, from: url, for: chosen) }
         #if DEBUG
         // Development hooks for a check with no taps: `MOSSAD_IMPORT_PERSON=<name>` names the person as typed, and
         // `MOSSAD_IMPORT_ADD=1` taps "Add to Mossad".
-        if let name = PhoneStore.hook("MOSSAD_IMPORT_PERSON") { person = CallImport.typed(name, among: store.importChoices(name)) }
+        if let name = PhoneStore.hook("MOSSAD_IMPORT_PERSON") { person = CallImport.typed(name, among: profiles.importChoices(name, for: chosen)) }
         if refusal == nil, PhoneStore.hook("MOSSAD_IMPORT_ADD") == "1" { await add() }
         #endif
     }
@@ -175,12 +231,17 @@ struct CallImportScreen: View {
         guard let draft else { return }
         adding = true
         defer { adding = false }
-        switch await store.importCall(draft, from: incoming.url) {
+        let into = chosen
+        switch await profiles.importCall(draft, from: incoming.url, for: into) {
         case .success:
             added = true
+            profiles.remember(importTarget: into.id)
             profiles.discardIncoming(incoming.url)
-            store.tab = .meetings
-            store.path = []
+            // The list changes only when the recording is in the profile that shows.
+            if into.id == store.context.id {
+                store.tab = .meetings
+                store.path = []
+            }
             dismiss()
         case .failure(let r):
             refusal = r
@@ -199,12 +260,13 @@ struct CallImportScreen: View {
 /// One person at most: a saved person, a name as typed, or nobody.
 private struct CallPersonPicker: View {
     @Binding var person: CallImport.Choice?
-    @Environment(PhoneStore.self) private var store
+    let profile: PhoneProfile
+    @Environment(PhoneProfiles.self) private var profiles
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
 
     var body: some View {
-        let choices = store.importChoices(query)
+        let choices = profiles.importChoices(query, for: profile)
         List {
             if let typed = CallImport.typed(query, among: choices), !choices.contains(typed) {
                 Button("Use \u{201C}\(typed.name)\u{201D}") { pick(typed) }

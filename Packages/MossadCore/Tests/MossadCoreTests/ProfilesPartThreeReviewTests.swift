@@ -272,4 +272,9 @@ final class ProfilesPartThreeReviewTests: XCTestCase {
                            "\(String(describing: outbox)) \(String(describing: audio)) \(busy) \(now)")
         }
     }
+
+    func testANameThatFitsNoProfileIsRefusedWithTheProfilesListed() {
+        XCTAssertEqual(PhoneProfileWords.noneNamed("Home", choices: ["Mossad", "Work"]),
+                       "Mossad has no profile named “Home” on this iPhone. Its profiles are Mossad, Work.")
+    }
 }
