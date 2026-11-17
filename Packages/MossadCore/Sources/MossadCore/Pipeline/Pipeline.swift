@@ -601,6 +601,15 @@ public actor Pipeline {
     /// A run of this call is in flight.
     public func isBusy(_ id: String) -> Bool { inFlight.contains(id) }
 
+    /// Removes a meeting that the target has taken in: the note, its reference backups, and the call folder (renamed out
+    /// of `Audio` first). Only a record marked with `moveTo` that is not in flight; any status. A folder that is gone
+    /// counts as done.
+    public func removeMoved(callID: String) -> Bool {
+        guard !inFlight.contains(callID) else { return false }
+        if let r = try? CallRecord.load(from: paths.callDirectory(callID)), r.moveTo == nil { return false }
+        return MoveRemoval.removeFolder(callID, paths: paths)
+    }
+
     /// Marks a meeting as leaving for a profile, or takes the mark off (nil). False for a call in flight, a call that
     /// records, a record that cannot be read, or one already marked for another profile.
     @discardableResult
