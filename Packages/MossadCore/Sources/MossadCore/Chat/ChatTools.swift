@@ -51,9 +51,13 @@ public struct ChatTools: Sendable {
     var now: Date { fixedNow ?? Date() }
 
     public init(records: [CallRecord], owner: String, paths: Paths? = nil, people: [Person]? = nil, profiles: [VoiceProfile]? = nil,
-                personaTraits: Bool = true, settings: ToolSettings? = nil, now: Date? = nil) {
+                personaTraits: Bool = true, settings: ToolSettings? = nil, now: Date? = nil, leaving: Set<String>? = nil) {
         fixedNow = now
-        self.records = records.filter { $0.status == .written }.sorted { $0.start > $1.start }
+        // A meeting that the other profile took in is that profile's from then on: no tool and no digest part reads it
+        // here while its removal runs (`MoveOut.syncHeld`, read-only from this profile's own `Moves`; nothing there,
+        // nothing read). A call marked during its recording is never written here, so it is never in the list.
+        let left = leaving ?? paths.map(MoveOut.syncHeld) ?? []
+        self.records = records.filter { $0.status == .written && !left.contains($0.id) }.sorted { $0.start > $1.start }
         live = records.filter { $0.status == .recording }.max { $0.start < $1.start }
         self.owner = owner
         self.paths = paths
