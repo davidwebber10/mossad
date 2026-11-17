@@ -248,8 +248,8 @@ public actor ProfileWorker {
         return Services(transcriber: s.transcriber(key: key, usage: usage), summarizer: s.summarizer(key: key, usage: usage),
                         embeddings: FluidEmbeddingProvider(), calendar: WorkerCalendar(mac: mac, macSource: macSource, google: google),
                         llm: s.languageModel(key: key, usage: usage),
-                        main: stores.main.map { CloudSync(paths: paths, store: $0.store) },
-                        mirror: stores.mirror.map { CloudSync(paths: paths, store: $0.store) },
+                        main: stores.main.map { CloudSync(paths: paths, store: $0.store, leaving: { MoveOut.syncHeld(paths) }) },
+                        mirror: stores.mirror.map { CloudSync(paths: paths, store: $0.store, leaving: { MoveOut.syncHeld(paths) }) },
                         archive: s.archive(key: key, paths: paths, server: server), screenReader: VisionScreenReader())
     }
 

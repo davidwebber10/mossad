@@ -224,6 +224,14 @@ public struct MoveOut: Codable, Equatable, Sendable {
     /// Every id with a file in `Moves`, readable or not: these ids left this profile and are never used here again.
     public static func leftIDs(_ paths: Paths) -> Set<String> { ids(paths) }
 
+    /// The meetings that the target took in and whose removal here has begun (`removing`, then `done` until the folder
+    /// is gone): the sync takes them off the store at once, as if the folder were gone. Before that the meeting is
+    /// still this profile's.
+    public static func syncHeld(_ paths: Paths) -> Set<String> {
+        guard FileManager.default.fileExists(atPath: paths.moves.path) else { return [] }
+        return Set(all(paths).moves.filter { $0.state == .removing || $0.state == .done }.map(\.callID))
+    }
+
     /// A move that is not done.
     public static func hasWork(_ paths: Paths) -> Bool {
         all(paths).moves.contains { $0.state != .done }

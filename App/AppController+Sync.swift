@@ -149,7 +149,7 @@ extension AppController {
         guard let key = stores.mainKey else { return nil }
         if let engine = syncEngine, engine.key == key { return engine.sync }
         guard let store = stores.main?.store else { return nil }
-        let sync = CloudSync(paths: paths, store: store)
+        let sync = CloudSync(paths: paths, store: store, leaving: { [paths] in MoveOut.syncHeld(paths) })
         syncEngine = (key, sync)
         return sync
     }
@@ -159,7 +159,7 @@ extension AppController {
         // The mirror does not depend on iCloud: asked without it, so no iCloud store is made here, as before.
         guard let mirror = services.syncStores(server: serverConnection, hasICloud: false).mirror else { return nil }
         if let m = mirrorEngine, m.key == mirror.key { return m.sync }
-        let sync = CloudSync(paths: paths, store: mirror.store)
+        let sync = CloudSync(paths: paths, store: mirror.store, leaving: { [paths] in MoveOut.syncHeld(paths) })
         mirrorEngine = (mirror.key, sync)
         return sync
     }

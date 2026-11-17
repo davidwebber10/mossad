@@ -27,11 +27,16 @@ public actor CloudSync {
     private let paths: Paths
     private let now: @Sendable () -> Date
     private var prepared = false
+    /// The meetings that left this profile and whose removal still runs (`MoveOut.syncHeld`): the app and the worker
+    /// give it, so the sync reads no ledger itself. Empty with no move.
+    private let leaving: @Sendable () -> Set<String>
 
-    public init(paths: Paths, store: any RecordStore, now: @escaping @Sendable () -> Date = Date.init) {
+    public init(paths: Paths, store: any RecordStore, now: @escaping @Sendable () -> Date = Date.init,
+                leaving: @escaping @Sendable () -> Set<String> = { [] }) {
         self.paths = paths
         self.store = store
         self.now = now
+        self.leaving = leaving
     }
 
     /// iCloud, as before.
@@ -118,10 +123,13 @@ public actor CloudSync {
         try await prepare()
         let withView = store.wantsMeetingView
         let scan = try ProcessingQueue(paths: paths).scan()
-        let payloads = scan.records.filter(SyncPayload.isSyncable).map {
+        // A meeting that another profile took in goes from the store now, as if its folder were gone: its removal here
+        // can wait on a step for long.
+        let leaving = leaving()
+        let payloads = scan.records.filter { SyncPayload.isSyncable($0) && !leaving.contains($0.id) }.map {
             SyncPayload(record: $0, coach: CoachReview.load(in: paths.callDirectory($0.id)), view: withView)
         }
-        let plan = try loadState().plan(payloads, present: scan.folders)
+        let plan = try loadState().plan(payloads, present: scan.folders.subtracting(leaving))
         let dir = try scratch()
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -169,8 +177,12 @@ public actor CloudSync {
                            stop: @Sendable () -> Bool = { false }, digest: [SharedPayload]? = nil) async throws -> Int {
         try await prepare()
         let chats = ChatStore(directory: paths.chats)
-        var payloads = chats.all().map(SharedPayload.chat)
-        for r in ProcessingQueue(paths: paths).allRecords() {
+        let records = ProcessingQueue(paths: paths).allRecords()
+        // The chats of a call for another profile (marked during its recording or by "Move to") and of a meeting that
+        // left: never sent from here, and not deleted either; the removal deletes the files.
+        let away = leaving().union(records.filter { $0.moveTo != nil }.map(\.id))
+        var payloads = chats.all().filter { $0.callID.map { !away.contains($0) } ?? true }.map(SharedPayload.chat)
+        for r in records {
             if let review = CoachReview.load(in: paths.callDirectory(r.id)), let notes = SharedPayload.notes(callID: r.id, review: review) {
                 payloads.append(notes)
             }
