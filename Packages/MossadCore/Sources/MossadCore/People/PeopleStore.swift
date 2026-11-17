@@ -233,7 +233,7 @@ public final class PeopleStore: @unchecked Sendable {
 
     /// The person of a voice profile, made when there is none.
     @discardableResult
-    public func ensure(voiceName name: String, isOwner: Bool, origin: SourceKind) throws -> PersonID {
+    public func ensure(voiceName name: String, isOwner: Bool, origin: SourceKind, actor: String = "voices") throws -> PersonID {
         var id: PersonID?
         try change { people, date in
             if let known = Self.id(forVoiceName: name, isOwner: isOwner, in: people) {
@@ -243,7 +243,7 @@ public final class PeopleStore: @unchecked Sendable {
             let person = Person(displayName: name, isOwner: isOwner, origin: origin, at: date)
             people.append(person)
             id = person.id
-            return [PeopleLogEntry(at: date, kind: "create", actor: "voices", subject: person.id, after: name)]
+            return [PeopleLogEntry(at: date, kind: "create", actor: actor, subject: person.id, after: name)]
         }
         guard let id else { throw CocoaError(.fileWriteUnknown) }
         return id

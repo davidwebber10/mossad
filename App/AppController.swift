@@ -85,6 +85,10 @@ final class AppController: ObservableObject {
             let was = if case .recording = oldValue { true } else { false }
             if was != isRecording { workers?.setRecording(isRecording) }
             callFlag.set(isRecording)
+            if was, !isRecording, geminiPeopleAfterCall {
+                geminiPeopleAfterCall = false
+                linkGeminiPeople()
+            }
             let room = if case .recording(.inPerson, _) = status { true } else { false }
             detection.isSuspended = room
             // With detection suspended, the room's mic gets its own stall check.
@@ -506,6 +510,8 @@ final class AppController: ObservableObject {
     /// A Gemini people run is going on; one more was asked for meanwhile.
     var geminiPeopleRunning = false
     var geminiPeopleAgain = false
+    /// A call held a Gemini people run back; it runs when the call ends.
+    var geminiPeopleAfterCall = false
     /// The calendar the app and the pipeline read: Google for the Google calendar, the Mac for the rest.
     let calendar: MergedCalendarSource
     let notifier = Notifier()
@@ -1111,8 +1117,8 @@ final class AppController: ObservableObject {
             await MainActor.run {
                 self.linkCoachPeople()
                 self.refreshPeopleReferences()
-                self.refreshGoogleDirectory()
-                self.linkGeminiPeople()
+                // The Gemini people wait for the directory read that the launch starts.
+                if !self.refreshGoogleDirectory() { self.linkGeminiPeople() }
             }
         }
     }

@@ -134,6 +134,37 @@ final class IdentityCorpusTests: XCTestCase {
         }
     }
 
+    /// The speaker of a Gemini meeting and the saved voices: who gets the directory's address (`GeminiPeople`). A
+    /// new person only when nobody saved can be the name; a saved one only on its whole name; any guess is nobody.
+    func testTheGeminiSpeakerRows() throws {
+        let rows: [(saved: [String], speaker: String, gets: String?, why: String)] = [
+            ([], "Sam Carter", "Sam Carter", "nobody of that name: a new person"),
+            (["Sam Carter"], "Sam Carter", "Sam Carter", "the whole name"),
+            (["Carter, Sam"], "Sam Carter", "Carter, Sam", "the whole name in the other order"),
+            (["Sam Carter (Acme)"], "Sam Carter", nil, "a part in brackets is another person"),
+            (["Sam A. Carter"], "Sam Carter", nil, "a middle name on one side is a guess"),
+            (["Mike Stone"], "Michael Stone", nil, "a short first name is a guess"),
+            (["Sam Carter", "SAM CARTER"], "Sam Carter", nil, "two who fit are nobody"),
+            (["Sam Carver"], "Sam Carter", nil, "a name a letter off is a guess"),
+        ]
+        for row in rows {
+            let paths = Paths(root: tempDirectory())
+            defer { try? FileManager.default.removeItem(at: paths.root) }
+            let library = VoiceLibrary(directory: paths.voices), people = PeopleStore(directory: paths.people)
+            library.identity = VoiceIdentity(people: people, samples: VoiceSampleStore(directory: paths.voices))
+            for (i, name) in row.saved.enumerated() { try library.add([Float(i + 1), 1, 0, 0], to: name) }
+            var r = CallRecord(id: "20261102-090000-notes", platform: .meet, bundleID: "b", start: Date(), end: Date(), status: .written)
+            r.source = CallRecord.geminiNotesSource
+            r.speakerNames = ["them:A": row.speaker]
+            r.invitees = [Invitee(name: nil, email: "speaker@example.com")]
+            GeminiPeople.link([r], library: library, people: people,
+                              directory: [GoogleProfile(emails: ["speaker@example.com"], name: row.speaker, source: .directory)],
+                              paths: paths, domains: .none)
+            XCTAssertEqual(library.name(forEmail: "speaker@example.com"), row.gets, "\(row.saved) and \(row.speaker): \(row.why)")
+            XCTAssertEqual(library.profiles.count, row.saved.count + (row.saved.isEmpty && row.gets != nil ? 1 : 0), "\(row.speaker): \(row.why)")
+        }
+    }
+
     /// Review scenario A: Samantha Carter is saved, and a new person, Samuel Carter, is named "Sam Carter".
     func testAShortNameOfANewPersonDoesNotGoIntoAnotherPersonsProfile() throws {
         try library(["Samantha Carter", "Alexandra Smith", "Patricia Lee", "Christopher Nair"]) { library in

@@ -223,16 +223,18 @@ extension AppController {
     }
 
     /// Reads the directory and the contacts, at most once a day unless forced, and fills the saved people by their
-    /// addresses. Off the main thread; nothing in a preview, Rehearsal, or a second copy.
-    func refreshGoogleDirectory(force: Bool = false) {
-        guard mode.does(.upkeep), google.has(.directory) || google.has(.contacts) else { return }
+    /// addresses. Off the main thread; nothing in a preview, Rehearsal, or a second copy. True when a read started.
+    @discardableResult
+    func refreshGoogleDirectory(force: Bool = false) -> Bool {
+        guard mode.does(.upkeep), google.has(.directory) || google.has(.contacts) else { return false }
         let last = UserDefaults.standard.double(forKey: "googleDirectoryRead")
-        guard force || Date().timeIntervalSince1970 - last > 86_400 else { return }
+        guard force || Date().timeIntervalSince1970 - last > 86_400 else { return false }
         let session = google, paths = paths, library = library, names = googleNames
         let signIn = googleConnector.version
         Task.detached(priority: .utility) {
             let fresh = await GooglePeopleAPI.fetch(session: session)
-            guard !fresh.isEmpty else { return }
+            // A read that brought nothing leaves the last copy, which the Gemini people step may still use.
+            guard !fresh.isEmpty else { return await MainActor.run { self.linkGeminiPeople() } }
             // A sign-out or a new sign-in during the read: its answer belongs to a grant that is gone.
             guard await MainActor.run(body: { self.googleConnector.version == signIn && session.isConnected }) else { return }
             // A part that was not read keeps its old copy; nothing is made from a part of a list.
@@ -250,37 +252,39 @@ extension AppController {
                 self.linkGeminiPeople()
             }
         }
+        return true
     }
 
     /// The speakers of Gemini meetings become saved people with their address, on a sure match with the invite and
-    /// the directory (`GeminiPeople`). Each meeting is read once: at launch for the ones imported before, and after
-    /// each import. It waits for the people store and the directory copy. One run at a time, so a late run never
-    /// writes an older list of the meetings done; a call during a run starts one more after it.
+    /// the directory (`GeminiPeople`). Every notes-only meeting is read at each run, so a match held back now is read
+    /// again: after each directory read (at launch, the one the launch started), after an import that made a
+    /// meeting, and after a call that held a run back. Only where the directory is read (the window app), with the
+    /// directory part on, never while a call records. One run at a time; a call during a run starts one more after it.
     func linkGeminiPeople() {
-        guard !isInert, !isSecondCopy, let people = library.identity?.people else { return }
+        guard mode.does(.upkeep), google.has(.directory), let people = library.identity?.people else { return }
+        guard !isRecording else { geminiPeopleAfterCall = true; return }
         guard !geminiPeopleRunning else { geminiPeopleAgain = true; return }
         geminiPeopleRunning = true
-        let paths = paths, library = library
-        let done = Set(UserDefaults.standard.stringArray(forKey: "geminiPeopleLinked") ?? [])
+        let paths = paths, library = library, flag = callFlag
         Task {
             defer {
                 geminiPeopleRunning = false
                 if geminiPeopleAgain { geminiPeopleAgain = false; linkGeminiPeople() }
             }
             // From disk, not the list on screen: a meeting just imported, or one at launch, may not be in it yet.
-            let out = await Task.detached(priority: .utility) { () -> (added: Int, done: Set<String>)? in
+            let out = await Task.detached(priority: .utility) { () -> GeminiPeople.Outcome? in
                 guard let cache = GoogleDirectoryCache.load(paths) else { return nil }
-                let todo = ProcessingQueue(paths: paths).allRecords().filter { $0.isNotesOnly && !done.contains($0.id) }
-                guard !todo.isEmpty else { return nil }
-                return GeminiPeople.link(todo, library: library, directory: GeminiPeople.directoryNames(cache), done: done,
-                                         people: people.people)
+                let notes = ProcessingQueue(paths: paths).allRecords().filter(\.isNotesOnly)
+                guard !notes.isEmpty else { return nil }
+                return GeminiPeople.link(notes, library: library, people: people, directory: cache.profiles, paths: paths, stop: { flag.recording })
             }.value
             guard let out else { return }
-            UserDefaults.standard.set(Array(out.done).sorted(), forKey: "geminiPeopleLinked")
-            if out.added > 0 {
-                Log.info("Gemini people: \(out.added) \(out.added == 1 ? "person" : "people") saved from the invites")
-                refreshPeopleReferences()
+            if out.stopped { geminiPeopleAfterCall = true }
+            // Counts only: never a name or an address.
+            if out.made + out.joined + out.failed > 0 {
+                Log.info("Gemini people: \(out.made) made, \(out.joined) given an address, \(out.left) held back, \(out.failed) not saved")
             }
+            if out.made + out.joined > 0 { refreshPeopleReferences() }
         }
     }
 
