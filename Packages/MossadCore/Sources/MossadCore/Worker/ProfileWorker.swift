@@ -310,7 +310,10 @@ public actor ProfileWorker {
     /// The duty `takeInMoved`: goes on with this profile's own moves, then takes in what waits. True when a meeting
     /// came in, left, or a move ended. A look that finds nothing reads two folder names and writes nothing.
     func moves() async -> Bool {
-        guard runs(.takeInMoved), referencesReady, MoveRules.hasWork(setup.paths) else { return false }
+        guard runs(.takeInMoved) else { return false }
+        // The leftovers of moves to this profile go after a week, also when no move has work.
+        moveIntake.cleanUpHourly()
+        guard referencesReady, MoveRules.hasWork(setup.paths) else { return false }
         // Its own removals first: a meeting that comes back waits while this profile still removes it.
         let events = await moveSource.runAll()
         let ended = events.values.contains { event in

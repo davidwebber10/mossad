@@ -66,6 +66,26 @@ public struct MoveIntake: Sendable {
     /// What the first profile normally removes itself: a part, a folder it cancelled, and one this profile refused.
     public static let leftoverAge: TimeInterval = 7 * 86_400
 
+    /// The leftovers are looked at once an hour, also when no move has work.
+    public static func cleanUpDue(last: Date?, now: Date) -> Bool {
+        guard let last else { return true }
+        return now.timeIntervalSince(last) >= 3600
+    }
+
+    private static let cleanLock = NSLock()
+    nonisolated(unsafe) private static var cleaned: [String: Date] = [:]
+
+    /// `cleanUp` at most once an hour for this folder, from a look that may have no work.
+    public func cleanUpHourly() {
+        let key = paths.root.path, at = now()
+        let due = Self.cleanLock.withLock { () -> Bool in
+            guard Self.cleanUpDue(last: Self.cleaned[key], now: at) else { return false }
+            Self.cleaned[key] = at
+            return true
+        }
+        if due { cleanUp() }
+    }
+
     /// Removes those leftovers after a week (the first profile may be gone). A folder that waits, is taken in, or was
     /// taken never goes: the first profile reads its marker before it removes its own meeting.
     public func cleanUp() {

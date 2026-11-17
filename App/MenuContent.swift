@@ -288,9 +288,11 @@ struct RecordingStatus: View {
                 VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                     TimelineView(.periodic(from: since, by: 1)) { context in
                         Text("\(controller.isPaused ? "Paused" : "Recording") · \(platform.displayName) · \(elapsed(since, context.date))")
-                            .fontWeight(.semibold).monospacedDigit().lineLimit(1)
+                            // The middle goes first, so the time stays whole at the panel's width.
+                            .fontWeight(.semibold).monospacedDigit().lineLimit(1).truncationMode(.middle)
                     }
-                    PanelVoicesLine(model: controller.live, platform: platform, title: controller.recordingTitle)
+                    PanelVoicesLine(model: controller.live, platform: platform, title: controller.recordingTitle,
+                                    names: controller.liveOff != .forOtherProfile && controller.liveOff != .afterOtherProfile)
                 }
                 .accessibilityElement(children: .combine)
                 Spacer(minLength: 6)
@@ -329,6 +331,8 @@ private struct PanelVoicesLine: View {
     @ObservedObject var model: LiveTranscriptModel
     let platform: Platform
     let title: String?
+    /// False for a call for another profile: the names stop with the live transcript.
+    let names: Bool
 
     var body: some View {
         Text(text).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(2)
@@ -339,6 +343,7 @@ private struct PanelVoicesLine: View {
         let (total, unnamed) = model.roomVoices
         let voices = total == 0 ? nil
             : "\(total) \(total == 1 ? "speaker" : "speakers") so far" + (unnamed == 0 ? "" : ", \(unnamed) not yet named")
+        guard names else { return title ?? "" }
         if platform == .inPerson { return voices ?? "Voices get names as Mossad knows them" }
         return title ?? voices ?? "Mossad names voices it knows"
     }

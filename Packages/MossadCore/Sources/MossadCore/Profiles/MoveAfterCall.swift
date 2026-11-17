@@ -144,6 +144,37 @@ public enum MoveAfterCall {
         return Kept(call: Call(callID: r.id, platform: r.platform, meetingID: r.meetingID, start: r.start), choice: .other(to), end: r.end)
     }
 
+    /// What the choice of another profile stops at once, in the same turn as the choice: the streams that are open, the
+    /// live file that `current_call` reads, and the live chat's answer in flight. Every other send asks `allows` before
+    /// it starts. A take-back starts nothing again.
+    public enum Stop: Equatable, Hashable, Sendable { case liveStreams, liveFile, liveChatAnswer }
+
+    public static func stops(_ choice: Choice) -> Set<Stop> {
+        if case .other = choice { return [.liveStreams, .liveFile, .liveChatAnswer] }
+        return []
+    }
+
+    /// The record at the end of the call with the owner's latest choice: a choice made in the same instant as the end
+    /// can miss the recorder's write, and the choice in memory is the last word. Nil (no choice in memory) keeps the
+    /// record as it is.
+    public static func settled(_ record: CallRecord, latest: Choice?) -> CallRecord {
+        guard let latest else { return record }
+        var r = record
+        r.moveTo = latest.moveTo
+        return r
+    }
+
+    /// The calls marked during their recording whose move starts at a look: not the call that records, not one with a
+    /// move, and not one held for the owner (its reason kept), also at the first look after a launch.
+    public static func startsAtLook(_ records: [CallRecord], moving: Set<String>, held: Set<String>, recording: String?,
+                                    targets: [String]) -> [(callID: String, to: String)] {
+        records.compactMap { r in
+            guard r.status == .recorded, r.moveTo != nil, r.id != recording, !moving.contains(r.id), !held.contains(r.id),
+                  case .move(let to) = atEnd(r, targets: targets) else { return nil }
+            return (r.id, to)
+        }
+    }
+
     public enum AtEnd: Equatable, Sendable { case process, move(to: String), hold, nothing }
 
     /// At the end of a call. Nil (skipped, discarded, or too short to keep): nothing, and the mark went with the call.

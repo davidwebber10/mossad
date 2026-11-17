@@ -123,12 +123,12 @@ extension AppController {
             Task { @MainActor in self.refresh() }
         }
         callChoice = (callID, next)
-        if case .other = next {
-            stopLive()
-            live.removeFile(paths.callDirectory(callID).appendingPathComponent(LiveTranscript.fileName))
-            liveChatSessions[callID]?.stop()
-            Log.info("Live: the call \(callID) is for another profile; nothing more of it is sent from here")
-        }
+        // What the choice stops at once is the rule's list (`MoveAfterCall.stops`); every other send asks `allows`.
+        let stops = MoveAfterCall.stops(next)
+        if stops.contains(.liveStreams) { stopLive() }
+        if stops.contains(.liveFile) { live.removeFile(paths.callDirectory(callID).appendingPathComponent(LiveTranscript.fileName)) }
+        if stops.contains(.liveChatAnswer) { liveChatSessions[callID]?.stop() }
+        if !stops.isEmpty { Log.info("Live: the call \(callID) is for another profile; nothing more of it is sent from here") }
         liveOff = MoveAfterCall.liveOff(next)
     }
 
@@ -273,12 +273,6 @@ extension AppController {
         halves.source = MoveSource(halves.setup) { [weak self] id, share in
             Task { @MainActor in self?.moveProgress[id] = share }
         }
-        // A call marked during its recording that has no move yet (a quit, a crash, a copy that failed to start):
-        // its move starts now, or it waits for the owner.
-        let recordingID = meetings.first { isLive($0) }?.id
-        for r in meetings where r.status == .recorded && r.moveTo != nil && r.id != recordingID && moves[r.id] == nil && moveEnded[r.id] == nil {
-            if case .move(let to) = MoveAfterCall.atEnd(r, targets: moveTargets.map(\.id)) { moveAfterCall(r.id, to: to) }
-        }
         let paths = paths, home = FileManager.default.homeDirectoryForCurrentUser
         let targets = profiles.registry.live.filter { $0.id != activeProfile.id }
         let workerReach = Dictionary(uniqueKeysWithValues: targets.map { ($0.id, workers?.reach($0.id) ?? .open) })
@@ -289,6 +283,8 @@ extension AppController {
             var taken: [String] = []
             var ended = false
             while true {
+                // The leftovers of moves to this profile go after a week, also when no move has work.
+                halves.intake.cleanUpHourly()
                 if MoveRules.hasWork(paths) {
                     let events = await halves.source.runAll()
                     for (callID, event) in events.sorted(by: { $0.key < $1.key }) {
@@ -326,6 +322,14 @@ extension AppController {
                 self.moveProgress = self.moveProgress.filter { id, _ in open.contains { $0.callID == id && $0.state == .copying } }
                 self.moveReach = reach
                 self.showEnded(kept, phoneChats: phoneChats)
+                // A call marked during its recording that has no move yet (a quit, a crash, a copy that failed to start):
+                // its move starts now. One held for the owner (its reason read from disk above, also at the first look
+                // after a launch) waits until the owner chooses.
+                let recordingID = self.meetings.first { self.isLive($0) }?.id
+                for (callID, to) in MoveAfterCall.startsAtLook(self.meetings, moving: Set(self.moves.keys), held: Set(kept.filter(\.afterCall).map(\.callID)),
+                                                               recording: recordingID, targets: self.moveTargets.map(\.id)) {
+                    self.moveAfterCall(callID, to: to)
+                }
                 for (callID, to) in moved { self.movedHere(callID, to: to) }
                 guard ended || !taken.isEmpty else { return }
                 self.refresh()

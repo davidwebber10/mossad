@@ -180,9 +180,11 @@ public actor CloudSync {
         let records = ProcessingQueue(paths: paths).allRecords()
         // The chats of a call for another profile (marked during its recording or by "Move to") and of a meeting that
         // left: never sent from here, and not deleted either; the removal deletes the files.
-        let away = leaving().union(records.filter { $0.moveTo != nil }.map(\.id))
+        let left = leaving()
+        let away = left.union(records.filter { $0.moveTo != nil }.map(\.id))
         var payloads = chats.all().filter { $0.callID.map { !away.contains($0) } ?? true }.map(SharedPayload.chat)
-        for r in records {
+        // As if its folder were gone: the owner's notes on the review of a meeting that left are not sent either.
+        for r in records where !left.contains(r.id) {
             if let review = CoachReview.load(in: paths.callDirectory(r.id)), let notes = SharedPayload.notes(callID: r.id, review: review) {
                 payloads.append(notes)
             }

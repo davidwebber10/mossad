@@ -274,8 +274,9 @@ public final class CloudArchive: @unchecked Sendable {
         }
     }
 
-    /// The `backup` step of a move: each copy removed now, or remembered for the next pass. False when a copy could be
-    /// neither: the step is not done.
+    /// The `backup` step of a move: each copy removed now, or remembered for the next pass. A remembered delete counts as
+    /// done only once it is saved in `backup-deletes.json`; the next backup pass then removes it (`retryDeletes`), as for
+    /// the delete of a meeting. False when a copy could be neither: the step is not done.
     public func deleteForMove(_ r: CallRecord) async -> Bool {
         var ok = true
         for object in Set([r.archived].compactMap { $0 } + (r.cloudLeftovers ?? [])) {

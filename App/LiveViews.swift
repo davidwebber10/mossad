@@ -13,7 +13,7 @@ struct LiveBand: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: Space.m) {
                 RecordingChip(paused: controller.isPaused, room: room)
-                LivePeopleLine(model: controller.live, record: record)
+                LivePeopleLine(model: controller.live, record: record, names: controller.choice(forCall: record.id) == .here)
             }
             .padding(.top, Space.m)
             if controller.isMuted, !controller.isPaused, !room {
@@ -52,6 +52,8 @@ private struct RecordingChip: View {
 private struct LivePeopleLine: View {
     @ObservedObject var model: LiveTranscriptModel
     let record: CallRecord
+    /// False for a call for another profile (or taken back from it): the names stop with the live transcript.
+    let names: Bool
 
     var body: some View {
         Text(text).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
@@ -60,8 +62,10 @@ private struct LivePeopleLine: View {
     private var text: String {
         guard record.platform == .inPerson else {
             let n = record.attendees.count
+            guard names else { return n > 1 ? "\(n) people" : "" }
             return (n > 1 ? "\(n) people · " : "") + "Mossad names voices it knows"
         }
+        guard names else { return "" }
         let (total, unnamed) = model.roomVoices
         guard total > 0 else { return "Voices get names as Mossad knows them" }
         return "\(total) \(total == 1 ? "speaker" : "speakers") so far" + (unnamed == 0 ? "" : " · \(unnamed) not named yet")

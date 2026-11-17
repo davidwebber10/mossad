@@ -31,7 +31,8 @@ final class MoveGateSourceTests: XCTestCase {
         // The detector's end and Stop both end in `endOfCall`, which reads the rule.
         XCTAssertGreaterThanOrEqual(controller.components(separatedBy: "self.endOfCall(record)").count - 1, 2, "the detector's end and Stop")
         XCTAssertTrue(try body(controller, "endOfCall").contains("MoveAfterCall.atEnd("))
-        XCTAssertTrue(try text("AppController+Moves.swift").contains("MoveAfterCall.atEnd("), "the launch and the next try")
+        // The launch and the next try: `startsAtLook` reads `atEnd` for each marked call (final review m1).
+        XCTAssertTrue(try text("AppController+Moves.swift").contains("MoveAfterCall.startsAtLook("), "the launch and the next try")
         // Every start of the pipeline at the end of a call is the `.process` case.
         let lines = controller.components(separatedBy: "\n")
         for (i, line) in lines.enumerated() where line.contains("pipeline.process(record.id)") {

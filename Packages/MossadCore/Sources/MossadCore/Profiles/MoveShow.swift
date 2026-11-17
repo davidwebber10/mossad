@@ -54,6 +54,9 @@ public enum MoveShow {
         guard r.moveTo != nil else { return nil }
         guard let name else { return Row(text: MoveWords.heldForGone, cancels: false, held: true) }
         if let held { return Row(text: MoveWords.held(held), cancels: false, held: true) }
+        // A call marked during its recording with no move and no reason (a start that was refused, a crash that left it
+        // failed): it waits for the owner, with "Process here", "Move to", and Delete.
+        if r.status == .recorded || r.status == .failed { return Row(text: MoveWords.held(MoveWords.notStarted(name)), cancels: false, held: true) }
         return Row(text: MoveWords.row(to: name, waited: 0, copied: nil), cancels: false, held: false)
     }
 
@@ -136,6 +139,7 @@ public enum MoveShow {
 
 extension MoveWords {
     public static let cancelling = "Cancelling the move…"
+    public static func notStarted(_ target: String) -> String { "The move to “\(target)” has not started." }
     public static let movingOnMac = "This meeting is moving to another profile on your Mac."
     public static let arriving = "Arriving from another profile…"
     public static let cancelled = "The move is cancelled. The meeting stays here."

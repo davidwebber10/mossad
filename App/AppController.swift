@@ -1780,7 +1780,15 @@ final class AppController: ObservableObject {
         guard let llm = languageModel else { throw MissingAPIKey(service: aiProvider.displayName) }
         // The chat's `remember` tool writes the coach's profile.
         defer { coachVersion += 1 }
-        return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: meetings, paths: paths,
+        // The call that records now carries the owner's choice from memory, as every other gate reads it: the list's
+        // copy of its record gets the mark only after the recorder's write and a refresh.
+        let records = meetings.map { r -> CallRecord in
+            guard r.status == .recording, case .other(let to) = choice(forCall: r.id) else { return r }
+            var m = r
+            m.moveTo = to
+            return m
+        }
+        return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: records, paths: paths,
                                                                           about: callID, personaTraits: personasOn,
                                                                           actions: isInert ? nil : chatActionHost, earlier: earlier, questionID: questionID,
                                                                           onAction: onAction,
@@ -2074,6 +2082,20 @@ final class AppController: ObservableObject {
 
     /// The end of a kept call: processed here, or moved as "recorded" to the profile it is for, or held for the owner.
     func endOfCall(_ record: CallRecord) {
+        // The owner's latest choice, in memory, is read after the recorder's last write: a choice in the same instant as
+        // the end that missed the record is written now, before anything else reads the mark.
+        let latest: MoveAfterCall.Choice? = if let c = callChoice, c.callID == record.id { c.choice }
+            else if let k = keptChoice, k.call.callID == record.id { k.choice } else { nil }
+        let settled = MoveAfterCall.settled(record, latest: latest)
+        if settled.moveTo != record.moveTo {
+            Task { @MainActor in
+                // The pipeline refuses nothing here but a call in flight, which an ended call is not yet.
+                _ = await pipeline.setMoveTarget(callID: record.id, settled.moveTo)
+                refresh()
+                endOfCall(settled)
+            }
+            return
+        }
         switch MoveAfterCall.atEnd(record, targets: moveTargets.map(\.id)) {
         case .process:
             // Utility: the next call may start in the same minute, and the call app comes first.
