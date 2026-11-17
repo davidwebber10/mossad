@@ -88,10 +88,11 @@ extension AppController {
             coach: { change in try Self.onMain { _ = try self.changeCoachProfile(change) } },
             stopShares: { callID in Self.onMain { self.stopSharing(callID: callID) } },
             backup: { r in
-                guard r.cloudKey != nil || r.cloudLeftovers?.isEmpty == false else { return }
+                // A copy that cannot be removed now is remembered by the archive, and tried again at each pass.
                 if backs, let archive { await archive.delete(r) } else { CloudArchive.rememberDeletes(of: r, paths: paths) }
+                return true
             },
-            removeFolder: { await pipeline.removeMoved(callID: $0) })
+            removeFolder: { await pipeline.removeMoved(callID: $0, target: $1) })
         let source = MoveSource(MoveSource.Setup(
             paths: paths, profileID: identity.profile.id, pipeline: pipeline, library: library, ownerName: { owner },
             target: { id in file.map { MoveRules.target(id, registryFile: $0, home: home, madeUpRegistry: madeUp) } ?? .unknown },

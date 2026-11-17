@@ -58,7 +58,12 @@ final class MoveRemovalTests: XCTestCase {
             var p = (try? CoachProfile.load(from: a.coach)) ?? CoachProfile()
             change(&p)
             try p.save(to: a.coach)
-        }, stopShares: { _ in }, backup: { _ in }, removeFolder: folder)
+        }, stopShares: { callID in
+            var book = ShareBook.load(from: a.shares)
+            book.markStopping(callID: callID)
+            try? book.save(to: a.shares)
+        }, backup: { r in CloudArchive.rememberDeletes(of: r, paths: a); return true },
+        removeFolder: { id, _ in await folder(id) })
     }
 
     func testEachStepOnceAndTheMeetingLeavesNoWord() async throws {

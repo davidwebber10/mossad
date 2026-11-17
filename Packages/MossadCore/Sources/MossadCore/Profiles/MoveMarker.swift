@@ -145,6 +145,8 @@ public struct MoveOut: Codable, Equatable, Sendable {
     public var removed: [String]
     /// Why, saved with the state `.cancelling`.
     public var cancel: MovePlan.Cancel?
+    /// The ids of the people whom only this call made, decided once before the `people` step deletes the first.
+    public var people: [String]?
 
     public init(callID: String, to: String, started: Date, afterCall: Bool = false, token: String = MoveOut.newToken()) {
         version = Self.currentVersion

@@ -51,7 +51,8 @@ final class MoveCancelTests: XCTestCase {
             var book = ShareBook.load(from: a.shares)
             book.markStopping(callID: callID)
             try? book.save(to: a.shares)
-        }, backup: { r in CloudArchive.rememberDeletes(of: r, paths: a) }, removeFolder: { await pipeline.removeMoved(callID: $0) })
+        }, backup: { r in CloudArchive.rememberDeletes(of: r, paths: a); return true },
+        removeFolder: { id, to in await pipeline.removeMoved(callID: id, target: to) })
         let s = MoveSource(MoveSource.Setup(paths: a, profileID: "default", pipeline: pipeline, library: lib, ownerName: { "Avery Webb" },
                                             target: { _ in place.value }, fetch: { _, _ in nil }, usage: { _ in [] }, actions: actions,
                                             now: { [t0] in t0 }, stop: stop))

@@ -31,7 +31,12 @@ final class MoveEndToEndTests: XCTestCase {
             var p = (try? CoachProfile.load(from: a.coach)) ?? CoachProfile()
             change(&p)
             try p.save(to: a.coach)
-        }, stopShares: { _ in }, backup: { _ in }, removeFolder: { MoveRemoval.removeFolder($0, paths: a, stop: stop) })
+        }, stopShares: { callID in
+            var book = ShareBook.load(from: a.shares)
+            book.markStopping(callID: callID)
+            try? book.save(to: a.shares)
+        }, backup: { r in CloudArchive.rememberDeletes(of: r, paths: a); return true },
+        removeFolder: { id, to in await pipeline.removeMoved(callID: id, target: to, stop: stop) })
         return MoveSource(MoveSource.Setup(paths: a, profileID: "default", pipeline: pipeline, library: lib, ownerName: { "Avery Webb" },
                                            target: { _ in place.value }, fetch: { _, _ in nil }, usage: { _ in [] }, actions: actions,
                                            now: { [t0] in t0 }, stop: stop))

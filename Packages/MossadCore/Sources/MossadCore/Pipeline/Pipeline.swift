@@ -604,10 +604,18 @@ public actor Pipeline {
     /// Removes a meeting that the target has taken in: the note, its reference backups, and the call folder (renamed out
     /// of `Audio` first). Only a record marked with `moveTo` that is not in flight; any status. A folder that is gone
     /// counts as done.
-    public func removeMoved(callID: String) -> Bool {
-        guard !inFlight.contains(callID) else { return false }
-        if let r = try? CallRecord.load(from: paths.callDirectory(callID)), r.moveTo == nil { return false }
-        return MoveRemoval.removeFolder(callID, paths: paths)
+    ///
+    /// Only an id that `MovePaths` takes, and only the folder in `Audio` whose record reads, has that id, and is
+    /// marked for `target`; a folder that is gone from `Audio` (renamed out by an earlier run) is finished.
+    public func removeMoved(callID: String, target: String, stop: @Sendable (String) throws -> Void = { _ in }) -> Bool {
+        guard MovePaths.isID(callID), MovePaths.isID(target), !inFlight.contains(callID) else { return false }
+        let dir = paths.callDirectory(callID)
+        if FileManager.default.fileExists(atPath: dir.path) {
+            guard let r = try? CallRecord.load(from: dir), r.id == callID, r.moveTo == target else { return false }
+        }
+        guard (try? MoveRemoval.removeFolderOrStop(callID, paths: paths, stop: stop)) == true else { return false }
+        heavy.forget(callID)
+        return true
     }
 
     /// Marks a meeting as leaving for a profile, or takes the mark off (nil). False for a call in flight, a call that

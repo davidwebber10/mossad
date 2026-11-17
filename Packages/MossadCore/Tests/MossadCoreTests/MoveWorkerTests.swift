@@ -29,7 +29,12 @@ final class MoveWorkerTests: XCTestCase {
             var p = (try? CoachProfile.load(from: a.coach)) ?? CoachProfile()
             change(&p)
             try p.save(to: a.coach)
-        }, stopShares: { _ in }, backup: { _ in }, removeFolder: { MoveRemoval.removeFolder($0, paths: a) })
+        }, stopShares: { callID in
+            var book = ShareBook.load(from: a.shares)
+            book.markStopping(callID: callID)
+            try? book.save(to: a.shares)
+        }, backup: { r in CloudArchive.rememberDeletes(of: r, paths: a); return true },
+        removeFolder: { id, to in await pipeline.removeMoved(callID: id, target: to) })
         let work = work
         return MoveSource(MoveSource.Setup(paths: a, profileID: personal, pipeline: pipeline, library: lib, ownerName: { "Avery Webb" },
                                            target: { $0 == work ? .paths(b) : .gone }, fetch: { _, _ in nil }, usage: { _ in [] },
