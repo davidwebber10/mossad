@@ -86,6 +86,12 @@ public enum WorkerLaunch {
         return abs(now.timeIntervalSince(started)) <= 1
     }
 
+    /// How long the first start of each worker waits for its folder lock: after a switch, the old app holds the
+    /// folder of the profile that was active for a moment, so its first try would fail and use up a restart.
+    public static func firstStartWait(arguments: [String]) -> TimeInterval {
+        arguments.contains("--switched") ? WorkerSwitch.waitSeconds : 0
+    }
+
     /// What Sparkle says after the app stopped its workers for an install: it aborted (an error, or the owner
     /// cancelled the authorization), its cycle ended with the app still running, or it relaunches now.
     public enum UpdateEvent: Sendable { case aborted, cycleEnded, willRelaunch }

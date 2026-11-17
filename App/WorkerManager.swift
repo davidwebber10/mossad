@@ -49,7 +49,18 @@ final class WorkerManager {
         started = true
         self.recording = recording
         Log.info("Workers: starting \(profiles.count) for the other profiles")
-        write(.start) { [weak self] in self?.profiles.forEach { self?.launch($0, failures: 0) } }
+        let wait = WorkerLaunch.firstStartWait(arguments: CommandLine.arguments)
+        write(.start) { [weak self] in
+            guard let self else { return }
+            for profile in profiles {
+                guard wait > 0 else { launch(profile, failures: 0); continue }
+                // A free folder answers at once; one the old app still holds, as soon as that app is gone.
+                Task { [weak self] in
+                    _ = await self?.waitForFolder(of: profile.id, seconds: wait)
+                    self?.launch(profile, failures: 0)
+                }
+            }
+        }
         startTimer()
     }
 

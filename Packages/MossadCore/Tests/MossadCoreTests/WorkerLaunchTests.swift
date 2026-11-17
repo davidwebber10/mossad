@@ -179,4 +179,12 @@ final class WorkerLaunchTests: XCTestCase {
         XCTAssertFalse(WorkerLaunch.mayKill(started: t, now: t, parent: 1, me: 500), "not our child")
         XCTAssertFalse(WorkerLaunch.mayKill(started: nil, now: t, parent: 500, me: 500), "a start not known")
     }
+
+    func testAfterASwitchTheFirstStartWaitsForTheFolderOfTheProfileThatWasActive() {
+        // The old app holds that folder for a moment after the new one starts: the first start waits, as a switch does.
+        XCTAssertEqual(WorkerLaunch.firstStartWait(arguments: ["Mossad", "--switched", "--background"]), WorkerSwitch.waitSeconds)
+        XCTAssertEqual(WorkerLaunch.firstStartWait(arguments: ["Mossad", "--profile", "1a2b3c4d", "--switched"]), WorkerSwitch.waitSeconds)
+        XCTAssertEqual(WorkerLaunch.firstStartWait(arguments: ["Mossad"]), 0)
+        XCTAssertEqual(WorkerLaunch.firstStartWait(arguments: ["Mossad", "--background"]), 0)
+    }
 }
