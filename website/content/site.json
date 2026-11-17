@@ -846,6 +846,7 @@
             "A phone call that you share goes to the profile you pick",
             "A meeting that went to the wrong profile moves to the right one, with its recording, its notes, and the chats about that meeting alone",
             "During a call you can say that it is for the other profile, and that profile writes the notes",
+            "When the call goes on as a new recording, your choice is kept; when Mossad is not sure it is the same call, it holds the recording until you choose",
             "With one profile, nothing changes"
           ],
           "icon": "person.2.crop.square.stack",

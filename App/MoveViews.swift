@@ -67,13 +67,21 @@ struct MoveRowLine: View {
 /// other profile.
 struct MoveLineView: View {
     @EnvironmentObject var controller: AppController
+    /// On a meeting's page: only the lines and the reasons about that meeting.
+    var meeting: String?
+    /// In a scroll view: the line counts as seen only while it is in view.
+    var inScroll = false
+    @State private var inView = false
 
     var body: some View {
-        if let line = controller.moveLine {
+        if let line = controller.moveLine, line.shows(on: meeting) {
             text(line.text)
-        } else if let notice = controller.moveNotices.current {
-            // A reason is forgotten only once it is on the screen: this view appears only where the owner looks.
-            text(notice.text).task(id: notice.id) { controller.moveNoticeSeen(notice.id) }
+        } else if let notice = controller.moveNotices.current(on: meeting) {
+            // A reason is forgotten only once it is on the screen: the window shows and the line is in view.
+            let seen = controller.windowVisible && (inView || !inScroll)
+            text(notice.text)
+                .onScrollVisibilityChange(threshold: 0.9) { inView = $0 }
+                .task(id: "\(notice.id)|\(seen)") { if seen { controller.moveNoticeSeen(notice.id) } }
         }
     }
 

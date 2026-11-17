@@ -40,7 +40,7 @@ extension AppController {
         let move = moves[r.id]
         guard move != nil || r.moveTo != nil else { return nil }
         let to = move?.to ?? r.moveTo
-        let held = moveEnded[r.id].flatMap { MoveWords.refusal($0.why, target: profileName($0.to) ?? MoveWords.otherProfile) }
+        let held = moveEnded[r.id].flatMap { MoveWords.refusal($0.why, target: profileName($0.to) ?? MoveWords.otherProfile) } ?? moveRefused[r.id]
         return MoveShow.row(r, move: move, name: profileName(to), copied: moveProgress[r.id], reach: to.map { moveReach[$0] ?? .open } ?? .open,
                             held: held, now: Date(), me: activeProfile.id)
     }
@@ -79,7 +79,7 @@ extension AppController {
     func refusedForMove(_ callID: String) -> Bool {
         guard let r = meetings.first(where: { $0.id == callID }), r.status != .recording,
               let text = MoveShow.refusesCommand(r, name: profileName(r.moveTo), me: activeProfile.id) else { return false }
-        showMoveLine(.refusal(text, at: Date()))
+        showMoveLine(.refusal(text, at: Date()).about(callID))
         return true
     }
 
@@ -112,6 +112,7 @@ extension AppController {
         let now = choice(forCall: callID)
         let next = MoveAfterCall.next(now, picked: profileID, active: activeProfile.id)
         guard next != now else { return }
+        let carriedForSure = carry.decided == callID && carry.kind == .sure
         if AppIdentity.current.isPreview {
             callChoice = (callID, next)
             liveOff = MoveAfterCall.liveOff(next)
@@ -130,39 +131,81 @@ extension AppController {
         if stops.contains(.liveChatAnswer) { liveChatSessions[callID]?.stop() }
         if !stops.isEmpty { Log.info("Live: the call \(callID) is for another profile; nothing more of it is sent from here") }
         liveOff = MoveAfterCall.liveOff(next)
+        // The guess is answered: its saved reason goes. Set to this profile, it was another call: its live transcript
+        // starts now, and it is processed here.
+        if case .guessed = now {
+            let paths = paths
+            Task.detached { MoveEnded.shown(callID, paths: paths) }
+            if next == .here { startLive(reset: false) }
+        }
+        // A take-back in a part carried for sure: the parts before it are the same call, processed here too.
+        if next == .backHere, carriedForSure, let parts = carry.from?.parts { cancelEarlierParts(parts) }
     }
 
-    /// At the start of a recording, before any send: a new recording of the call the owner marked (the same link on the
-    /// same platform, within `MeetingMerge.continuationGap` of its end) takes over the choice, and the recorder saves it
-    /// on the new record as for the first part. Any other call forgets it.
+    /// The parts before a take-back whose move the target has not claimed: each move is cancelled, or the mark goes.
+    private func cancelEarlierParts(_ parts: [String]) {
+        guard let pipeline else { return }
+        let paths = paths, source = moveHalves(pipeline).source
+        let marked = Set(meetings.filter { parts.contains($0.id) && $0.moveTo != nil }.map(\.id))
+        Task {
+            let moves = await Task.detached { Dictionary(MoveOut.all(paths).moves.map { ($0.callID, $0.state) }, uniquingKeysWith: { a, _ in a }) }.value
+            for id in MoveAfterCall.takeBackCancels(parts, moves: moves, marked: marked) {
+                if moves[id] != nil {
+                    let to = self.moves[id]?.to ?? meetings.first { $0.id == id }?.moveTo
+                    let answer = await source.cancelMove(id)
+                    if answer != .cancelled { showMoveLine(.cancel(answer, target: profileName(to) ?? MoveWords.otherProfile, at: Date()).about(id)) }
+                } else {
+                    _ = await pipeline.setMoveTarget(callID: id, nil)
+                    await Task.detached { MoveEnded.shown(id, paths: paths) }.value
+                }
+                Log.info("Live: the take-back also keeps \(id), an earlier part of the same call, here")
+            }
+            refresh()
+            checkMoves()
+            processPending()
+        }
+
+    }
+
+    /// At the start of a recording, before any send, from the detector's own values (`MoveAfterCall.Book.started`): a new
+    /// recording of the call the owner marked takes over the choice, for sure (the same link) or as a guess (no link to
+    /// compare in the same call app, or the first part after a launch). The recorder saves the mark on the new record
+    /// as for the first part. A guess also saves its reason at once, so the recording is held at its end, also after a
+    /// crash. Any other call forgets the kept choice.
     func carryChoice(to call: MoveAfterCall.Call) {
-        let carried = MoveAfterCall.carried(keptChoice, to: call)
-        keptChoice = nil
-        liveCall = call
-        guard let carried else { return }
-        callChoice = (call.callID, carried)
-        liveOff = MoveAfterCall.liveOff(carried)
-        if let mark = carried.moveTo {
+        guard let carried = carry.started(call) else { return }
+        callChoice = (call.callID, carried.choice)
+        liveOff = MoveAfterCall.liveOff(carried.choice)
+        let recorder = recorder, paths = paths
+        if let mark = carried.choice.moveTo {
             // Queued after the recorder's `begin`, which the detector queued first.
-            let recorder = recorder
             CaptureQueue.queue.async {
                 recorder.setMoveTarget(mark, forCall: call.callID)
                 Task { @MainActor in self.refresh() }
             }
         }
-        Log.info("Live: the call \(call.callID) goes on from a call the owner marked; it keeps that choice")
+        if case .guessed(let to) = carried.choice {
+            Task.detached { try? MoveEnded(callID: call.callID, to: to, why: .notSure, afterCall: true, at: Date()).save(paths) }
+        }
+        Log.info("Live: the call \(call.callID) goes on from a call the owner marked; it keeps that choice (\(carried.kind == .sure ? "sure" : "a guess"))")
     }
 
-    /// The end of a call marked for another profile: it moves as "recorded"; a move that fails or is refused keeps
-    /// the mark (`MoveSource.keepsMark`), and the row offers "Process here" and "Move to".
+    /// The end of a call marked for another profile: it moves as "recorded". A start that is refused holds the call with
+    /// its reason, and only the owner's choice tries again; only a start looks again at once.
     func moveAfterCall(_ callID: String, to profileID: String) {
         guard !AppIdentity.current.isPreview, let pipeline else { return }
         let source = moveHalves(pipeline).source
         Task {
-            // A start that is refused leaves the mark: the call waits here, and the next look tries again.
-            _ = await source.start(callID, to: profileID, name: profileName(profileID), afterCall: true)
+            let started = await source.start(callID, to: profileID, name: profileName(profileID), afterCall: true)
+            if started == .started {
+                // In memory at once, before the copy runs: the row never says the move has not started.
+                moves[callID] = MoveOut(callID: callID, to: profileID, started: Date(), afterCall: true)
+                moveRefused[callID] = nil
+            } else if case .refused(let text) = started {
+                moveRefused[callID] = text.isEmpty ? MoveWords.notStarted(profileName(profileID) ?? MoveWords.otherProfile) : text
+            }
             refresh()
-            checkMoves()
+            if MoveAfterCall.looksAgain(after: started) { checkMoves() }
         }
     }
 
@@ -190,11 +233,11 @@ extension AppController {
                 return (offer, sent, MovedChats.split(mine, title: r.title, otherTitles: others).deleted.count)
             }.value
             switch found.0 {
-            case .refused(let text): showMoveLine(.refusal(text, at: Date()))
+            case .refused(let text): showMoveLine(.refusal(text, at: Date()).about(r.id))
             case .offer: moveRequest = MoveRequest(record: r, target: target, sent: found.1, deletedChats: found.2)
             case .moving where moveRow(r)?.held == true:
                 moveRequest = MoveRequest(record: r, target: target, sent: found.1, deletedChats: found.2)
-            case .moving(let to): showMoveLine(.refusal(MoveWords.moving(to: profileName(to) ?? MoveWords.otherProfile), at: Date()))
+            case .moving(let to): showMoveLine(.refusal(MoveWords.moving(to: profileName(to) ?? MoveWords.otherProfile), at: Date()).about(r.id))
             case .hidden: break
             }
         }
@@ -208,8 +251,12 @@ extension AppController {
         let source = moveHalves(pipeline).source
         Task {
             let started = await source.start(callID, to: profileID, name: name, afterCall: held)
-            if case .refused(let text) = started, !text.isEmpty { showMoveLine(.refusal(text, at: Date())) }
-            if started == .started { moveEnded[callID] = nil }
+            if case .refused(let text) = started, !text.isEmpty { showMoveLine(.refusal(text, at: Date()).about(callID)) }
+            if started == .started {
+                moveEnded[callID] = nil
+                moveRefused[callID] = nil
+                moves[callID] = MoveOut(callID: callID, to: profileID, started: Date(), afterCall: held)
+            }
             refresh()
             checkMoves()
         }
@@ -222,7 +269,7 @@ extension AppController {
         let name = profileName(to) ?? MoveWords.otherProfile
         Task {
             let answer = await source.cancelMove(callID)
-            showMoveLine(.cancel(answer, target: name, at: Date()))
+            showMoveLine(.cancel(answer, target: name, at: Date()).about(callID))
             refresh()
             checkMoves()
         }
@@ -231,9 +278,13 @@ extension AppController {
     /// "Process here" on a held call: the mark goes, and the call is processed in this profile.
     func processHere(_ callID: String) {
         guard !AppIdentity.current.isPreview, let pipeline, moves[callID] == nil else { return }
-        let paths = paths
+        let paths = paths, name = profileName(meetings.first { $0.id == callID }?.moveTo) ?? MoveWords.otherProfile
         Task {
+            // From the ledgers on disk, not the list in memory: a move that started is never undone by this click.
+            let may = await Task.detached { MoveRules.mayProcessHere(ledger: MoveOut.load(callID, paths: paths), hasFile: MoveOut.leftIDs(paths).contains(callID)) }.value
+            guard may else { return showMoveLine(.refusal(MoveWords.moving(to: name), at: Date()).about(callID)) }
             guard await pipeline.setMoveTarget(callID: callID, nil) else { return }
+            moveRefused[callID] = nil
             await Task.detached { MoveEnded.shown(callID, paths: paths) }.value
             moveEnded[callID] = nil
             refresh()
@@ -326,7 +377,7 @@ extension AppController {
                 // its move starts now. One held for the owner (its reason read from disk above, also at the first look
                 // after a launch) waits until the owner chooses.
                 let recordingID = self.meetings.first { self.isLive($0) }?.id
-                for (callID, to) in MoveAfterCall.startsAtLook(self.meetings, moving: Set(self.moves.keys), held: Set(kept.filter(\.afterCall).map(\.callID)),
+                for (callID, to) in MoveAfterCall.startsAtLook(self.meetings, moving: Set(self.moves.keys), held: Set(kept.filter(\.afterCall).map(\.callID)).union(self.moveRefused.keys),
                                                                recording: recordingID, targets: self.moveTargets.map(\.id)) {
                     self.moveAfterCall(callID, to: to)
                 }
@@ -362,7 +413,7 @@ extension AppController {
     /// The line of a notice was on the screen (the view's own appear): only now is it forgotten, and its file goes.
     func moveNoticeSeen(_ id: String) {
         guard let n = moveNotices.shown(id) else { return }
-        showMoveLine(.refusal(n.text, at: Date()))
+        showMoveLine(.refusal(n.text, at: Date()).about(n.callID))
         guard !n.keepsFile else { return }
         let paths = paths
         Task.detached {
@@ -379,7 +430,7 @@ extension AppController {
     func cancelMoveBeforeDelete(_ callID: String) async -> Bool {
         guard let r = meetings.first(where: { $0.id == callID }), let target = r.moveTo else { return true }
         guard !isArriving(r), let pipeline else {
-            showMoveLine(.refusal(MoveWords.arriving, at: Date()))
+            showMoveLine(.refusal(MoveWords.arriving, at: Date()).about(callID))
             return false
         }
         let paths = paths
@@ -395,7 +446,7 @@ extension AppController {
             let line: MoveShow.Line = answer == .cancelled
                 ? .refusal(MoveWords.moving(to: profileName(target) ?? MoveWords.otherProfile), at: Date())
                 : .cancel(answer, target: profileName(target) ?? MoveWords.otherProfile, at: Date())
-            showMoveLine(line)
+            showMoveLine(line.about(callID))
             return false
         }
         return true

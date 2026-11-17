@@ -77,4 +77,29 @@ final class MoveRenameTests: XCTestCase {
         XCTAssertEqual(lib.profiles.first { $0.name == "Sam Rivers" }?.embeddings, [[0.9, 0.1, 0, 0, 0, 0, 0, 0]])
         XCTAssertTrue(PeopleStore(directory: a.people).people.contains { $0.isLive && $0.displayName == "Sam Rivers" })
     }
+
+    /// n9: a person from before the call who also has a sample of the call: the person and their older samples stay;
+    /// only the call's sample goes.
+    func testAPersonFromBeforeTheCallStays() async throws {
+        let a = temp()
+        let r = try writtenCall(in: a)
+        let before = r.start - 30 * 86_400
+        let lib = VoiceLibrary(directory: a.voices)
+        lib.identity = VoiceIdentity(people: PeopleStore(directory: a.people, now: { before }), samples: VoiceSampleStore(directory: a.voices))
+        let old: [Float] = [0, 0, 0.9, 0.1, 0, 0, 0, 0]
+        try lib.add(old, to: "Sam Carter",
+                    source: VoiceSampleSource(callID: "20261001-100000", speakerKey: "them:A", recorded: before, seconds: 30, quality: 0.8, origin: .ownerNamed))
+        try lib.add(r.speakerEmbeddings["them:A"]!, to: "Sam Carter",
+                    source: VoiceSampleSource(callID: id, speakerKey: "them:A", recorded: r.start, seconds: 30, quality: 0.8, origin: .ownerNamed))
+        var out = MoveOut(callID: id, to: work, started: t0)
+        out.state = .removing
+        try out.save(a)
+        try await MoveRemoval.advance(&out, paths: a, library: lib, ownerName: "Avery Webb", actions: actions(a), now: t0)
+        XCTAssertNil(out.nextStep)
+        let samples = VoiceSampleStore(directory: a.voices).samples
+        XCTAssertFalse(samples.contains { $0.callID == id })
+        XCTAssertTrue(samples.contains { $0.callID == "20261001-100000" })
+        XCTAssertTrue(PeopleStore(directory: a.people).people.contains { $0.isLive && $0.displayName == "Sam Carter" })
+        XCTAssertEqual(library(a).profiles.first { $0.name == "Sam Carter" }?.embeddings, [old])
+    }
 }

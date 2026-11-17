@@ -37,6 +37,10 @@ public struct MoveNotices: Equatable, Sendable {
     /// The one that shows next.
     public var current: Notice? { pending.first }
 
+    /// The one that shows next on a page: the list and Calendar (nil) show any; a meeting's page only its own, so a
+    /// reason about one meeting never reads as "this meeting" on another.
+    public func current(on meeting: String?) -> Notice? { meeting.map { m in pending.first { $0.callID == m } } ?? current }
+
     /// Its line was on the screen: it is forgotten, and the caller deletes its file unless `keepsFile`.
     public mutating func shown(_ id: String) -> Notice? {
         guard let i = pending.firstIndex(where: { $0.id == id }) else { return nil }

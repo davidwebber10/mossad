@@ -40,3 +40,20 @@ final class MoveNoticesTests: XCTestCase {
         XCTAssertEqual(MoveShow.phoneChatOff(r), "This meeting is moving to another profile on your Mac.")
     }
 }
+
+/// Review g5 n1: a meeting's page shows only its own lines and reasons.
+final class MoveNoticesOnAPageTests: XCTestCase {
+    func testAMeetingsPageShowsOnlyItsOwn() {
+        var n = MoveNotices()
+        n.offer([MoveNotices.Notice(callID: "x", kind: .ended, text: "About x", keepsFile: false),
+                 MoveNotices.Notice(callID: "y", kind: .ended, text: "About y", keepsFile: false)])
+        XCTAssertEqual(n.current(on: nil)?.callID, "x")
+        XCTAssertEqual(n.current(on: "y")?.callID, "y")
+        XCTAssertNil(n.current(on: "z"))
+        let line = MoveShow.Line.refusal("Could not read this meeting.", at: Date()).about("x")
+        XCTAssertTrue(line.shows(on: nil))
+        XCTAssertTrue(line.shows(on: "x"))
+        XCTAssertFalse(line.shows(on: "y"))
+        XCTAssertFalse(MoveShow.Line.refusal("A line", at: Date()).shows(on: "y"))
+    }
+}

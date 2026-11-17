@@ -169,10 +169,9 @@ final class AppController: ObservableObject {
     @Published var liveOff: LiveOffReason?
     /// "This call is for": the choice of the call that records now (`MoveAfterCall`); nil is `.here`.
     @Published var callChoice: (callID: String, choice: MoveAfterCall.Choice)?
-    /// The call that records now, for the choice it keeps when it ends.
-    var liveCall: MoveAfterCall.Call?
-    /// The choice of the call that ended, for a new recording of the same call (`MoveAfterCall.carried`).
-    var keptChoice: MoveAfterCall.Kept?
+    /// The carry of the owner's choice from a call to a new recording of it (`MoveAfterCall.Book`): read back at a
+    /// launch, decided at each start before any send, kept again at each end.
+    var carry = MoveAfterCall.Book()
     var liveOffReason: String? { liveOff?.text }
     /// The live chat of each call, so an answer that runs survives a change of tab or of view (the Chat tab and
     /// the quick panel show the same one).
@@ -449,6 +448,8 @@ final class AppController: ObservableObject {
     @Published var moveNotices = MoveNotices()
     /// Why a move ended that the owner has not seen yet, or that holds a call marked during its recording.
     @Published var moveEnded: [String: MoveEnded] = [:]
+    /// A start after the call that was refused, with its words: the call is held, and only the owner tries again.
+    @Published var moveRefused: [String: String] = [:]
     /// Why each other profile cannot take a meeting in now, as far as the app can tell.
     @Published var moveReach: [String: MoveShow.Reach] = [:]
     /// The confirmation of "Move to" that is open.
@@ -896,9 +897,9 @@ final class AppController: ObservableObject {
         let paths = paths, recovers = mode.does(.recover)
         Task.detached(priority: .userInitiated) { [weak self] in
             // Before detection starts: a call that starts during a slow launch must not look like a crashed one.
-            let held = recovers ? ProcessingQueue(paths: paths).recoverInterrupted() : []
+            let (held, recovered) = recovers ? ProcessingQueue(paths: paths).recoverInterruptedCalls() : ([], [])
             let records = Self.previewFailures(MeetingIndex(paths: paths).all())
-            await self?.finishLaunch(records, held: held, inert: inert)
+            await self?.finishLaunch(records, held: held, recovered: Set(recovered), inert: inert)
         }
         Log.info("Mossad started")
         // The launch used to block when a record could not be read from a volume that does not answer, and that was
@@ -919,7 +920,7 @@ final class AppController: ObservableObject {
         if meetingsLoaded { work() } else { waitingForLaunch.append(work) }
     }
 
-    private func finishLaunch(_ records: [CallRecord], held: [String], inert: Bool) {
+    private func finishLaunch(_ records: [CallRecord], held: [String], recovered: Set<String>, inert: Bool) {
         meetings = records
         meetingsLoaded = true
         reportMacWideStrays()
@@ -943,7 +944,7 @@ final class AppController: ObservableObject {
             checkMoves()
             startMoveLook()
             // A call marked for another profile that a quit or a crash ended: a new recording of it keeps the choice.
-            keptChoice = MoveAfterCall.kept(from: records, now: Date())
+            carry.launched(records, recovered: recovered, now: Date())
             // A recovered call whose muted parts are still in its track is held back; the pipeline tries again.
             if !held.isEmpty { notifier.postCaptureProblem(.mutedNotSilenced) }
             if isOn || (offUntilDate.map { $0 <= Date() } ?? false) {
@@ -1384,6 +1385,8 @@ final class AppController: ObservableObject {
         status = .recording(.inPerson, since: start)
         isPaused = false
         isMuted = false
+        // A room has no link and no call app: nothing carries, and the decision is made before the live transcript.
+        carryChoice(to: MoveAfterCall.Call(callID: CallRecorder.callID(for: start), platform: .inPerson, bundleID: nil, meetingID: nil, start: start))
         let recorder = recorder
         CaptureQueue.queue.async {
             do {
@@ -1420,7 +1423,7 @@ final class AppController: ObservableObject {
     }
 
     /// Opens one streaming session per track. Billed while open, so only while recording and not paused.
-    private func startLive(reset: Bool) {
+    func startLive(reset: Bool) {
         stopLive()
         if reset { live.reset() } else { live.newSession() }
         if reset {
@@ -1428,6 +1431,8 @@ final class AppController: ObservableObject {
             liveCoverage = LiveCoverage()
         }
         guard case .recording(_, let since) = status else { return }
+        // The carry of this call was decided before anything is sent (`show(.started)`, `recordInPerson`).
+        assert(AppIdentity.current.isPreview || carry.decided == CallRecorder.callID(for: since), "the carry of this call is not decided yet")
         // A call for another profile, or one taken back from it: the streams never open again for it.
         let choice = self.choice(forCall: CallRecorder.callID(for: since))
         guard MoveAfterCall.allows(.liveTranscript, choice) else { liveOff = MoveAfterCall.liveOff(choice); return }
@@ -1524,11 +1529,8 @@ final class AppController: ObservableObject {
     /// answer still on its way keeps its own session and saves its chat.
     private func forgetLiveCall(end: Date) {
         // The choice stays for a new recording of the same call. A second end of the same call (the detector's, after
-        // Stop) has no call and keeps what the first one kept.
-        if let call = liveCall {
-            keptChoice = MoveAfterCall.keep(call, choice: callChoice.flatMap { $0.callID == call.callID ? $0.choice : nil }, end: end)
-        }
-        liveCall = nil
+        // Stop) keeps what the first one kept.
+        carry.ended(choice: carry.call.flatMap { c in callChoice.flatMap { $0.callID == c.callID ? $0.choice : nil } }, at: end)
         callChoice = nil
         liveNamer = nil
         liveCalendar = nil
@@ -1783,7 +1785,7 @@ final class AppController: ObservableObject {
         // The call that records now carries the owner's choice from memory, as every other gate reads it: the list's
         // copy of its record gets the mark only after the recorder's write and a refresh.
         let records = meetings.map { r -> CallRecord in
-            guard r.status == .recording, case .other(let to) = choice(forCall: r.id) else { return r }
+            guard r.status == .recording, let to = choice(forCall: r.id).moveTo else { return r }
             var m = r
             m.moveTo = to
             return m
@@ -1791,7 +1793,7 @@ final class AppController: ObservableObject {
         return try await ChatAgent(llm: llm, ownerName: ownerName).answer(question, history: history, records: records, paths: paths,
                                                                           about: callID, personaTraits: personasOn,
                                                                           actions: isInert ? nil : chatActionHost, earlier: earlier, questionID: questionID,
-                                                                          onAction: onAction,
+                                                                          onAction: onAction, liveOff: liveOff,
                                                                           onStep: onStep)
     }
 
@@ -2084,8 +2086,7 @@ final class AppController: ObservableObject {
     func endOfCall(_ record: CallRecord) {
         // The owner's latest choice, in memory, is read after the recorder's last write: a choice in the same instant as
         // the end that missed the record is written now, before anything else reads the mark.
-        let latest: MoveAfterCall.Choice? = if let c = callChoice, c.callID == record.id { c.choice }
-            else if let k = keptChoice, k.call.callID == record.id { k.choice } else { nil }
+        let latest: MoveAfterCall.Choice? = if let c = callChoice, c.callID == record.id { c.choice } else { carry.keptChoice(of: record.id) }
         let settled = MoveAfterCall.settled(record, latest: latest)
         if settled.moveTo != record.moveTo {
             Task { @MainActor in
@@ -2096,13 +2097,16 @@ final class AppController: ObservableObject {
             }
             return
         }
-        switch MoveAfterCall.atEnd(record, targets: moveTargets.map(\.id)) {
+        switch MoveAfterCall.atEnd(record, latest: latest, targets: moveTargets.map(\.id)) {
         case .process:
             // Utility: the next call may start in the same minute, and the call app comes first.
             Task(priority: .utility) { @MainActor in await self.track { await self.pipeline.process(record.id) } }
         case .move(let to):
             moveAfterCall(record.id, to: to)
-        case .hold, .nothing:
+        case .hold:
+            // A guess is held with its reason saved (`MoveEnded`, `.notSure`): the row asks the owner.
+            checkMoves()
+        case .nothing:
             break
         }
     }
@@ -2136,15 +2140,17 @@ final class AppController: ObservableObject {
     private func show(_ event: DetectorEvent, meetingID: String?) {
         if case .recording(.inPerson, _) = status { return }
         switch event {
-        case .started(let platform, _, let at):
+        case .started(let platform, let bundleID, let at):
             notifier.clearUnconfirmed()
             // The failure can arrive first: a recording that did not start must not show as one.
             if failedStarts.remove(at) != nil { return }
             status = .recording(platform, since: at)
             isPaused = false
             isMuted = false
-            // Before the live transcript and any other send: the same call going on keeps the owner's choice.
-            carryChoice(to: MoveAfterCall.Call(callID: CallRecorder.callID(for: at), platform: platform, meetingID: meetingID, start: at))
+            // Before the live transcript and any other send, from the detector's own values: the same call going on
+            // keeps the owner's choice, for sure or as a guess.
+            carryChoice(to: MoveAfterCall.Call(callID: CallRecorder.callID(for: at), platform: platform, bundleID: bundleID,
+                                               meetingID: meetingID, start: at))
             startLive(reset: true)
         case .ended(let at, _):
             failedStarts.removeAll()

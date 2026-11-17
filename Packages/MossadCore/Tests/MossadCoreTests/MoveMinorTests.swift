@@ -49,10 +49,7 @@ final class MoveMinorTests: XCTestCase {
         XCTAssertEqual(MoveAfterCall.stops(.other(work)), [.liveStreams, .liveFile, .liveChatAnswer])
         XCTAssertEqual(MoveAfterCall.stops(.backHere), [])
         XCTAssertEqual(MoveAfterCall.stops(.here), [])
-        // Each kind of live send the choice refuses is stopped or never starts again.
-        for send in MoveAfterCall.Send.allCases where !MoveAfterCall.allows(send, .other(work)) {
-            XCTAssertFalse(MoveAfterCall.allows(send, .other(work)), "\(send)")
-        }
+        XCTAssertEqual(MoveAfterCall.stops(.guessed(work)), [.liveStreams, .liveFile, .liveChatAnswer])
     }
 
     /// m12, the second net: the app stops what the rule lists, and carries a choice to a new recording before any send.
@@ -65,9 +62,13 @@ final class MoveMinorTests: XCTestCase {
             XCTAssertTrue(moves.contains(stop), stop)
         }
         let controller = try String(contentsOf: app.appendingPathComponent("AppController.swift"), encoding: .utf8)
-        let carry = try XCTUnwrap(controller.range(of: "carryChoice(to:"))
-        let live = try XCTUnwrap(controller.range(of: "startLive(reset: true)", range: carry.upperBound..<controller.endIndex))
+        // In `show(.started)`, both found from the start of the case: the carry comes first.
+        let started = try XCTUnwrap(controller.range(of: "case .started(let platform, let bundleID, let at):"))
+        let rest = controller[started.upperBound...]
+        let carry = try XCTUnwrap(rest.range(of: "carryChoice(to:"))
+        let live = try XCTUnwrap(rest.range(of: "startLive(reset: true)"))
         XCTAssertLessThan(carry.lowerBound, live.lowerBound)
+        XCTAssertTrue(controller.contains("assert(AppIdentity.current.isPreview || carry.decided == CallRecorder.callID(for: since)"))
     }
 
     /// m6: the leftovers in `Incoming` are cleaned at most once an hour, with or without work.
@@ -82,9 +83,14 @@ final class MoveMinorTests: XCTestCase {
         let sam = Person(id: PersonID(rawValue: "p-sam"), displayName: "Sam", origin: .voiceNaming, at: t0)
         var plan = PeopleMigration.Plan(made: t0, basis: "b", changes: true, people: [], samples: [], report: MigrationReport())
         plan.people = [sam]
-        plan.report.notes = ["Sam", "Samuel Lee was merged", "sam"]
+        plan.report.notes = ["Sam", "Samuel Lee was merged", "Sam was merged"]
         let kept = PeopleMigration.forgetting(plan, callID: id, people: ["p-sam"])
         XCTAssertEqual(kept.report.notes, ["Samuel Lee was merged"])
+        // n7: a name that is a common word takes only the lines with it as a name.
+        var will = plan
+        will.people = [Person(id: PersonID(rawValue: "p-will"), displayName: "Will", origin: .voiceNaming, at: t0)]
+        will.report.notes = ["Will was merged", "It will read the plan again"]
+        XCTAssertEqual(PeopleMigration.forgetting(will, callID: id, people: ["p-will"]).report.notes, ["It will read the plan again"])
     }
 
     func testANewerPlanIsNotWrittenAgain() throws {

@@ -12,11 +12,16 @@ public enum MoveAfterCall {
         case other(String)
         /// Taken back during the call: processed here, and the live transcript stays off for the rest of the call.
         case backHere
+        /// Kept from the call before as a guess (`Carry.guessed`): nothing is sent, and at its end the recording is held
+        /// until the owner chooses.
+        case guessed(String)
 
         /// The mark on the record for this choice.
         public var moveTo: String? {
-            if case .other(let id) = self { return id }
-            return nil
+            switch self {
+            case .other(let id), .guessed(let id): id
+            case .here, .backHere: nil
+            }
         }
     }
 
@@ -41,7 +46,7 @@ public enum MoveAfterCall {
     public static func allows(_ send: Send, _ choice: Choice) -> Bool {
         switch choice {
         case .here: true
-        case .other: false
+        case .other, .guessed: false
         case .backHere: send == .chatSummary || send == .pipeline
         }
     }
@@ -54,11 +59,15 @@ public enum MoveAfterCall {
         case .here: nil
         case .other: .forOtherProfile
         case .backHere: .afterOtherProfile
+        case .guessed: .maybeOtherProfile
         }
     }
 
+    /// A guess set to this profile was never the owner's marked call: it is a call like any other (`.here`), and its live
+    /// transcript starts. A guess set to any other profile is the owner's choice.
     public static func next(_ choice: Choice, picked profile: String, active: String) -> Choice {
         guard profile == active else { return .other(profile) }
+        if case .guessed = choice { return .here }
         return choice == .here ? .here : .backHere
     }
 
@@ -81,7 +90,7 @@ public enum MoveAfterCall {
         guard live.count >= 2 else { return nil }
         let chosen: String? = switch choice {
         case .here, .backHere: active
-        case .other(let id): id
+        case .other(let id), .guessed(let id): id
         }
         let rows = live.map { Menu.Row(id: $0.id, name: $0.name, color: $0.color, chosen: $0.id == chosen) }
         let activeName = live.first { $0.id == active }?.name ?? registry.activeProfile.name
@@ -90,58 +99,171 @@ public enum MoveAfterCall {
         case .other(let id): live.first { $0.id == id }.map { "“\($0.name)” writes the notes. Nothing more of this call is sent from “\(activeName)”." }
             ?? LiveOffReason.forOtherProfile.text
         case .backHere: LiveOffReason.afterOtherProfile.text
+        case .guessed: MoveWords.keptGuess
         }
         return Menu(rows: rows, note: note)
     }
 
     // MARK: A call that goes on as a new recording
 
-    /// The recording that a choice belongs to.
+    /// The recording that a choice belongs to, with what the detector knows at `.started`.
     public struct Call: Equatable, Sendable {
         public let callID: String
         public let platform: Platform
+        /// The call app's bundle id; nil when it is not known (a room).
+        public let bundleID: String?
         public let meetingID: String?
         public let start: Date
 
-        public init(callID: String, platform: Platform, meetingID: String?, start: Date) {
+        public init(callID: String, platform: Platform, bundleID: String?, meetingID: String?, start: Date) {
             self.callID = callID
             self.platform = platform
+            self.bundleID = bundleID
             self.meetingID = meetingID
             self.start = start
         }
     }
 
-    /// The owner's choice of a call that ended, kept for the new recording of the same call (the microphone stopped for
-    /// a moment, a quit, a crash). Only a choice is kept: `.here` keeps nothing.
+    /// How a new recording takes over the choice of the call before it. `sure`: the same link. `guessed`: no link to
+    /// compare, the same call app, or the first part after a launch: nothing is sent, and at its end it is held.
+    public enum Carry: Equatable, Sendable { case sure, guessed }
+
+    /// The time in which a new recording may be the call before it going on. Not `MeetingMerge.continuationGap`: joining
+    /// two recordings into one meeting must be strict; keeping a privacy choice must be generous.
+    public static let carryWindow: TimeInterval = 900
+
+    /// The owner's choice of a call that ended, kept for a new recording of the same call.
     public struct Kept: Equatable, Sendable {
+        /// The part that ended last.
         public let call: Call
+        /// The last link of the parts that carried the choice: a part with no link keeps the one before it.
+        public let link: String?
+        /// The owner's choice: another profile, or a take-back.
         public let choice: Choice
         public let end: Date
-    }
+        /// Read back at a launch, or carried as a guess since one: the owner did not see the panel since.
+        public let afterLaunch: Bool
+        /// Every part that carried this choice, in order.
+        public let parts: [String]
 
-    public static func keep(_ call: Call?, choice: Choice?, end: Date) -> Kept? {
-        guard let call, let choice, choice != .here else { return nil }
-        return Kept(call: call, choice: choice, end: end)
-    }
-
-    /// The choice that a new recording takes over: the kept one when the new recording is the same meeting by the rule
-    /// that joins two recordings (`MeetingMerge.continues`: the same link, within the gap) on the same platform.
-    public static func carried(_ kept: Kept?, to call: Call) -> Choice? {
-        guard let kept, kept.call.platform == call.platform,
-              MeetingMerge.continues(.init(meetingID: kept.call.meetingID, start: kept.call.start, end: kept.end),
-                                     .init(meetingID: call.meetingID, start: call.start, end: call.start)) else { return nil }
-        return kept.choice
-    }
-
-    /// After a launch: the choice of the call marked during its recording that ended last, while its gap lasts. A
-    /// take-back is not on the record, so only another profile is read back.
-    public static func kept(from records: [CallRecord], now: Date) -> Kept? {
-        let marked = records.filter { r in
-            r.moveTo != nil && (r.status == .recorded || (r.status == .failed && r.failedStep == .recorded))
-                && now.timeIntervalSince(r.end) < MeetingMerge.continuationGap
+        public init(call: Call, link: String?, choice: Choice, end: Date, afterLaunch: Bool, parts: [String]) {
+            self.call = call
+            self.link = link
+            self.choice = choice
+            self.end = end
+            self.afterLaunch = afterLaunch
+            self.parts = parts
         }
-        guard let r = marked.max(by: { $0.end < $1.end }), let to = r.moveTo else { return nil }
-        return Kept(call: Call(callID: r.id, platform: r.platform, meetingID: r.meetingID, start: r.start), choice: .other(to), end: r.end)
+    }
+
+    /// What a part keeps when it ends: nothing for `.here`; a guess the owner left alone keeps the owner's choice of the
+    /// part before, still a guess for the next part unless a link proves it.
+    public static func keep(_ call: Call?, choice: Choice?, end: Date, from carried: Kept? = nil) -> Kept? {
+        guard let call, let choice else { return nil }
+        let link = call.meetingID ?? carried?.link
+        let parts = (carried?.parts ?? []) + [call.callID]
+        switch choice {
+        case .here: return nil
+        case .other, .backHere:
+            return Kept(call: call, link: link, choice: choice, end: end, afterLaunch: false, parts: parts)
+        case .guessed(let id):
+            return Kept(call: call, link: link, choice: .other(id), end: end, afterLaunch: carried?.afterLaunch ?? false, parts: parts)
+        }
+    }
+
+    /// The choice that a new recording takes over, and how. Never: two different links, two different call apps with no
+    /// link to compare, or a start more than `carryWindow` after the end. A take-back carries only for sure; a guess of a
+    /// take-back is a call like any other.
+    public static func carry(_ kept: Kept?, to call: Call) -> (choice: Choice, kind: Carry)? {
+        guard let kept, call.start.timeIntervalSince(kept.end) <= carryWindow else { return nil }
+        let kind: Carry
+        if let a = kept.link, let b = call.meetingID {
+            guard a == b else { return nil }
+            kind = kept.afterLaunch ? .guessed : .sure
+        } else {
+            guard let a = kept.call.bundleID, a == call.bundleID else { return nil }
+            kind = .guessed
+        }
+        switch (kept.choice, kind) {
+        case (.other(let id), .sure): return (.other(id), .sure)
+        case (.other(let id), .guessed): return (.guessed(id), .guessed)
+        case (.backHere, .sure): return (.backHere, .sure)
+        default: return nil
+        }
+    }
+
+    /// After a launch: the call marked for another profile that was recording when the app stopped (`recovered`: its
+    /// audio length says nothing of a pause, so it counts from the launch), or that ended within `carryWindow` before
+    /// it. A carry after a launch is always a guess: the owner did not see the panel since.
+    public static func kept(from records: [CallRecord], recovered: Set<String>, now: Date) -> Kept? {
+        let marked = records.compactMap { r -> (CallRecord, Date)? in
+            guard r.moveTo != nil, r.status == .recorded || (r.status == .failed && r.failedStep == .recorded) else { return nil }
+            if recovered.contains(r.id) { return (r, now) }
+            return now.timeIntervalSince(r.end) <= carryWindow ? (r, r.end) : nil
+        }
+        guard let last = marked.max(by: { $0.1 < $1.1 }), let to = last.0.moveTo else { return nil }
+        let (r, end) = last
+        let call = Call(callID: r.id, platform: r.platform, bundleID: r.bundleID, meetingID: r.meetingID, start: r.start)
+        return Kept(call: call, link: r.meetingID, choice: .other(to), end: end, afterLaunch: true, parts: [r.id])
+    }
+
+    /// The earlier parts that a take-back in a part carried for sure cancels, so that the whole call is processed here:
+    /// each part of the same carried call whose move the target has not claimed (copying, copied, or waiting; or marked
+    /// with no move yet). A part whose move went further stays with the target.
+    public static func takeBackCancels(_ parts: [String], moves: [String: MoveOut.State], marked: Set<String>) -> [String] {
+        parts.filter { id in
+            if let state = moves[id] { return [.copying, .copied, .waiting].contains(state) }
+            return marked.contains(id)
+        }
+    }
+
+    /// The carry of the app: the choice kept from the part that ended, read back at a launch, decided at each start
+    /// before anything is sent, and kept again at the end. Pure, so its order is tested.
+    public struct Book: Equatable, Sendable {
+        public private(set) var kept: Kept?
+        /// The part that records now, with the choice it carried from.
+        public private(set) var call: Call?
+        public private(set) var from: Kept?
+        public private(set) var kind: Carry?
+        /// The id of the last call whose carry was decided: `startLive` asserts it.
+        public private(set) var decided: String?
+        /// The part that ended last and its own choice then (a guess left alone stays a guess), for `endOfCall`.
+        public private(set) var endedID: String?
+        public private(set) var endedChoice: Choice?
+
+        public init() {}
+
+        public mutating func launched(_ records: [CallRecord], recovered: Set<String>, now: Date) {
+            kept = MoveAfterCall.kept(from: records, recovered: recovered, now: now)
+        }
+
+        /// At `.started`, from the detector's own values. Any other call forgets the kept choice.
+        public mutating func started(_ call: Call) -> (choice: Choice, kind: Carry)? {
+            let carried = MoveAfterCall.carry(kept, to: call)
+            from = carried == nil ? nil : kept
+            kind = carried?.kind
+            kept = nil
+            self.call = call
+            decided = call.callID
+            return carried
+        }
+
+        /// At the end of the part, with its choice as it is then. A second end of the same call (the detector's, after
+        /// Stop) keeps what the first one kept.
+        public mutating func ended(choice: Choice?, at end: Date) {
+            guard let call else { return }
+            kept = MoveAfterCall.keep(call, choice: choice, end: end, from: from)
+            endedID = call.callID
+            endedChoice = choice
+            self.call = nil
+            from = nil
+            kind = nil
+        }
+
+        /// The kept choice of a call that ended, for the end's own read of the latest choice.
+        public func keptChoice(of callID: String) -> Choice? {
+            endedID == callID ? endedChoice : nil
+        }
     }
 
     /// What the choice of another profile stops at once, in the same turn as the choice: the streams that are open, the
@@ -150,8 +272,10 @@ public enum MoveAfterCall {
     public enum Stop: Equatable, Hashable, Sendable { case liveStreams, liveFile, liveChatAnswer }
 
     public static func stops(_ choice: Choice) -> Set<Stop> {
-        if case .other = choice { return [.liveStreams, .liveFile, .liveChatAnswer] }
-        return []
+        switch choice {
+        case .other, .guessed: [.liveStreams, .liveFile, .liveChatAnswer]
+        case .here, .backHere: []
+        }
     }
 
     /// The record at the end of the call with the owner's latest choice: a choice made in the same instant as the end
@@ -175,10 +299,20 @@ public enum MoveAfterCall {
         }
     }
 
+    /// After a start of a move after the call: only a start looks again at once; a refusal waits for the owner, so a
+    /// cause that lasts never makes a loop.
+    public static func looksAgain(after start: MoveSource.Start) -> Bool { start == .started }
+
     public enum AtEnd: Equatable, Sendable { case process, move(to: String), hold, nothing }
 
     /// At the end of a call. Nil (skipped, discarded, or too short to keep): nothing, and the mark went with the call.
     /// No mark: processed here. A mark for a live target: it moves as "recorded". Else it waits for the owner.
+    /// The end with the owner's latest choice: a guess is held (never moved, never processed) until the owner chooses.
+    public static func atEnd(_ record: CallRecord?, latest: Choice?, targets: [String]) -> AtEnd {
+        if case .guessed = latest { return record == nil ? .nothing : .hold }
+        return atEnd(record.map { settled($0, latest: latest) }, targets: targets)
+    }
+
     public static func atEnd(_ record: CallRecord?, targets: [String]) -> AtEnd {
         guard let record else { return .nothing }
         guard let to = record.moveTo else { return .process }

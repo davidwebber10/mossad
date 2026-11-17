@@ -8,6 +8,8 @@ public enum MovePlan {
 
     public enum Cancel: String, Codable, Equatable, Sendable {
         case byOwner, targetGone, lost, refusedIDTaken, refusedUnreadable, refusedNotWhole, noRoom, copyFailed, backupFailed
+        /// A call whose choice was kept from the call before as a guess: held until the owner chooses (`MoveAfterCall`).
+        case notSure
     }
 
     public enum SourceStep: Equatable, Sendable {

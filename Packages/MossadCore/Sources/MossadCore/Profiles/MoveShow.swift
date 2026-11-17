@@ -115,6 +115,18 @@ public enum MoveShow {
         public let text: String
         public let since: Date
         public let lasts: TimeInterval
+        /// The meeting the line is about: a meeting's own page shows only its own lines.
+        public private(set) var callID: String?
+
+        /// The same line, about one meeting.
+        public func about(_ id: String?) -> Line {
+            var l = self
+            l.callID = id
+            return l
+        }
+
+        /// Shown on a page: the list and Calendar (no meeting) show every line; a meeting's page only its own.
+        public func shows(on meeting: String?) -> Bool { meeting == nil || callID == meeting }
 
         public init(text: String, since: Date, lasts: TimeInterval) {
             self.text = text
@@ -146,6 +158,8 @@ public enum MoveShow {
 extension MoveWords {
     public static let cancelling = "Cancelling the move…"
     public static func notStarted(_ target: String) -> String { "The move to “\(target)” has not started." }
+    /// The panel's line under a choice kept from the call before as a guess.
+    public static let keptGuess = "Kept from the call before. Change it if this is another call."
     public static let movingOnMac = "This meeting is moving to another profile on your Mac."
     public static let arriving = "Arriving from another profile…"
     public static let cancelled = "The move is cancelled. The meeting stays here."
@@ -166,6 +180,8 @@ extension MoveWords {
 
     /// A call marked during its recording whose move ended: the reason, and that it waits for the owner.
     public static func held(_ reason: String) -> String {
+        // A reason that says it already (a guess kept from the call before) is the whole sentence.
+        if reason.hasSuffix("until you choose.") { return reason }
         let stays = " The meeting stays here."
         let base = reason.hasSuffix(stays) ? String(reason.dropLast(stays.count)) : reason
         return base + " Mossad does not process it until you choose."

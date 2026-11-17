@@ -2,6 +2,13 @@ import Foundation
 
 /// Which meeting may move, to which profile, and who may start a move. Pure.
 public enum MoveRules {
+    /// "Process here" may take the mark off only when no move of the call exists, or its move ended: a ledger in any
+    /// other state (or one that does not read) means the copy may already be in the other profile.
+    public static func mayProcessHere(ledger: MoveOut?, hasFile: Bool) -> Bool {
+        guard hasFile else { return true }
+        return ledger?.state == .done
+    }
+
     /// What the first profile sent of a meeting, from what the code keeps: the record and the usage log.
     public enum Sent: Equatable, Sendable { case nothing, live, inWork, all }
 
@@ -177,6 +184,7 @@ public enum MoveWords {
         case .noRoom: "There is not enough room on this Mac to move the meeting. Nothing was moved."
         case .copyFailed: "The copy did not match the meeting. Nothing was moved."
         case .backupFailed: "The recording is only in the backup, and Mossad could not get it. Nothing was moved."
+        case .notSure: "Mossad kept “\(target)” from the call before and is not sure this is the same call. It does not process it until you choose."
         }
     }
 }

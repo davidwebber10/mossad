@@ -32,16 +32,16 @@ public actor CloudSync {
     private let leaving: @Sendable () -> Set<String>
 
     public init(paths: Paths, store: any RecordStore, now: @escaping @Sendable () -> Date = Date.init,
-                leaving: @escaping @Sendable () -> Set<String> = { [] }) {
+                leaving: @escaping @Sendable () -> Set<String>) {
         self.paths = paths
         self.store = store
         self.now = now
         self.leaving = leaving
     }
 
-    /// iCloud, as before.
+    /// iCloud, as before. Only where no meeting can leave (no profile's own `Moves`).
     public init(paths: Paths) {
-        self.init(paths: paths, store: CloudKitStore())
+        self.init(paths: paths, store: CloudKitStore(), leaving: { [] })
     }
 
     private func prepare() async throws {

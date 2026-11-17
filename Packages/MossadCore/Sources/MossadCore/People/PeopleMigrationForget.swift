@@ -16,7 +16,8 @@ extension PeopleMigration {
         let removed = plan.people.filter { gone.contains($0.id.rawValue) }
         let words = Set(removed.flatMap { person in [person.displayName] + person.forms.map(\.text) + person.emails.map(\.address) }
             .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
-        // A whole field is the name; in a line of text the name is a whole word ("Sam" is not in "Samuel Lee").
+        // A whole field is the name; in a line of text the name is a whole word with its own capitals ("Sam" is not in
+        // "Samuel Lee", and "Will" is not in "it will").
         func isName(_ field: String) -> Bool {
             let f = field.trimmingCharacters(in: .whitespaces)
             return f.contains(callID) || words.contains { $0.caseInsensitiveCompare(f) == .orderedSame }
@@ -24,7 +25,7 @@ extension PeopleMigration {
         func names(_ text: String) -> Bool {
             text.contains(callID) || words.contains { word in
                 let pattern = "(?<![\\p{L}\\p{N}])" + NSRegularExpression.escapedPattern(for: word) + "(?![\\p{L}\\p{N}])"
-                return text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+                return text.range(of: pattern, options: [.regularExpression]) != nil
             }
         }
         p.people.removeAll { gone.contains($0.id.rawValue) }

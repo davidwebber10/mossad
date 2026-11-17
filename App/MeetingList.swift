@@ -43,7 +43,7 @@ struct MeetingList: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    MoveLineView()
+                    MoveLineView(inScroll: true)
                     if !live.isEmpty {
                         GroupHeader(title: "Now", color: Palette.recording, first: true)
                         // Its own id in the stack: with the record's id, a stopped call's row moved to its day kept
