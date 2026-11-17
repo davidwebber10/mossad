@@ -50,18 +50,28 @@ final class ProfileWorkerTests: XCTestCase {
         var get: Bool { lock.withLock { value } }
     }
 
+    /// What the worker saved in its settings, in order.
+    final class Remembered: @unchecked Sendable {
+        private let lock = NSLock()
+        private var items: [(String, Any)] = []
+        func add(_ key: String, _ value: Any) { lock.withLock { items.append((key, value)) } }
+        func keys(_ key: String) -> [Any] { lock.withLock { items.filter { $0.0 == key }.map(\.1) } }
+    }
+
     private func worker(madeUp: Bool = false, calling: Bool = false, key: String? = "k", transcriber t: Transcribing? = nil,
                         store: MemoryStore = MemoryStore(), calendar: CalendarSource = FakeCalendar(), coach: Bool = false,
-                        screens: ScreenTextReading? = nil) throws -> ProfileWorker {
+                        screens: ScreenTextReading? = nil, llm: (any LanguageModel)? = nil, archive: CloudArchive? = nil,
+                        remembered: Remembered = Remembered(), now: Date? = nil) throws -> ProfileWorker {
         let made = try MadeUpSuite(self)
         if coach { made.defaults.set(true, forKey: "coachEnabled") }
         let settings = ServiceSettings.read(made.defaults, fullUserName: "Avery Lane")
         let flag = Flag(calling)
         let setup = ProfileWorker.Setup(paths: paths, settings: settings, key: { _ in key }, google: Keychain(service: "com.dwebber.mossad.test-none"),
-                                        remember: { _, _ in }, hasICloud: false, madeUpRegistry: madeUp,
-                                        macCalendarAuthorized: { false }, callRecords: { flag.get }, now: { [start] in start.addingTimeInterval(7200) })
+                                        remember: { remembered.add($0, $1) }, hasICloud: false, madeUpRegistry: madeUp,
+                                        macCalendarAuthorized: { false }, callRecords: { flag.get },
+                                        now: { [start] in now ?? start.addingTimeInterval(7200) })
         let services = ProfileWorker.Services(transcriber: t ?? transcriber, summarizer: summarizer, embeddings: ToneEmbeddingProvider(),
-                                              calendar: calendar, llm: nil, main: CloudSync(paths: paths, store: store), mirror: nil, archive: nil,
+                                              calendar: calendar, llm: llm, main: CloudSync(paths: paths, store: store), mirror: nil, archive: archive,
                                               screenReader: screens)
         return ProfileWorker(setup, services: services)
     }
@@ -160,5 +170,14 @@ final class ProfileWorkerTests: XCTestCase {
         XCTAssertEqual(r.status, .written)
         XCTAssertEqual(reader.read, ["12000.heic"])
         XCTAssertEqual(r.screens?.map(\.offset), [12])
+    }
+
+    func testTheStartOfThePersonasAndCommitmentsIsSetOnce() async throws {
+        let remembered = Remembered()
+        let w = try worker(coach: true, llm: FakeModel(output: [:]), remembered: remembered)
+        _ = await w.start()
+        for _ in 0..<3 { _ = await w.pass([.queue]) }
+        XCTAssertEqual(remembered.keys("personaSince").count, 1)
+        XCTAssertEqual(remembered.keys("commitmentsSince").count, 1)
     }
 }

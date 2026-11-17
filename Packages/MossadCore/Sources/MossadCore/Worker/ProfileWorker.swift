@@ -95,6 +95,9 @@ public actor ProfileWorker {
     private var changes = 0
     private var digestSent: String?
     private var digestPending: (key: String, parts: [SharedPayload])?
+    /// The start dates this worker set, once each, so a later pass does not move them.
+    private var personaSince: Double?
+    private var commitmentsSince: Double?
 
     public init(_ setup: Setup, services given: Services? = nil) {
         self.setup = setup
@@ -225,11 +228,13 @@ public actor ProfileWorker {
            let made = PersonaExtractor.model(provider: settings.aiProvider, chosen: settings.aiModel, key: settings.aiProvider.key.flatMap(setup.key),
                                              usage: usage, serverURL: settings.localServerBase) {
             pass.ran.insert(.personas)
-            var since = settings.personaSince
+            // Set once, as the app's `personaSince`: the settings value is from the start, so the actor keeps it.
+            var since = personaSince ?? settings.personaSince
             if since == 0 {
                 since = setup.now().timeIntervalSince1970
                 setup.remember("personaSince", since)
             }
+            personaSince = since
             let usage = usage, callRecords = setup.callRecords
             let out = await PersonaBacklog.run(runner: PersonaRunner(paths: paths, llm: made.llm, owner: settings.ownerName), paths: paths,
                                                owner: settings.ownerName, model: made.name, service: made.service,
@@ -241,11 +246,12 @@ public actor ProfileWorker {
         }
         if runs(.commitments), let llm {
             pass.ran.insert(.commitments)
-            var since = settings.commitmentsSince
+            var since = commitmentsSince ?? settings.commitmentsSince
             if since == 0 {
                 since = setup.now().addingTimeInterval(-14 * 86_400).timeIntervalSince1970
                 setup.remember("commitmentsSince", since)
             }
+            commitmentsSince = since
             _ = await CommitmentRunner(paths: paths, finder: CommitmentFinder(llm: llm, ownerName: settings.ownerName),
                                        since: Date(timeIntervalSince1970: since)).run()
         }
