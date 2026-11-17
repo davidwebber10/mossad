@@ -36,6 +36,12 @@ enum DevHooks {
             for r in c.meetings where Calendar.current.isDateInToday(r.start) && r.status == .written { c.regenerateSummary(r.id) }
         }
         let looks = preview || debug
+        // `MOSSAD_PROOF_DAYS=<n>` on a made-up registry: a setting written through `@AppStorage` into the profile's
+        // suite, and what Sparkle reads, for the proof that a profile's swap holds.
+        if AppIdentity.current.madeUpRegistry, !preview, let days = env["MOSSAD_PROOF_DAYS"].flatMap(Int.init) {
+            c.recordingDays = days
+            Log.info("Proof: updates check automatically: \(c.updater.automaticallyChecks)")
+        }
         // `--light` shows the UI in light mode, to check both looks. Before the preview's own appearance hooks.
         if looks, has("--light") { NSApp.appearance = NSAppearance(named: .aqua) }
         if preview { previewOnly(c) }

@@ -5,14 +5,18 @@ import MossadCore
 @main
 struct MossadEntry {
     static func main() {
-        // First of all: a preview runs only on a made-up folder, and reads and writes its own empty settings.
+        // First of all, before anything reads a setting, the Keychain, or `Paths.live`: which profile this process
+        // is (the registry is read here and nowhere earlier). A preview runs only on a made-up folder and an unknown
+        // profile does not start. Then a preview or a profile reads and writes its own settings; the Mac-wide keys
+        // stay in the real domain (`MacDefaults`).
         let identity = AppIdentity.current
         if let refusal = identity.refusal(home: FileManager.default.homeDirectoryForCurrentUser, environment: ProcessInfo.processInfo.environment) {
             FileHandle.standardError.write(Data((refusal + "\n").utf8))
             exit(2)
         }
         if !identity.isolateDefaults() {
-            FileHandle.standardError.write(Data("Mossad: the preview could not use its own settings; not starting.\n".utf8))
+            let whose = identity.isPreview ? "the preview" : "the profile"
+            FileHandle.standardError.write(Data("Mossad: \(whose) could not use its own settings; not starting.\n".utf8))
             exit(2)
         }
         // Before any resolver: the app, `--mcp`, and each command-line step read the same company domains.

@@ -633,7 +633,8 @@ final class AppController: ObservableObject {
                 Log.error("Could not lock \(paths.root.path): \(String(cString: strerror(code)))")
             }
         }
-        let inert = preview || AppIdentity.current.isPreview || Rehearsal.isOn || isSecondCopy
+        let inert = RunMode.decide(preview: preview || AppIdentity.current.isPreview, rehearsal: Rehearsal.isOn, secondCopy: isSecondCopy,
+                                   madeUpRegistry: AppIdentity.current.madeUpRegistry) == .inert
         isInert = inert
         // Reading the calendar records nothing. A preview lists made-up calendars, and its invites come from MOSSAD_UPCOMING.
         if inert { refreshUpcoming() }
@@ -797,6 +798,7 @@ final class AppController: ObservableObject {
     private func finishLaunch(_ records: [CallRecord], held: [String], inert: Bool) {
         meetings = records
         meetingsLoaded = true
+        reportMacWideStrays()
         // The count of the cards in the sidebar, from the start, and again as cards get old.
         refreshFindings()
         Task { [weak self] in
@@ -2059,11 +2061,19 @@ final class AppController: ObservableObject {
         permissions.askAutomationIfNeeded(bundleID)
     }
 
+    /// A Mac-wide key in a profile's own settings means something read or wrote it past `MacDefaults`.
+    private func reportMacWideStrays() {
+        let identity = AppIdentity.current
+        guard identity.takesProfiles, !identity.profile.isDefault, let suite = identity.defaultsSuite else { return }
+        let strays = MacDefaults.strays(in: UserDefaults.standard.persistentDomain(forName: suite) ?? [:])
+        if !strays.isEmpty { Log.error("Settings: Mac-wide keys in this profile's settings: \(strays.joined(separator: ", "))") }
+    }
+
     private func enableLaunchAtLoginOnce() {
-        guard !AppIdentity.current.isPreview, !UserDefaults.standard.bool(forKey: "didSetLoginItem") else { return }
+        guard !AppIdentity.current.isPreview, !MacDefaults.store.bool(forKey: "didSetLoginItem") else { return }
         do {
             try SMAppService.mainApp.register()
-            UserDefaults.standard.set(true, forKey: "didSetLoginItem")
+            MacDefaults.store.set(true, forKey: "didSetLoginItem")
         } catch {
             Log.error("Launch at login failed: \(error)")
         }
