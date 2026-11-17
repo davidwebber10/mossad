@@ -38,7 +38,8 @@ enum WorkerEntry {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let env = ProcessInfo.processInfo.environment
         // 1. The app in front: nothing of the data folder is touched before it is known.
-        let watcher = ForegroundWatcher(file: ForegroundState.url(home: home, environment: env)) { why in
+        // `signals: true`: the worker's own SIGTERM and SIGINT handling, set by itself (the app's are not inherited).
+        let watcher = ForegroundWatcher(file: ForegroundState.url(home: home, environment: env), signals: true) { why in
             Log.info("Worker: stops (\(why.rawValue))")
             Log.flush()
             exit(WorkerLaunch.Exit.stopped.rawValue)

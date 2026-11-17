@@ -121,6 +121,63 @@ final class ForegroundWatchTests: XCTestCase {
         XCTAssertTrue(watcher.callRecords)
     }
 
+    func testAnUnreadableFileIsReadAgainAtEachTick() throws {
+        let file = try temp()
+        let me = ProcessInfo.processInfo.processIdentifier
+        let good = try JSONEncoder().encode(ForegroundState(pid: me, started: ProcessFacts.startTime(of: me), recording: false))
+        try good.write(to: file)
+        let watcher = ForegroundWatcher(file: file, every: 0.05, signals: false) { _ in }
+        XCTAssertEqual(watcher.first(), .work(callRecords: false))
+        watcher.start()
+        // A short failure: as long as the good file, so only a new read can tell them apart.
+        try Data(repeating: UInt8(ascii: "x"), count: good.count).write(to: file)
+        let stamp = try FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as! Date
+        var deadline = Date().addingTimeInterval(1)
+        while !watcher.callRecords, Date() < deadline { Thread.sleep(forTimeInterval: 0.02) }
+        XCTAssertTrue(watcher.callRecords)
+        try good.write(to: file)
+        try FileManager.default.setAttributes([.modificationDate: stamp], ofItemAtPath: file.path)
+        deadline = Date().addingTimeInterval(1)
+        while watcher.callRecords, Date() < deadline { Thread.sleep(forTimeInterval: 0.02) }
+        XCTAssertFalse(watcher.callRecords, "the same size and time, read again")
+    }
+
+    func testTheWatcherEndsWhenTheAppsPidExitsBeforeItsNextCheck() throws {
+        let app = Process()
+        app.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        app.arguments = ["30"]
+        try app.run()
+        addTeardownBlock { if app.isRunning { app.terminate() } }
+        let file = try temp()
+        try ForegroundState(pid: app.processIdentifier, started: nil, recording: false).write(to: file)
+        let gone = expectation(description: "gone")
+        // A check every minute that would think the pid lives: only the exit source can end it in time.
+        let watcher = ForegroundWatcher(file: file, every: 60, alive: { _ in true }, signals: false) { why in
+            if why == .foregroundGone { gone.fulfill() }
+        }
+        XCTAssertEqual(watcher.first(), .work(callRecords: false))
+        watcher.start()
+        Thread.sleep(forTimeInterval: 0.2)
+        app.terminate()
+        wait(for: [gone], timeout: 3)
+    }
+
+    func testASigtermIsAStopWhenTheWatcherHandlesSignals() throws {
+        let file = try temp()
+        let me = ProcessInfo.processInfo.processIdentifier
+        try ForegroundState(pid: me, started: ProcessFacts.startTime(of: me), recording: false).write(to: file)
+        let told = expectation(description: "told")
+        let watcher = ForegroundWatcher(file: file, every: 60, signals: true) { why in
+            if why == .told { told.fulfill() }
+        }
+        addTeardownBlock { signal(SIGTERM, SIG_DFL); signal(SIGINT, SIG_DFL) }
+        XCTAssertEqual(watcher.first(), .work(callRecords: false))
+        watcher.start()
+        Thread.sleep(forTimeInterval: 0.2)
+        kill(me, SIGTERM)
+        wait(for: [told], timeout: 3)
+    }
+
     final class Counter: @unchecked Sendable {
         private let lock = NSLock()
         private var items: [String] = []

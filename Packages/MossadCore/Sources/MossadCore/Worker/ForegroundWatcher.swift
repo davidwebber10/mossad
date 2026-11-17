@@ -1,6 +1,6 @@
 import Foundation
 
-/// A worker's watch of the app in front: the foreground file every 2 s (read again only when it changed), the
+/// A worker's watch of the app in front: the foreground file every 2 s (read again when it changed or could not be read), the
 /// app's pid at each tick, an exit source on that pid, and SIGTERM and SIGINT as a stop. It tells `onStop` once.
 public final class ForegroundWatcher: @unchecked Sendable {
     public static let every: TimeInterval = 2
@@ -24,7 +24,7 @@ public final class ForegroundWatcher: @unchecked Sendable {
 
     public init(file: URL, every: TimeInterval = ForegroundWatcher.every,
                 alive: @escaping @Sendable (ForegroundState) -> Bool = { ProcessFacts.isAlive(pid: $0.pid, started: $0.started) },
-                signals: Bool = true, onStop: @escaping @Sendable (ForegroundWatch.Stop) -> Void) {
+                signals: Bool, onStop: @escaping @Sendable (ForegroundWatch.Stop) -> Void) {
         self.file = file
         self.every = every
         self.alive = alive
@@ -66,7 +66,8 @@ public final class ForegroundWatcher: @unchecked Sendable {
         let attributes = try? FileManager.default.attributesOfItem(atPath: file.path)
         let stamp = (attributes?[.modificationDate] as? Date, (attributes?[.size] as? Int) ?? -1)
         let read: ForegroundState.Read
-        if !force, let last = lastStamp, last.0 == stamp.0, last.1 == stamp.1 {
+        // An unreadable read is read again at each tick: a short failure must not stand for hours.
+        if !force, lastRead != .unreadable, let last = lastStamp, last.0 == stamp.0, last.1 == stamp.1 {
             read = lastRead
         } else {
             read = ForegroundState.read(file)
