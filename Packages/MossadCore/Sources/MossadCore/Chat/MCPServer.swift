@@ -10,6 +10,8 @@ public struct MCPServer: Sendable {
 
     let paths: Paths
     let owner: String
+    /// The profile's server name, which `serverInfo` gives: `mossad` for the first profile.
+    let name: String
     /// The coach's reads of how each person thinks, in the `people` tool. The owner can turn it off in Settings.
     let personaTraits: Bool
 
@@ -21,16 +23,18 @@ public struct MCPServer: Sendable {
     /// The owner's settings, read again at each call: a switch turned off reaches a process that runs for days.
     let settings: (@Sendable () -> ToolSettings)?
 
-    public init(paths: Paths, owner: String, settings: @escaping @Sendable () -> ToolSettings) {
+    public init(paths: Paths, owner: String, name: String = "mossad", settings: @escaping @Sendable () -> ToolSettings) {
         self.paths = paths
         self.owner = owner
+        self.name = name
         personaTraits = false
         self.settings = settings
     }
 
-    public init(paths: Paths, owner: String, personaTraits: Bool = true) {
+    public init(paths: Paths, owner: String, name: String = "mossad", personaTraits: Bool = true) {
         self.paths = paths
         self.owner = owner
+        self.name = name
         self.personaTraits = personaTraits
         settings = nil
     }
@@ -55,7 +59,7 @@ public struct MCPServer: Sendable {
         case "initialize":
             result = ["protocolVersion": params["protocolVersion"] as? String ?? Self.fallbackVersion,
                       "capabilities": ["tools": ["listChanged": false]],
-                      "serverInfo": ["name": "mossad", "version": "1.0"],
+                      "serverInfo": ["name": name, "version": "1.0"],
                       "instructions": "Search and read \(owner)'s recorded meetings and everything Mossad shows about them: transcripts, summaries, decisions, action items, people (read_person), upcoming meetings and their prep, recurring meetings, points for next time, tasks, bookmarks, the coach, and analytics. Read a meeting before saying what someone agreed to."]
         case "ping":
             result = [:]

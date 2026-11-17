@@ -11,6 +11,12 @@ public enum PersonaFill {
     /// The calls of one run of the app's fill.
     public static let callsPerRun = 10
 
+    /// Why `--go` does not run: the app holds this profile's folder. Another profile's app may stay open.
+    public static func openMessage(_ profile: Profile) -> String {
+        let why = "the fill writes the files that the app keeps."
+        return profile.isDefault ? "Quit Mossad first: \(why)" : "Mossad has this profile open. Switch to another profile or quit Mossad first: \(why)"
+    }
+
     /// The dollars of a request's tokens for a model, and whether the price is known: a model on the owner's own
     /// server or Mac costs nothing; a cloud model with no list price is not known.
     public static func price(service: UsageEvent.Service, model: String) -> (known: Bool, cost: @Sendable (Int, Int) -> Double) {
