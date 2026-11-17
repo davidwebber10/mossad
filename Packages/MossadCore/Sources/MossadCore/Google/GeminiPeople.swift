@@ -223,9 +223,14 @@ public struct GeminiPeopleBook: Codable, Equatable, Sendable {
         let list = addresses.map(EmailIdentity.normalized).filter { $0.contains("@") }
         guard !list.isEmpty else { return }
         guard var book = load(paths) else { throw Unreadable() }
-        let before = book.given
+        let before = book
         book.given.formUnion(list)
-        if book.given != before { try book.save(paths) }
+        // A refused address never leaves the record through `settle`.
+        if let pending = book.pending {
+            let left = pending.subtracting(list)
+            book.pending = left.isEmpty ? nil : left
+        }
+        if book != before { try book.save(paths) }
     }
 
     /// Before the owner deletes a person: each address of the voice and of the person, in any state, and each

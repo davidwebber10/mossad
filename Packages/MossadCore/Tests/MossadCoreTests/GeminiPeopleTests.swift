@@ -431,6 +431,20 @@ final class GeminiPeopleTests: XCTestCase {
         XCTAssertEqual(GeminiPeopleBook.load(s.paths)?.given, ["sam.carter@example.com"])
     }
 
+    // E and A: a write that a quit left pending, then the owner's delete: the refused address never leaves the record.
+    func testAPendingAddressThatTheOwnerRefusedStaysGiven() throws {
+        let s = stores()
+        try s.library.add([0, 1, 0, 0], to: "Sam Carter")
+        _ = try s.library.addEmail("sam.carter@example.com", for: "Sam Carter")
+        try GeminiPeopleBook(given: ["sam.carter@example.com"], pending: ["sam.carter@example.com"]).save(s.paths)
+        try GeminiPeopleBook.refuse(personNamed: "Sam Carter", library: s.library, paths: s.paths)
+        try s.library.delete("Sam Carter")
+        XCTAssertEqual(link(s, [sam()]).made, 0)
+        XCTAssertTrue(s.library.profiles.isEmpty)
+        XCTAssertNil(person(s, "Sam Carter"))
+        XCTAssertEqual(GeminiPeopleBook.load(s.paths)?.given, ["sam.carter@example.com"])
+    }
+
     // An older book with no pending field still reads.
     func testAnOlderBookStillReads() throws {
         let s = stores()
