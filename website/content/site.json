@@ -835,16 +835,18 @@
         {
           "id": "separate-profiles",
           "title": "Work and personal, kept apart",
-          "body": "Keep work calls and personal calls in separate profiles on one Mac, and change from one to the other with one click.",
+          "body": "Keep work calls and personal calls in separate profiles on your Mac and your iPhone, and change from one to the other with one click.",
           "details": [
             "Each profile has its own keys, people, voices, coach, sync, and backup",
             "A call is recorded by the profile you are in, and the menu bar shows which one",
             "An AI app that you connect to one profile never reads the other",
+            "On your iPhone, each profile has its own meetings, and you change profile in Settings",
+            "A phone call that you share goes to the profile you pick",
             "With one profile, nothing changes"
           ],
           "icon": "person.2.crop.square.stack",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Profiles/ProfileRegistry.swift", "Packages/MossadCore/Sources/MossadCore/Support/AppIdentity.swift", "App/ProfileSwitcher.swift", "App/ProfileSettings.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Profiles/ProfileRegistry.swift", "Packages/MossadCore/Sources/MossadCore/Support/AppIdentity.swift", "App/ProfileSwitcher.swift", "App/ProfileSettings.swift", "PhoneApp/PhoneProfiles.swift", "PhoneApp/ProfilesScreen.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/PhoneProfileBook.swift"]
         }
       ]
     },
