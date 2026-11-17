@@ -150,4 +150,29 @@ final class PhoneRecordingTests: XCTestCase {
         let me = try AVAudioFile(forReading: paths.callDirectory(rec.id).appendingPathComponent(Track.me.fileName))
         XCTAssertGreaterThan(try peak(of: me), 0.05, "the person on channel 2 is in the mono track")
     }
+
+    /// The peak of the Mac's mic track after an import of `source`.
+    private func importedPeak(_ source: URL) throws -> Float {
+        let paths = Paths(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        let rec = PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 3, title: nil, kind: .phoneCall)
+        try PhoneRecording.importAudio(source, recording: rec, into: paths)
+        return try peak(of: AVAudioFile(forReading: paths.callDirectory(rec.id).appendingPathComponent(Track.me.fileName)))
+    }
+
+    func testTheTwoChannelsAreMixedByTheirMean() throws {
+        let one = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).caf")
+        try writeSecondChannelTone(one, seconds: 3, amplitude: 0.9)
+        XCTAssertEqual(try importedPeak(one), 0.45, accuracy: 0.135, "one side of two is half as loud")
+        let both = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).caf")
+        try writeSecondChannelTone(both, seconds: 3, amplitude: 0.9, both: true)
+        let p = try importedPeak(both)
+        XCTAssertEqual(p, 0.9, accuracy: 0.09)
+        XCTAssertLessThanOrEqual(p, 1.0, "a mean never clips")
+    }
+
+    func testAMonoFileKeepsItsLevel() throws {
+        let mono = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).caf")
+        try writeTestAudio(mono, seconds: 3, frequency: 440)
+        XCTAssertEqual(try importedPeak(mono), 0.5, accuracy: 0.05)
+    }
 }

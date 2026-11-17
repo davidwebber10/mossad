@@ -212,4 +212,21 @@ final class CallImportTests: XCTestCase {
     func testARecordingTheIPhoneCouldNotSaveIsRefusedInPlainWords() {
         XCTAssertEqual(CallImport.Refusal.notSaved.message, "Mossad could not save this recording on the iPhone. Try again.")
     }
+
+    func testTheInboxIsClearedOnlyOfFilesAddedMoreThanADayAgoAndNotInUse() {
+        XCTAssertTrue(CallImport.clearsFromInbox(added: now - 25 * 3600, now: now, inUse: false))
+        XCTAssertFalse(CallImport.clearsFromInbox(added: now - 3600, now: now, inUse: false))
+        XCTAssertFalse(CallImport.clearsFromInbox(added: nil, now: now, inUse: false), "unknown is not old")
+        XCTAssertFalse(CallImport.clearsFromInbox(added: now - 400 * 86_400, now: now, inUse: true), "the file the screen or an import uses")
+    }
+
+    func testAFileWithAnOldModificationDateAddedNowIsKept() {
+        // The copy iOS hands over keeps its source's modification date (last year); only the date it was added counts.
+        XCTAssertFalse(CallImport.clearsFromInbox(added: now, now: now, inUse: false))
+    }
+
+    func testThePersonChoicesLeaveOutSpeakerLettersAndAddresses() {
+        XCTAssertEqual(CallImport.choices(query: "", people: [], heard: ["Speaker B", "sam@example.com", "Jo Fenwick"], owner: "Avery Webb").map(\.name),
+                       ["Jo Fenwick"])
+    }
 }

@@ -190,7 +190,9 @@ public enum CallImport {
         }
         let ownerKey = PersonNames.key(owner)
         var seen = Set<String>()
+        // As the People page: a letter for an unnamed voice and an address are no person to pick.
         return heard
+            .filter { !$0.hasPrefix("Speaker ") && !$0.contains("@") }
             .filter { PersonNames.key($0) != ownerKey && search.match(title: $0, fields: []) != nil }
             .filter { seen.insert(PersonNames.key($0)).inserted }
             .map { Choice(name: $0, personID: nil) }
@@ -205,6 +207,17 @@ public enum CallImport {
         let key = PersonNames.key(name)
         let same = choices.filter { PersonNames.key($0.name) == key }
         return same.count == 1 ? same[0] : Choice(name: name, personID: nil)
+    }
+
+    /// How long a handed file may wait in the app's inbox before the launch clears it.
+    public static let inboxKeep: TimeInterval = 86_400
+
+    /// Whether the launch clears a file from the inbox: only one added to the folder more than a day ago and not in
+    /// use. The date it was added counts, never its modification date: a copy keeps its source's. A file with no
+    /// such date is kept, as unknown is not old.
+    public static func clearsFromInbox(added: Date?, now: Date, inUse: Bool) -> Bool {
+        guard !inUse, let added else { return false }
+        return now.timeIntervalSince(added) > inboxKeep
     }
 
     /// The Shortcuts action's answer.

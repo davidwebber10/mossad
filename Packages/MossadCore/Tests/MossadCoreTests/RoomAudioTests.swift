@@ -240,4 +240,27 @@ final class RoomAudioTests: XCTestCase {
         XCTAssertEqual(f.fileFormat.channelCount, 1)
         XCTAssertGreaterThan(try peak(of: f), 0.05, "the person on channel 2 is in the file")
     }
+
+    private func adoptedPeak(_ source: URL) throws -> Float {
+        let dir = temp(), id = "20270115-090000"
+        try RoomAudio.adopt(source, as: id, in: dir, convert: true)
+        return try peak(of: AVAudioFile(forReading: RoomAudio.finished(id, in: dir)))
+    }
+
+    func testAdoptMixesTheTwoChannelsByTheirMean() throws {
+        let outside = temp()
+        let one = outside.appendingPathComponent("one.caf"), both = outside.appendingPathComponent("both.caf")
+        try writeSecondChannelTone(one, seconds: 3, amplitude: 0.9)
+        try writeSecondChannelTone(both, seconds: 3, amplitude: 0.9, both: true)
+        XCTAssertEqual(try adoptedPeak(one), 0.45, accuracy: 0.135, "one side of two is half as loud")
+        let p = try adoptedPeak(both)
+        XCTAssertEqual(p, 0.9, accuracy: 0.09)
+        XCTAssertLessThanOrEqual(p, 1.0, "a mean never clips")
+    }
+
+    func testAdoptKeepsTheLevelOfAMonoFile() throws {
+        let mono = temp().appendingPathComponent("mono.caf")
+        try writeTestAudio(mono, seconds: 3, frequency: 440)
+        XCTAssertEqual(try adoptedPeak(mono), 0.5, accuracy: 0.05)
+    }
 }

@@ -20,14 +20,21 @@ extension PhoneStore {
     /// after. The entry is saved first and the id is held in `joining` while the audio is added, so a stop in the
     /// middle is never taken for a room recording. On a failure nothing is added and the handed file stays.
     func importCall(_ draft: CallImport.Draft, from url: URL) async -> Result<String, CallImport.Refusal> {
-        let (planned, hash, memory) = await importPlan(draft, from: url)
+        let (planned, hash, _) = await importPlan(draft, from: url)
         let plan: CallImport.Plan
         switch planned {
         case .failure(let refusal): return .failure(refusal)
         case .success(let p): plan = p
         }
         joining.insert(plan.id)
-        defer { joining.remove(plan.id) }
+        importing.insert(url.path)
+        // A long convert must not stop when the owner goes back to Notes: the entry would lose its audio.
+        let time = BackgroundTime("Add the shared recording")
+        defer {
+            joining.remove(plan.id)
+            importing.remove(url.path)
+            time.end()
+        }
         guard addImported(PhoneRecording(plan)) else { return .failure(.notSaved) }
 
         let dir = recordingsFolder, id = plan.id, convert = plan.convert
@@ -48,13 +55,19 @@ extension PhoneStore {
         }
 
         if let hash {
-            var memory = memory
-            memory.remember(hash: hash, id: id)
-            if loaded { memory.keep(only: Set(outbox.entries.map(\.id) + meetings.map(\.id))) }
+            // Read again just before the write, one write at a time: an import that overlapped keeps its hash.
             let file = importMemoryFile
-            await Task.detached {
-                do { try memory.save(to: file) } catch { Log.error("Saving the imported files failed: \(error)") }
-            }.value
+            let ids: Set<String>? = loaded ? Set(outbox.entries.map(\.id) + meetings.map(\.id)) : nil
+            do {
+                try await writes.run {
+                    var memory = ImportMemory.load(from: file)
+                    memory.remember(hash: hash, id: id)
+                    if let ids { memory.keep(only: ids) }
+                    try memory.save(to: file)
+                }
+            } catch {
+                Log.error("Saving the imported files failed: \(error)")
+            }
         }
         discardIncoming(url)
         Log.info("Added the shared recording \(id)")
@@ -79,14 +92,18 @@ extension PhoneStore {
         return outbox[id]?.isSent == true
     }
 
-    /// Files that iOS handed over and the app never took, after a day: the share was cancelled or the app stopped.
-    nonisolated static func clearOldInbox() {
+    /// Files that iOS handed over and the app never took, by `CallImport.clearsFromInbox`: added a day ago or more,
+    /// and not the file the screen shows or an import reads.
+    func clearOldInbox() {
+        let inUse = Set([incomingAudio?.url.standardizedFileURL.path].compactMap { $0 } + importing.map { URL(fileURLWithPath: $0).standardizedFileURL.path })
         Task.detached(priority: .utility) {
             guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
             let inbox = docs.appendingPathComponent("Inbox")
-            let files = (try? FileManager.default.contentsOfDirectory(at: inbox, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
-            let old = Date().addingTimeInterval(-86_400)
-            for f in files where ((try? f.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantFuture) < old {
+            let files = (try? FileManager.default.contentsOfDirectory(at: inbox, includingPropertiesForKeys: [.addedToDirectoryDateKey])) ?? []
+            let now = Date()
+            for f in files {
+                let added = try? f.resourceValues(forKeys: [.addedToDirectoryDateKey]).addedToDirectoryDate
+                guard CallImport.clearsFromInbox(added: added, now: now, inUse: inUse.contains(f.standardizedFileURL.path)) else { continue }
                 try? FileManager.default.removeItem(at: f)
             }
         }

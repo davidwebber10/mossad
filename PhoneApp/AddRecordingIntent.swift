@@ -23,7 +23,10 @@ struct AddRecordingIntent: AppIntent {
         defer { try? FileManager.default.removeItem(at: dir) }
         let name = (audio.filename as NSString).lastPathComponent
         let url = dir.appendingPathComponent(name.isEmpty ? "Recording.m4a" : name)
-        try audio.data.write(to: url)
+        let data = audio.data
+        try await Task.detached(priority: .userInitiated) { try data.write(to: url) }.value
+        // A launch in the background reads the people first, so a whole saved name keeps its id.
+        await store.launch?.value
 
         let file = await Task.detached { await CallImport.read(url) }.value
         let begin = start ?? CallImport.start(metadata: file.metadataDate, file: file.fileDate, length: file.length ?? 0, now: Date()).date

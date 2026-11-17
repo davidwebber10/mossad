@@ -62,7 +62,8 @@ final class PhoneStore {
     /// A short message for a link that cannot open, such as to a meeting that is not on this iPhone yet.
     var notice: String?
     /// An audio file that iOS handed over from the share sheet, shown in the import screen until it closes.
-    var incomingAudio: IncomingAudio? = PhoneStore.hook("MOSSAD_IMPORT").map { IncomingAudio(url: URL(fileURLWithPath: $0)) }
+    var incomingAudio: IncomingAudio? = PhoneStore.hook("MOSSAD_IMPORT_AFTER") == nil
+        ? PhoneStore.hook("MOSSAD_IMPORT").map { IncomingAudio(url: URL(fileURLWithPath: $0)) } : nil
     /// The room recorder's screen is open: the import screen shows over it.
     var recorderScreenOpen = false
 
@@ -104,7 +105,9 @@ final class PhoneStore {
     private let offline = ProcessInfo.processInfo.environment["MOSSAD_ROOT"] != nil
     /// Every write to a file that a pull also writes (commitments, the coach's memory, chats, reviews), and the
     /// pull itself, run one at a time, so neither saves over what the other merged.
-    @ObservationIgnored private let writes = SerialQueue()
+    @ObservationIgnored let writes = SerialQueue()
+    /// The handed files that an import reads now: the launch's inbox cleanup leaves them.
+    @ObservationIgnored var importing: Set<String> = []
     @ObservationIgnored private var syncTask: (key: String, task: Task<Void, Never>)?
     /// The first read of the outbox and the meetings; a sync and a new recording wait for it.
     @ObservationIgnored var launch: Task<Void, Never>?
@@ -147,12 +150,21 @@ final class PhoneStore {
         case "search": tab = .search
         default: break
         }
+        #if DEBUG
+        // `MOSSAD_IMPORT_AFTER=<seconds>` hands the `MOSSAD_IMPORT` file over later, as a share while a sheet is open.
+        if let after = Self.hook("MOSSAD_IMPORT_AFTER").flatMap(Double.init), let path = Self.hook("MOSSAD_IMPORT") {
+            Task {
+                try? await Task.sleep(for: .seconds(after))
+                incomingAudio = IncomingAudio(url: URL(fileURLWithPath: path))
+            }
+        }
+        #endif
         // The first frame does not wait for the disk.
         let outboxRead = Task { await readOutbox() }
         self.outboxRead = outboxRead
         launch = Task {
             await outboxRead.value
-            Self.clearOldInbox()
+            clearOldInbox()
             await load(meetings: true)
             // Joining a long recording takes a while; a sync does not wait for it.
             Task {

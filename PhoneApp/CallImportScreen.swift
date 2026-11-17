@@ -38,6 +38,8 @@ struct CallImportScreen: View {
     @State private var person: CallImport.Choice?
     @State private var refusal: CallImport.Refusal?
     @State private var adding = false
+    /// The import worked: the store already removed the handed file.
+    @State private var added = false
 
     private var draft: CallImport.Draft? {
         file.map { CallImport.Draft(file: $0, title: title, start: start, person: person) }
@@ -68,6 +70,8 @@ struct CallImportScreen: View {
         }
         .interactiveDismissDisabled(adding)
         .task(id: incoming.id) { await read() }
+        // Every way out but a success (Cancel, Close, a swipe, a newer file in its place) deletes the app's copy.
+        .onDisappear { discardUnlessAdded() }
     }
 
     @ViewBuilder
@@ -76,6 +80,7 @@ struct CallImportScreen: View {
             VStack(alignment: .leading, spacing: Space.s) {
                 PhoneLabel("Title")
                 TextField(CallImport.placeholder, text: $title)
+                    .accessibilityLabel("Title")
                     .textRole(.body)
                     .submitLabel(.done)
                 if title.isEmpty, !suggestion.isEmpty {
@@ -89,7 +94,9 @@ struct CallImportScreen: View {
         HairlineRow {
             VStack(alignment: .leading, spacing: Space.s) {
                 PhoneLabel("When")
-                DatePicker("Started", selection: $start, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
+                // No start whose end is after now: the plan would move it back with no word.
+                DatePicker("Started", selection: $start, in: ...Date().addingTimeInterval(-(file.length ?? 0)),
+                           displayedComponents: [.date, .hourAndMinute])
                     .textRole(.body)
                 if let length = file.length {
                     Text("Length \(duration(length))").textRole(.secondary).foregroundStyle(Palette.secondary)
@@ -129,6 +136,7 @@ struct CallImportScreen: View {
         } label: {
             if adding { ProgressView().tint(Palette.onAccent) } else { Text("Add to Mossad") }
         }
+        .accessibilityLabel(adding ? "Adding to Mossad" : "Add to Mossad")
         .buttonStyle(PhoneFillButtonStyle(wide: true))
         .disabled(adding)
         .padding(.top, Space.l)
@@ -168,6 +176,7 @@ struct CallImportScreen: View {
         defer { adding = false }
         switch await store.importCall(draft, from: incoming.url) {
         case .success:
+            added = true
             store.tab = .meetings
             store.path = []
             dismiss()
@@ -176,10 +185,12 @@ struct CallImportScreen: View {
         }
     }
 
-    private func close() {
-        // A file that could not be saved stays where iOS put it; the inbox is cleared after a day.
-        if refusal != .notSaved { store.discardIncoming(incoming.url) }
-        dismiss()
+    private func close() { dismiss() }
+
+    private func discardUnlessAdded() {
+        // A newer share of the same file in its place keeps it for that screen.
+        guard !added, store.incomingAudio.map({ $0.id != incoming.id && $0.url == incoming.url }) != true else { return }
+        store.discardIncoming(incoming.url)
     }
 }
 
@@ -204,6 +215,7 @@ private struct CallPersonPicker: View {
                         if c == person { Image(systemName: "checkmark").foregroundStyle(Palette.accent) }
                     }
                 }
+                .accessibilityAddTraits(c == person ? .isSelected : [])
             }
             Button("Nobody") { pick(nil) }.foregroundStyle(Palette.secondary)
         }

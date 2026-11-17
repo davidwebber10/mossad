@@ -23,15 +23,16 @@ func tempDirectory() -> URL {
 }
 
 /// A stereo file with silence on channel 1 and a 440 Hz tone on channel 2: a call with one person on each side.
-func writeSecondChannelTone(_ url: URL, seconds: Double, sampleRate: Double = 16_000) throws {
+func writeSecondChannelTone(_ url: URL, seconds: Double, sampleRate: Double = 16_000, amplitude: Double = 0.5, both: Bool = false) throws {
     let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
     let file = try AVAudioFile(forWriting: url, settings: format.settings, commonFormat: .pcmFormatFloat32, interleaved: false)
     let frames = AVAudioFrameCount(seconds * sampleRate)
     let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
     buffer.frameLength = frames
     for i in 0..<Int(frames) {
-        buffer.floatChannelData![0][i] = 0
-        buffer.floatChannelData![1][i] = Float(sin(2 * .pi * 440 * Double(i) / sampleRate) * 0.5)
+        let v = Float(sin(2 * .pi * 440 * Double(i) / sampleRate) * amplitude)
+        buffer.floatChannelData![0][i] = both ? v : 0
+        buffer.floatChannelData![1][i] = v
     }
     try file.write(from: buffer)
 }
