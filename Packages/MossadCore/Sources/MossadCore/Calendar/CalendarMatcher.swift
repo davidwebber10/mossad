@@ -208,7 +208,7 @@ public enum CalendarMatcher {
         case .meet: ["meet.google.com"]
         case .zoom: ["zoom.us/j/", "zoom.us/my/"]
         case .teams: ["teams.microsoft.com", "teams.cloud.microsoft", "teams.live.com"]
-        case .inPerson: []
+        case .inPerson, .phoneCall, .unknown: []
         }
     }
 
@@ -231,6 +231,9 @@ public enum CalendarMatcher {
         if let meetingID {
             let id = meetingID.lowercased()
             candidates = timed.filter { text($0).contains(id) }
+        } else if platform == .phoneCall || platform == .unknown {
+            // A phone call takes an event only by its own rule (`phoneCallEvent`); an unknown platform none.
+            candidates = []
         } else if platform == .inPerson {
             // In a room there is no link to match: the overlapping event without a call link is the meeting.
             let callMarkers = Platform.callApps.flatMap(linkMarkers)

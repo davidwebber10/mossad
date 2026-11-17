@@ -106,4 +106,19 @@ final class PhoneRecordingTests: XCTestCase {
         }
         XCTAssertFalse(FileManager.default.fileExists(atPath: paths.callDirectory(rec.id).appendingPathComponent(CallRecord.fileName).path))
     }
+
+    func testAPhoneCallBecomesAPhoneCallRecordWithTheOwnersTitle() throws {
+        let paths = Paths(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        let r = try PhoneRecording.importAudio(try phoneAudio(), recording: PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 3,
+                                               title: "Renewal terms", kind: .phoneCall), into: paths)
+        XCTAssertEqual(r.platform, .phoneCall)
+        XCTAssertEqual(r.bundleID, "iphone")
+        XCTAssertEqual(r.status, .recorded)
+        XCTAssertEqual(r.customTitle, "Renewal terms")
+        XCTAssertNil(r.calendarTitle)
+        let untitled = try PhoneRecording.importAudio(try phoneAudio(), recording: PhoneRecording(id: "20270115-100000", start: t0, end: t0 + 3,
+                                                      title: nil, kind: .phoneCall), into: paths)
+        XCTAssertNil(untitled.customTitle)
+        XCTAssertEqual(untitled.title, "Phone call")
+    }
 }

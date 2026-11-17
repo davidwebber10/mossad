@@ -1187,7 +1187,7 @@ final class AppController: ObservableObject {
             for r in meetings {
                 guard let step = ProcessingStep(status: r.status) else { continue }
                 var p = ProcessingProgress(step: state == "summarizing" ? .summarizing : step, started: Date().addingTimeInterval(-134))
-                let room = r.platform == .inPerson
+                let room = r.platform.isOneTrack
                 switch state {
                 case "upload": p.tracks = room ? [.me: .uploading(0.42)] : [.me: .done, .them: .uploading(0.42)]
                 case "queued": p.tracks = room ? [.me: .queued] : [.me: .transcribing, .them: .queued]
@@ -1758,7 +1758,7 @@ final class AppController: ObservableObject {
     func progressText(_ r: CallRecord) -> String? {
         // While uploading, the list and the menu show the percent of the track that is furthest behind.
         if let p = progress[r.id], p.step == .transcribing, p.detail == nil, let t = p.slowestUpload,
-           let line = p.trackLine(t, service: transcriptionProvider.displayName, room: r.platform == .inPerson) {
+           let line = p.trackLine(t, service: transcriptionProvider.displayName, platform: r.platform) {
             return line
         }
         return stepDetails[r.id] ?? ProcessingStep(status: r.status)?.title

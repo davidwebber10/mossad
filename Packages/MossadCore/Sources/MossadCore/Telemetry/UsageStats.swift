@@ -123,7 +123,9 @@ public struct UsageStats: Codable, Equatable, Sendable {
             case .zoom: platforms.zoom += 1
             case .meet: platforms.meet += 1
             case .teams: platforms.teams += 1
-            case .inPerson: platforms.inPerson += 1
+            // The version 1 payload has no key of its own for a phone call: it is a meeting without a call app.
+            case .inPerson, .phoneCall: platforms.inPerson += 1
+            case .unknown: break
             }
         }
         let cap = { (n: Int) in min(max(n, 0), maxMeetings) }

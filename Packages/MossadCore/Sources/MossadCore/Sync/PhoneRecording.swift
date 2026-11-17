@@ -142,8 +142,10 @@ public struct PhoneRecording: Codable, Equatable, Sendable {
             }
             _ = try AVAudioFile(forWriting: dir.appendingPathComponent(Track.them.fileName), settings: TrackWriter.fileSettings,
                                 commonFormat: .pcmFormatFloat32, interleaved: false)
-            var r = CallRecord(id: p.id, platform: .inPerson, bundleID: bundleID, start: p.start, end: p.end, status: .recorded)
-            r.calendarTitle = p.title?.nonBlank
+            var r = CallRecord(id: p.id, platform: p.isPhoneCall ? .phoneCall : .inPerson, bundleID: bundleID, start: p.start, end: p.end,
+                               status: .recorded)
+            // The owner typed a phone call's title, so no calendar event replaces it; a room's is the invite's.
+            if p.isPhoneCall { r.customTitle = p.title?.nonBlank } else { r.calendarTitle = p.title?.nonBlank }
             try r.save(to: dir)
             return r
         } catch {

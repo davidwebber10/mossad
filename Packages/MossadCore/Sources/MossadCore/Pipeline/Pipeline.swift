@@ -657,7 +657,7 @@ public actor Pipeline {
     /// on a call the owner is on the mic and the rest are in the call audio.
     static func speakerHints(_ r: CallRecord) -> [Track: Int] {
         guard let n = r.speakersExpected, n > 0 else { return [:] }
-        return r.platform == .inPerson ? [.me: n] : [.them: max(1, n - 1)]
+        return r.platform.isOneTrack ? [.me: n] : [.them: max(1, n - 1)]
     }
 
     private func transcribeIfNeeded(_ done: [Utterance]?, track: Track, speakers: Int?, dir: URL, callID: String) async -> Result<[Utterance], Error> {
@@ -706,8 +706,8 @@ public actor Pipeline {
         p.detail = nil
         if step == .transcribing {
             p.tracks = [.me: r.meUtterances == nil ? .uploading(nil) : .done, .them: r.themUtterances == nil ? .uploading(nil) : .done]
-            // A room has no call audio to wait for.
-            if r.platform == .inPerson { p.tracks[.them] = .skipped }
+            // A room or a phone call has no call audio to wait for.
+            if r.platform.isOneTrack { p.tracks[.them] = .skipped }
         }
         progress[r.id] = p
         onProgress(r.id, p)

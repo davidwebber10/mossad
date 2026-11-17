@@ -209,7 +209,7 @@ public enum MeetingWindow {
                 || head.hasSuffix(" Meeting") || head.hasSuffix(" meeting")
         case .zoom:
             return zoomTitleIsMeeting(title)
-        case .inPerson:
+        case .inPerson, .phoneCall, .unknown:
             return false
         }
     }

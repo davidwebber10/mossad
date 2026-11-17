@@ -318,7 +318,7 @@ public struct CallRecord: Codable, Equatable, Sendable {
         if customTitle != nil { .custom } else if calendarTitle != nil { .calendar } else if generatedTitle != nil { .generated } else { .platform }
     }
 
-    public var title: String { customTitle ?? calendarTitle ?? generatedTitle ?? "\(platform.displayName) call" }
+    public var title: String { customTitle ?? calendarTitle ?? generatedTitle ?? platform.untitled }
 
     /// Takes the invite's title, people, and planned times. An all-day event plans no time of day.
     public mutating func setInvite(_ event: CalendarEventInfo) {

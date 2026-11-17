@@ -193,7 +193,7 @@ public final class AccessibilityMuteProbe: MuteProbing, @unchecked Sendable {
             case .meet: return MeetingMatcher.meetWindowIsMeeting(title) || title.lowercased().contains("meet.google.com")
             case .zoom: return title.contains("Zoom")
             case .teams: return title.contains("Teams")
-            case .inPerson: return false
+            case .inPerson, .phoneCall, .unknown: return false
             }
         }
         if let meetingID, !meetingID.isEmpty {

@@ -69,7 +69,8 @@ struct NeedsYouChip: View {
     }
 }
 
-/// The platform as a dot, its only use of color. Hollow for a meeting that has not happened yet.
+/// The platform as a dot, its only use of color. Hollow for a meeting that has not happened yet. A phone call is a
+/// small phone in the same place, as a dot alone would read as in person.
 struct PlatformDot: View {
     let platform: Platform
     var size: CGFloat = 8
@@ -77,7 +78,11 @@ struct PlatformDot: View {
 
     var body: some View {
         Group {
-            if hollow {
+            if platform == .phoneCall {
+                Image(systemName: hollow ? "phone" : "phone.fill")
+                    .font(.system(size: size + 3))
+                    .foregroundStyle(Palette.platform(platform))
+            } else if hollow {
                 Circle().strokeBorder(Palette.platform(platform), lineWidth: 1.5)
             } else {
                 Circle().fill(Palette.platform(platform))

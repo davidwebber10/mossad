@@ -82,7 +82,7 @@ enum Palette {
         case .meet: meet
         case .zoom: zoom
         case .teams: teams
-        case .inPerson: inPerson
+        case .inPerson, .phoneCall, .unknown: inPerson
         }
     }
 

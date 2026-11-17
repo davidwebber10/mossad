@@ -54,9 +54,13 @@ public struct ProcessingProgress: Equatable, Sendable {
         return [Track.me, .them].filter { sent($0) != nil }.min { sent($0)! < sent($1)! }
     }
 
-    /// "Uploading your mic · 42%", "AssemblyAI is transcribing the call audio".
     public func trackLine(_ track: Track, service: String, room: Bool) -> String? {
-        let name = track == .me ? (room ? "the room audio" : "your mic") : "the call audio"
+        trackLine(track, service: service, platform: room ? .inPerson : .zoom)
+    }
+
+    /// "Uploading your mic · 42%", "AssemblyAI is transcribing the call audio".
+    public func trackLine(_ track: Track, service: String, platform: Platform) -> String? {
+        let name = track == .me ? platform.micTrackName : "the call audio"
         switch tracks[track] {
         case .uploading(let f?): return "Uploading \(name) · \(Int((f * 100).rounded(.down)))%"
         case .uploading(nil): return "Uploading \(name)"

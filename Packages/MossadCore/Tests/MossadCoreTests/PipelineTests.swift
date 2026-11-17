@@ -524,6 +524,19 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(transcriber.speakers[.me], 12)
     }
 
+    func testTranscribeAgainOnAPhoneCallSendsTheCountWithTheOneTrack() async throws {
+        let id = try makeRecord()
+        var r = try load(id)
+        r.platform = .phoneCall
+        r.bundleID = PhoneRecording.bundleID
+        try r.save(to: paths.callDirectory(id))
+        let p = pipeline()
+        await p.process(id)
+        _ = await p.transcribeAgain(id, speakers: 12)
+        XCTAssertEqual(transcriber.speakers[.me], 12)
+        XCTAssertNil(transcriber.speakers[.them])
+    }
+
     func testRestorePreviousTranscriptBringsBackTheOldOne() async throws {
         let id = try makeRecord()
         let p = pipeline()
