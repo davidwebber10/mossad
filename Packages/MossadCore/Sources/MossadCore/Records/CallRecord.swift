@@ -304,6 +304,9 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var gemini: GeminiNotesRef?
     /// The other person of a phone call, as the owner said on the iPhone. Nil for every other meeting.
     public var personHint: PersonHint?
+    /// The profile this meeting leaves for. Set when a move starts; the pipeline and the queue leave a marked call alone.
+    /// Written only for a move.
+    public var moveTo: String?
     /// The file names of screens the owner deleted. The text step drops them from `frames.json` if they are still
     /// there (a failed save, a run that was reading at that moment), so a deleted screen never comes back.
     public var deletedScreens: [String]?
@@ -440,6 +443,7 @@ extension CallRecord {
         _platform = try c.decode(KeptPlatform.self, forKey: .platform)
         gemini = try c.decodeIfPresent(GeminiNotesRef.self, forKey: .gemini)
         personHint = try c.decodeIfPresent(PersonHint.self, forKey: .personHint)
+        moveTo = try c.decodeIfPresent(String.self, forKey: .moveTo)
     }
 }
 
