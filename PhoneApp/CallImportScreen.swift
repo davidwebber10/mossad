@@ -154,6 +154,12 @@ struct CallImportScreen: View {
         sure = found.sure
         file = f
         if let draft { refusal = await store.importRefusal(draft, from: url) }
+        #if DEBUG
+        // Development hooks for a check with no taps: `MOSSAD_IMPORT_PERSON=<name>` names the person as typed, and
+        // `MOSSAD_IMPORT_ADD=1` taps "Add to Mossad".
+        if let name = PhoneStore.hook("MOSSAD_IMPORT_PERSON") { person = CallImport.typed(name, among: store.importChoices(name)) }
+        if refusal == nil, PhoneStore.hook("MOSSAD_IMPORT_ADD") == "1" { await add() }
+        #endif
     }
 
     private func add() async {
