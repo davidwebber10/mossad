@@ -40,7 +40,7 @@ public enum MoveRemoval {
                                stop: (String) throws -> Void = { _ in }) async throws {
         while let step = out.nextStep {
             try stop("\(step.rawValue) begins")
-            if step == .people, out.people == nil {
+            if step == .voices || step == .people, out.people == nil {
                 // The people who go are decided once and kept by id, before the first delete: a run after a stop
                 // finishes the same list, also for a person who is gone already.
                 guard let decided = peopleIDs(out.callID, paths: paths, library: library) else { return }
@@ -122,6 +122,9 @@ public enum MoveRemoval {
                     try stop("voices: forget \(key)")
                     try library.forget(callID: callID, speakerKey: key, from: from, voice: voice)
                 }
+                // By the samples' own call id: a label that a rename or a merge made old finds nothing above.
+                try stop("voices: forget the call's samples")
+                try library.forgetSamples(ofCall: callID)
             case .people:
                 guard let identity = library.identity else { return false }
                 let store = identity.people
@@ -132,7 +135,7 @@ public enum MoveRemoval {
                 for id in out.people ?? [] {
                     let person = store.people.first { $0.id.rawValue == id }
                     if let person, person.isLive,
-                       peopleToRemove(r, people: [person], samples: identity.samples.samples, others: others).isEmpty { continue }
+                       peopleToRemove(r, people: [person], samples: identity.samples.samples, others: others, ofCall: Set(out.people ?? [])).isEmpty { continue }
                     goes.insert(id)
                     let name = person?.displayName ?? ""
                     // The coach forgets first and the person goes last: a stop between them leaves the person, and the
@@ -230,13 +233,18 @@ public enum MoveRemoval {
     }
 
     /// The people whom only this meeting made. Asked after the `voices` step.
-    public static func peopleToRemove(_ r: CallRecord, people: [Person], samples: [VoiceSample], others: [CallRecord]) -> [Person] {
-        let voiceIDs = Set((r.speakerPeople ?? [:]).values), voiceNames = Set(r.speakerNames.values)
+    /// A person is of the call by the record's ids or labels, by a sample the call taught (a rename since does not hide
+    /// it), or by `ofCall` (decided before the samples went). Only samples of other calls keep them.
+    public static func peopleToRemove(_ r: CallRecord, people: [Person], samples: [VoiceSample], others: [CallRecord],
+                                      ofCall: Set<String> = []) -> [Person] {
+        let voiceIDs = Set((r.speakerPeople ?? [:]).values).union(ofCall)
+            .union(samples.filter { $0.callID == r.id }.compactMap { $0.personID?.rawValue })
+        let voiceNames = Set(r.speakerNames.values)
         let kept: Set<SourceKind> = [.orgChart, .googleDirectory, .googleContacts, .migration]
         return people.filter { p in
             guard p.isLive, !p.isOwner, p.created >= r.start, !kept.contains(p.origin) else { return false }
             guard voiceIDs.contains(p.id.rawValue) || voiceNames.contains(p.displayName) else { return false }
-            guard !samples.contains(where: { $0.personID == p.id }) else { return false }
+            guard !samples.contains(where: { $0.personID == p.id && $0.callID != r.id }) else { return false }
             return !others.contains { o in
                 (o.speakerPeople ?? [:]).values.contains(p.id.rawValue) || o.speakerNames.values.contains(p.displayName)
                     || (o.invitees ?? []).contains { $0.personID == p.id.rawValue }
