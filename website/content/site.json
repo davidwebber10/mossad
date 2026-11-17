@@ -649,7 +649,8 @@
             "Each person as their page shows them, with how to present to them when you keep a read",
             "Your next meetings, the prep for each, recurring meetings, and your points for next time",
             "Your tasks, the coach's cards and goal, and your analytics",
-            "It can save a point for next time; nothing else changes"
+            "It can save a point for next time; nothing else changes",
+            "Each profile has its own connection"
           ],
           "icon": "puzzlepiece.extension",
           "comingSoon": false,
@@ -818,6 +819,20 @@
           "icon": "icloud",
           "comingSoon": false,
           "sources": ["Packages/MossadCore/Sources/MossadCore/Sync/CloudSync.swift", "Packages/MossadCore/Sources/MossadCore/Sync/CloudKitStore.swift"]
+        },
+        {
+          "id": "separate-profiles",
+          "title": "Work and personal, kept apart",
+          "body": "Keep work calls and personal calls in separate profiles on one Mac, and change from one to the other with one click.",
+          "details": [
+            "Each profile has its own keys, people, voices, coach, sync, and backup",
+            "A call is recorded by the profile you are in, and the menu bar shows which one",
+            "An AI app that you connect to one profile never reads the other",
+            "With one profile, nothing changes"
+          ],
+          "icon": "person.2.crop.square.stack",
+          "comingSoon": false,
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Profiles/ProfileRegistry.swift", "Packages/MossadCore/Sources/MossadCore/Support/AppIdentity.swift", "App/ProfileSwitcher.swift", "App/ProfileSettings.swift"]
         }
       ]
     },
