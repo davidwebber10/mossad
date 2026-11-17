@@ -69,8 +69,9 @@ public struct MoveMarker: Codable, Equatable, Sendable {
     /// The target took the meeting in and checked every file of `files` in its `Audio`.
     public var heldWhole: Bool { intake == .taken && !files.isEmpty && count == files.count }
 
+    /// A call id that fails `MovePaths.isID` gives a hidden name that is never there, never `Incoming` itself.
     public static func folder(_ callID: String, in target: Paths) -> URL {
-        target.incoming.appendingPathComponent(callID)
+        target.incoming.appendingPathComponent(MovePaths.isID(callID) ? callID : MovePaths.notAnID)
     }
 
     /// Reads `claimed.json`, else `move.json`, else `cancelled.json`. The target's claim can come between the first two
@@ -163,12 +164,14 @@ public struct MoveOut: Codable, Equatable, Sendable {
     public var nextStep: Step? { Step.allCases.first { !removed.contains($0.rawValue) } }
 
     public static func url(_ callID: String, paths: Paths) -> URL {
-        paths.moves.appendingPathComponent(callID + ".json")
+        paths.moves.appendingPathComponent((MovePaths.isID(callID) ? callID : MovePaths.notAnID) + ".json")
     }
 
-    /// Nil: no file, a file that does not read, or one of a newer version.
+    /// Nil: no file, a file that does not read, one of a newer version, or one whose ids or token fail `MovePaths`.
     public static func load(_ callID: String, paths: Paths) -> MoveOut? {
-        (try? Data(contentsOf: url(callID, paths: paths))).flatMap(decode)
+        guard MovePaths.isID(callID), let out = (try? Data(contentsOf: url(callID, paths: paths))).flatMap(decode),
+              out.callID == callID, MovePaths.isID(out.to), MovePaths.isToken(out.token) else { return nil }
+        return out
     }
 
     private struct Versioned: Decodable { var version: Int }
@@ -201,12 +204,17 @@ public struct MoveOut: Codable, Equatable, Sendable {
     }
 
     /// One atomic write; makes `Moves`.
+    /// One atomic write, synced to the disk; makes `Moves`.
     public func save(_ paths: Paths) throws {
+        guard MovePaths.isID(callID), MovePaths.isID(to), MovePaths.isToken(token) else { throw MovePaths.Invalid() }
         try FileManager.default.createDirectory(at: paths.moves, withIntermediateDirectories: true)
-        try JSONEncoder.move.encode(self).write(to: Self.url(callID, paths: paths), options: .atomic)
+        let file = Self.url(callID, paths: paths)
+        try JSONEncoder.move.encode(self).write(to: file, options: .atomic)
+        try MoveFiles.fullSync(file)
     }
 
     public static func delete(_ callID: String, paths: Paths) {
+        guard MovePaths.isID(callID) else { return }
         try? FileManager.default.removeItem(at: url(callID, paths: paths))
     }
 }

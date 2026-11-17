@@ -67,8 +67,10 @@ public enum MoveCopy {
     public typealias OtherVolume = MoveFiles.OtherVolume
 
     public static func plan(_ callID: String, in paths: Paths, to target: String, owner: OwnerIdentity, fetched: URL?) throws -> Plan {
+        guard MovePaths.isID(callID), MovePaths.isID(target) else { throw MovePaths.Invalid() }
         let dir = paths.callDirectory(callID)
         let r = try CallRecord.load(from: dir)
+        guard r.id == callID else { throw Refused.inWork }
         let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
         if MovedFiles.inWork(names) { throw Refused.inWork }
         if !MovedFiles.unknown(names).isEmpty { throw Refused.unknownFile }
@@ -126,8 +128,17 @@ public enum MoveCopy {
         return free > bytes + 50_000_000
     }
 
+    /// The disk is full: the move ends with `noRoom`, not as a copy that did not match.
+    public static func isOutOfSpace(_ error: Error) -> Bool {
+        if let e = error as? CocoaError, e.code == .fileWriteOutOfSpace { return true }
+        if let e = error as? POSIXError, e.code == .ENOSPC { return true }
+        let ns = error as NSError
+        return ns.domain == NSPOSIXErrorDomain && ns.code == Int(ENOSPC)
+    }
+
     public static func part(_ callID: String, token: String, incoming: URL) -> URL {
-        incoming.appendingPathComponent("\(callID).\(token)\(MoveMarker.partSuffix)")
+        guard MovePaths.isID(callID), MovePaths.isToken(token) else { return incoming.appendingPathComponent(MovePaths.notAnID + MoveMarker.partSuffix) }
+        return incoming.appendingPathComponent("\(callID).\(token)\(MoveMarker.partSuffix)")
     }
 
     /// This move's own part is there, whole: its `move.json` is in it.
@@ -167,7 +178,11 @@ public enum MoveCopy {
                 files.append(try written(chat, as: "\(MoveMarker.chatsFolder)/\(chat.id.uuidString).json", in: folder))
             }
             try stop("sync the folder")
-            try MoveFiles.fullSync(folder.appendingPathComponent(MoveMarker.callFolder))
+            // Every folder of the part, the deepest first, so each entry is on the disk before the marker.
+            let dirs = (fm.enumerator(at: folder, includingPropertiesForKeys: [.isDirectoryKey])?.allObjects as? [URL] ?? [])
+                .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+                .sorted { $0.pathComponents.count > $1.pathComponents.count }
+            for dir in dirs { try MoveFiles.fullSync(dir) }
             let marker = MoveMarker(callID: plan.record.id, from: from, to: plan.to, made: now, token: token,
                                     files: files.sorted { $0.path < $1.path }, ownerKeys: plan.ownerKeys)
             try stop("write the marker")
@@ -205,7 +220,7 @@ public enum MoveCopy {
         guard hasPart(callID, token: token, incoming: incoming) else { throw CocoaError(.fileNoSuchFile) }
         try stop("publish")
         try MoveFiles.rename(from, to: incoming.appendingPathComponent(callID), with: rename)
-        try? MoveFiles.fullSync(incoming)
+        try MoveFiles.fullSync(incoming)
     }
 }
 

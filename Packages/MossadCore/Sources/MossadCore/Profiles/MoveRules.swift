@@ -160,6 +160,7 @@ public enum MoveWords {
     }
 
     public static func moved(to target: String) -> String { "Moved to \(target)" }
+    public static let unreachable = "Mossad cannot reach the other profile now. Try again when it is there."
     public static func tooLate(_ target: String) -> String { "“\(target)” has the meeting already." }
 
     /// Why a move ended without moving; nil for the owner's own Cancel.

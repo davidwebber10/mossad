@@ -110,6 +110,11 @@ final class MoveEndToEndTests: XCTestCase {
             let place = Place(.paths(b))
             let stop = StopAt(n)
             _ = await source(a, place: place, stop: stop.step).start(id, to: work)
+            if MoveOut.load(id, paths: a) == nil {
+                // A stop before the start saved its ledger: no move began, and the owner starts it again.
+                check(a, b, "stop \(n) (\(stop.seen.last ?? "")) before the ledger")
+                _ = await source(a, place: place).start(id, to: work)
+            }
             var stopped = false
             for _ in 0..<6 where !stopped {
                 _ = await source(a, place: place, stop: stop.step).run(id)
