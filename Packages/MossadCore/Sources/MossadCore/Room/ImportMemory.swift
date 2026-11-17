@@ -15,7 +15,11 @@ public struct ImportMemory: Codable, Equatable, Sendable {
     public mutating func remember(hash: String, id: String) { ids[hash] = id }
 
     /// Forgets each file whose recording is gone, so the owner can add it again.
-    public mutating func keep(only ids: Set<String>) { self.ids = self.ids.filter { ids.contains($0.value) } }
+    /// A meeting that came back as `<id>-iphone` keeps its file, as `CallImport.plan` reads ids.
+    public mutating func keep(only ids: Set<String>) {
+        let bare = Set(ids.map(CallImport.bare))
+        self.ids = self.ids.filter { bare.contains($0.value) }
+    }
 
     /// SHA-256 as hex, read in chunks so a long recording never sits whole in memory.
     public static func hash(of url: URL) throws -> String {

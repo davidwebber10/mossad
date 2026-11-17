@@ -38,12 +38,13 @@ public enum CallImport {
     }
 
     /// The start of the call, cut to the whole second. A sure start from the metadata date, else from the file date;
-    /// with neither, the share time minus the length, not sure. A start date whose end is after `now`, or a metadata
+    /// with neither, the share time minus the length, not sure. A date after `now` or before 2001 is no date. A start date whose end is after `now`, or a metadata
     /// date of the last `shareWindow` seconds, is read as the share time.
     public static func start(metadata: Date?, file: Date?, length: TimeInterval, now: Date,
                              metadataIs: DateMeaning = metadataDate, fileIs: DateMeaning = fileDate) -> Start {
         func read(_ date: Date?, as meaning: DateMeaning, recent: Bool) -> Start? {
-            guard let date else { return nil }
+            // A date after now, or before 2001 (an MPEG-4 header with no date reads as 1904), says nothing.
+            guard let date, date <= now, date >= earliest else { return nil }
             var meaning = meaning
             if meaning == .start && date.addingTimeInterval(length) > now { meaning = .share }
             if recent, (0...shareWindow).contains(now.timeIntervalSince(date)) { meaning = .share }
@@ -56,6 +57,9 @@ public enum CallImport {
         let found = [read(metadata, as: metadataIs, recent: true), read(file, as: fileIs, recent: false)].compactMap { $0 }
         return found.first(where: \.sure) ?? found.first ?? Start(date: whole(now.addingTimeInterval(-length)), sure: false)
     }
+
+    /// Before this, a file date is a default and not a time: 2001-01-01.
+    static let earliest = Date(timeIntervalSinceReferenceDate: 0)
 
     static func whole(_ date: Date) -> Date { Date(timeIntervalSince1970: date.timeIntervalSince1970.rounded(.down)) }
 
@@ -190,12 +194,14 @@ public enum CallImport {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    /// The person for a typed name: the choice with that name, else the name alone; nil when blank.
+    /// The person for a typed name: the one choice with that name, else the name alone; nil when blank. Two saved
+    /// people with that name are nobody: the name goes with no id.
     public static func typed(_ text: String, among choices: [Choice]) -> Choice? {
         let name = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }
         let key = PersonNames.key(name)
-        return choices.first { PersonNames.key($0.name) == key } ?? Choice(name: name, personID: nil)
+        let same = choices.filter { PersonNames.key($0.name) == key }
+        return same.count == 1 ? same[0] : Choice(name: name, personID: nil)
     }
 
     /// The Shortcuts action's answer.

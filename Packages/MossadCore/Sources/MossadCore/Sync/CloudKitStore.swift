@@ -51,7 +51,10 @@ public actor CloudKitStore: RecordStore {
     public func saveOne(_ record: StoredRecord) async throws {
         do {
             let (saved, _) = try await database.modifyRecords(saving: [Self.record(record)], deleting: [], savePolicy: .allKeys, atomically: false)
-            guard let result = saved[Self.id(record.name)] else { throw ServerError.http(0, "The recording did not upload.") }
+            // By the name alone, as `save` reads its results: the zone's owner can come back in another form.
+            guard let result = saved.first(where: { $0.key.recordName == record.name })?.value else {
+                throw ServerError.http(0, "The recording did not upload.")
+            }
             if case .failure(let error) = result { throw error }
         } catch {
             Log.error("iCloud upload of \(record.name) failed: \(error)")
@@ -60,9 +63,10 @@ public actor CloudKitStore: RecordStore {
     }
 
     /// Whether iCloud refused a record for its fields: a production schema without them. Never a failure of the
-    /// network, the quota, or the rate, which keep the fields for the next try.
+    /// network, the quota, the rate, or iCloud's own trouble (code 15, as `FriendlyError` reads it), which keep the
+    /// fields for the next try.
     static func isUnknownField(_ error: Error) -> Bool {
-        if let ck = error as? CKError, [.invalidArguments, .serverRejectedRequest].contains(ck.code) { return true }
+        if let ck = error as? CKError, ck.code == .invalidArguments { return true }
         return String(describing: error).localizedCaseInsensitiveContains("schema")
     }
 

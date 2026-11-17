@@ -65,7 +65,17 @@ actor MemoryStore: RecordStore {
     private var refusedFields: Set<String> = []
     func refuseFields(_ keys: Set<String>) { refusedFields = keys }
 
+    private(set) var saveOneCalls = 0
+    /// An error for the next `saveOne` only, as a dropped connection.
+    private var failNext: Error?
+    func failNextSave(with error: Error) { failNext = error }
+
     func saveOne(_ record: StoredRecord) async throws {
+        saveOneCalls += 1
+        if let error = failNext {
+            failNext = nil
+            throw error
+        }
         if !refusedFields.isDisjoint(with: record.fields.keys) { throw StoreRefusal.unknownField }
         guard try await save([record]).contains(record.name) else { throw ServerError.http(0, "The recording did not upload.") }
     }
@@ -199,10 +209,17 @@ final class RecordStoreTests: XCTestCase {
 
     func testOnlyASchemaRefusalCountsAsAnUnknownField() {
         XCTAssertTrue(CloudKitStore.isUnknownField(CKError(.invalidArguments)))
-        XCTAssertTrue(CloudKitStore.isUnknownField(CKError(.serverRejectedRequest)))
-        for code in [CKError.Code.networkFailure, .networkUnavailable, .quotaExceeded, .zoneBusy, .requestRateLimited] {
+        XCTAssertTrue(CloudKitStore.isUnknownField(CKError(.partialFailure, userInfo: [NSLocalizedDescriptionKey: "Cannot create new type Recording in production schema"])),
+                      "a schema refusal under another code")
+        for code in [CKError.Code.networkFailure, .networkUnavailable, .quotaExceeded, .zoneBusy, .requestRateLimited, .serverRejectedRequest] {
             XCTAssertFalse(CloudKitStore.isUnknownField(CKError(code)), "\(code)")
         }
         XCTAssertFalse(CloudKitStore.isUnknownField(URLError(.timedOut)))
+    }
+
+    /// Code 15 is iCloud's own trouble (`FriendlyError`): the fields stay for the next try.
+    func testICloudServerTroubleIsNotARefusalOfTheFields() {
+        XCTAssertFalse(CloudKitStore.isUnknownField(CKError(.serverRejectedRequest)))
+        XCTAssertFalse(CloudKitStore.isUnknownField(CKError(.serverRejectedRequest, userInfo: [NSLocalizedDescriptionKey: "Request rejected"])))
     }
 }

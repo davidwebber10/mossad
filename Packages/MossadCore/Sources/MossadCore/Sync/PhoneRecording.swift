@@ -102,6 +102,8 @@ public struct PhoneRecording: Codable, Equatable, Sendable {
             guard let converter = AVAudioConverter(from: input.processingFormat, to: TrackWriter.outputFormat) else {
                 throw ConversionFailed(reason: "no converter from \(input.processingFormat)")
             }
+            // Mix every channel into the one: a call recording can have one person on each side.
+            converter.downmix = true
             let chunk: AVAudioFrameCount = 16_384
             guard let source = AVAudioPCMBuffer(pcmFormat: input.processingFormat, frameCapacity: chunk) else {
                 throw ConversionFailed(reason: "no buffer for \(input.processingFormat)")

@@ -427,19 +427,24 @@ final class SyncSafetyTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? StoreRefusal, .unknownField)
         }
+        let calls = await store.saveOneCalls
+        XCTAssertEqual(calls, 1, "a room recording has no new fields to leave out")
     }
 
     func testAnotherUploadFailureKeepsTheFields() async throws {
         let store = MemoryStore()
         let sync = CloudSync(paths: temp(), store: store)
-        await store.refuse("rec-20270115-090000")
+        await store.failNextSave(with: URLError(.timedOut))
         do {
             try await sync.upload(call, audio: try phoneAudio())
             XCTFail("must throw")
-        } catch {}
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .timedOut)
+        }
         let none = await store.entries["rec-20270115-090000"]
         XCTAssertNil(none, "nothing went without its fields")
-        await store.refuse(nil)
+        let calls = await store.saveOneCalls
+        XCTAssertEqual(calls, 1, "no second send")
         try await sync.upload(call, audio: try phoneAudio())
         let kind = await store.entries["rec-20270115-090000"]?.record.fields["kind"]
         XCTAssertEqual(kind, .string("phoneCall"))

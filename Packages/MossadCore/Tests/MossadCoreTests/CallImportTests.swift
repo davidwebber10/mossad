@@ -179,4 +179,33 @@ final class CallImportTests: XCTestCase {
         try Data("other".utf8).write(to: two)
         XCTAssertNotEqual(try ImportMemory.hash(of: one), try ImportMemory.hash(of: two))
     }
+
+    func testTwoSavedPeopleWithOneNameGiveTheNameWithNoID() {
+        let two = [CallImport.Choice(name: "Sam Carter", personID: "p1"), CallImport.Choice(name: "Sam Carter", personID: "p4")]
+        XCTAssertEqual(CallImport.typed("Sam Carter", among: two), .init(name: "Sam Carter", personID: nil))
+        XCTAssertEqual(CallImport.typed("sam carter", among: two + [.init(name: "Sara Lund", personID: "p2")]), .init(name: "sam carter", personID: nil))
+    }
+
+    func testAMeetingThatCameBackAsAnIPhoneIDKeepsItsHash() {
+        var memory = ImportMemory()
+        memory.remember(hash: "h1", id: "20270101-090000")
+        memory.keep(only: ["20270101-090000-iphone"])
+        XCTAssertEqual(memory.id(of: "h1"), "20270101-090000")
+        let back = CallImport.Known(id: "20270101-090000-iphone", start: t0 - 5_000, end: t0 - 4_400)
+        XCTAssertEqual(plan(draft(file()), meetings: [back], memory: memory), .failure(.duplicate))
+    }
+
+    func testADateInTheFutureOrBefore2001IsNoDate() {
+        // A metadata date an hour ahead: the file date (the share) gives the start, not the impossible one.
+        XCTAssertEqual(CallImport.start(metadata: now + 3_600, file: now - 30, length: 600, now: now), .init(date: now - 630, sure: false))
+        // An MPEG-4 header with no date reads as 1904.
+        let empty = Date(timeIntervalSince1970: -2_082_844_800)
+        XCTAssertEqual(CallImport.start(metadata: empty, file: nil, length: 600, now: now), .init(date: now - 600, sure: false))
+        XCTAssertEqual(CallImport.start(metadata: nil, file: empty, length: 600, now: now, fileIs: .start), .init(date: now - 600, sure: false))
+        XCTAssertEqual(CallImport.start(metadata: nil, file: now + 60, length: 600, now: now, fileIs: .start), .init(date: now - 600, sure: false))
+    }
+
+    func testAMetadataDateExactlyTwoMinutesOldIsTheShareTime() {
+        XCTAssertEqual(CallImport.start(metadata: now - 120, file: nil, length: 30, now: now), .init(date: now - 150, sure: false))
+    }
 }

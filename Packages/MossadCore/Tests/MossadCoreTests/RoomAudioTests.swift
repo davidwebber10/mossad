@@ -230,4 +230,14 @@ final class RoomAudioTests: XCTestCase {
         XCTAssertEqual(RoomAudio.ids(in: dir), [])
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), [])
     }
+
+    func testAdoptKeepsTheVoiceOnTheSecondChannel() throws {
+        let dir = temp(), outside = temp(), id = "20270115-090000"
+        let source = outside.appendingPathComponent("call.caf")
+        try writeSecondChannelTone(source, seconds: 3)
+        try RoomAudio.adopt(source, as: id, in: dir, convert: true)
+        let f = try AVAudioFile(forReading: RoomAudio.finished(id, in: dir))
+        XCTAssertEqual(f.fileFormat.channelCount, 1)
+        XCTAssertGreaterThan(try peak(of: f), 0.05, "the person on channel 2 is in the file")
+    }
 }

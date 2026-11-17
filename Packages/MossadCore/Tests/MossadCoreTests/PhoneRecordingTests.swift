@@ -104,7 +104,7 @@ final class PhoneRecordingTests: XCTestCase {
         XCTAssertThrowsError(try PhoneRecording.importAudio(try audioWithNoConverter(), recording: rec, into: paths)) {
             XCTAssertTrue($0 is PhoneRecording.ConversionFailed, "\($0)")
         }
-        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.callDirectory(rec.id).appendingPathComponent(CallRecord.fileName).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.callDirectory(rec.id).path), "the half-made folder goes")
     }
 
     func testAPhoneCallBecomesAPhoneCallRecordWithTheOwnersTitle() throws {
@@ -139,5 +139,15 @@ final class PhoneRecordingTests: XCTestCase {
                                                   person: "Sam Carter"), into: paths)
         XCTAssertNil(room.personHint, "a room recording names nobody, whatever a store sent")
         XCTAssertEqual(room.attendees, [])
+    }
+
+    func testAStereoFileKeepsTheVoiceOnItsSecondChannel() throws {
+        let paths = Paths(root: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        let source = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).caf")
+        try writeSecondChannelTone(source, seconds: 3)
+        let rec = PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 3, title: nil, kind: .phoneCall)
+        try PhoneRecording.importAudio(source, recording: rec, into: paths)
+        let me = try AVAudioFile(forReading: paths.callDirectory(rec.id).appendingPathComponent(Track.me.fileName))
+        XCTAssertGreaterThan(try peak(of: me), 0.05, "the person on channel 2 is in the mono track")
     }
 }
