@@ -129,7 +129,7 @@ final class ProfileUploaderReviewTests: UploaderTestCase {
         before.begin(PhoneRecording(id: "20270115-090000", start: RoomAudio.start(of: "20270115-090000")!, end: Date(), title: nil))
         try writePart(before, "20270115-090000", seconds: 65)
         let after = uploader(work, root: root, world: world)
-        await after.pass()
+        await after.pass(active: { nil })
         XCTAssertTrue(isSent(after, "20270115-090000"), "recovered, joined, and sent by the pass")
         XCTAssertTrue(FileManager.default.fileExists(atPath: RoomAudio.finished("20270115-090000", in: after.recordingsFolder).path))
     }
@@ -207,10 +207,10 @@ final class ProfileUploaderReviewTests: UploaderTestCase {
         try writeMeeting(id, in: mac)
         let store = world.store("Mossad-1a2b3c4d")
         _ = try await CloudSync(paths: mac, store: store).push()
-        await u.pass()
+        await u.pass(active: { nil })
         XCTAssertTrue(isSent(u, id), "unsent: no pull, just the send")
         XCTAssertFalse(FileManager.default.fileExists(atPath: u.paths.callDirectory(id).path), "nothing was pulled for an unsent entry")
-        await u.pass()
+        await u.pass(active: { nil })
         XCTAssertNil(u.outbox[id], "the pulled meeting settled it")
         XCTAssertFalse(FileManager.default.fileExists(atPath: RoomAudio.finished(id, in: u.recordingsFolder).path))
     }
@@ -221,23 +221,23 @@ final class ProfileUploaderReviewTests: UploaderTestCase {
         var parts = world.parts
         parts.icloud = { _ in failing }
         let u = ProfileUploader(context: PhoneProfileContext(id: work)!, paths: Paths(root: temp()), settings: defaults(),
-                                listed: .icloud, offline: false, parts: parts)
+                                listed: .icloud, offline: false, parts: parts, active: { nil })
         try addFinished(u, "20270115-090000")
         await u.sendOutbox()
         try addFinished(u, "20270115-100000")
         await failing.failNext(URLError(.badServerResponse))
-        await u.pass()
+        await u.pass(active: { nil })
         XCTAssertTrue(isSent(u, "20270115-100000"), "the send runs after a failed pull")
         XCTAssertNotNil(u.syncStatus.shown, "the failure shows")
     }
 
     func testAnOfflineUploaderSendsNothing() async throws {
         let world = UploaderWorld()
-        let u = ProfileUploader(context: .default, paths: Paths(root: temp()), settings: defaults(), listed: .icloud, offline: true, parts: world.parts)
+        let u = ProfileUploader(context: .default, paths: Paths(root: temp()), settings: defaults(), listed: .icloud, offline: true, parts: world.parts, active: { nil })
         try addFinished(u, "20270115-090000")
         XCTAssertNil(u.cloud)
         await u.sendOutbox()
-        await u.pass()
+        await u.pass(active: { nil })
         XCTAssertEqual(world.zonesAsked, [])
         XCTAssertFalse(u.waits(active: nil))
     }

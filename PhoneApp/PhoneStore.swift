@@ -185,9 +185,9 @@ final class PhoneStore {
         // microphone: in a headless simulator the recorder would use the Mac's own.
         if Self.hook("MOSSAD_ROOM_START") != nil {
             Task { [weak self] in
-                guard let self else { return }
+                guard let self, life.allows(.record) else { return }
                 await uploader.ready()
-                guard let rec = recorder.startWithoutMicrophone(into: recordingsFolder) else { return }
+                guard life.allows(.record), let rec = recorder.startWithoutMicrophone(into: recordingsFolder) else { return }
                 uploader.begin(rec)
             }
         }
@@ -301,6 +301,7 @@ final class PhoneStore {
             people = s.people
             // The import's person choices read this profile's saved people, at once.
             uploader.take(people: s.people)
+            assert(uploader.people == people, "the import's person choices are the people this store read")
         }
         if chats != s.chats { chats = s.chats }
         if commitments != s.commitments { commitments = s.commitments }
@@ -575,8 +576,12 @@ final class PhoneStore {
     var recordingsFolder: URL { uploader.recordingsFolder }
 
     func startRecording() async {
+        // A closed store (a switch decided) never starts the recorder, before or after its wait. The recorder counts as
+        // busy from its start, so a switch decided after this line is refused.
+        guard life.allows(.record) else { return }
         // The outbox is read first, so the read never replaces this recording's entry.
         await uploader.ready()
+        guard life.allows(.record) else { return }
         guard let rec = await recorder.start(into: recordingsFolder) else { return }
         uploader.begin(rec)
     }

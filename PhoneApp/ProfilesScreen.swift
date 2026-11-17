@@ -10,14 +10,16 @@ struct ProfilesScreen: View {
     @State private var applying = false
     @State private var added: String?
     @State private var addProblem: FriendlyError?
-    @State private var deleting: (uploader: ProfileUploader, id: String)?
+    @State private var deleting: (uploader: ProfileUploader, id: String, sent: Bool)?
+    /// Which profiles have a server, read off the main actor: each read is a Keychain read.
+    @State private var servers: [String: Bool] = [:]
 
     var body: some View {
         let book = profiles.book
         List {
             Section {
                 ForEach(book.listed) { profile in
-                    row(profile, active: profile.id == book.activeProfile.id)
+                    row(profile, active: profile.id == profiles.shownProfile.id)
                 }
             } footer: {
                 if let problem = profiles.problem { Text(problem).foregroundStyle(Palette.recording) }
@@ -39,22 +41,10 @@ struct ProfilesScreen: View {
             }
             .listRowBackground(Palette.fill)
 
+            // A profile the Mac dropped, and one the owner removed here, each under its own words.
             let leaving = profiles.leavingWithRecordings
-            if !leaving.isEmpty {
-                Section {
-                    ForEach(leaving, id: \.profile.id) { item in
-                        Text(item.profile.name).textRole(.headline).foregroundStyle(Palette.ink)
-                        ForEach(item.uploader.outbox.entries) { entry in
-                            leftRecording(entry, uploader: item.uploader)
-                        }
-                    }
-                } header: {
-                    PhoneLabel(PhoneProfileWords.leavingTitle)
-                } footer: {
-                    Text(PhoneProfileWords.leavingFooter).foregroundStyle(Palette.secondary)
-                }
-                .listRowBackground(Palette.fill)
-            }
+            gone(leaving.filter { !$0.profile.removedHere }, title: PhoneProfileWords.leavingTitle, footer: PhoneProfileWords.leavingFooter)
+            gone(leaving.filter { $0.profile.removedHere }, title: PhoneProfileWords.removedTitle, footer: PhoneProfileWords.removedFooter)
         }
         .phonePage()
         .navigationTitle("Profile")
@@ -69,6 +59,10 @@ struct ProfilesScreen: View {
                 Button("Cancel") { scanning = false }.buttonStyle(.borderedProminent).padding()
             }
         }
+        .onAppear { if !profiles.switchHeld { profiles.problem = nil } }
+        .task(id: book.listed.map(\.id)) {
+            for p in book.listed { if let u = profiles.uploader(for: p) { servers[p.id] = await u.hasServer() } }
+        }
         .confirmationDialog("Delete this recording?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
                             titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
@@ -79,7 +73,7 @@ struct ProfilesScreen: View {
                 deleting = nil
             }
         } message: {
-            Text("The audio is deleted from this iPhone. Your Mac never got it.")
+            Text(PhoneProfileWords.deleteMessage(sent: deleting?.sent ?? false))
         }
     }
 
@@ -89,7 +83,7 @@ struct ProfilesScreen: View {
         let troubled = uploader.map { u in u.outbox.entries.contains { u.syncStatus.uploads[$0.id] != nil } } ?? false
         let line: (String, Color)? = if uploader == nil {
             (PhoneProfileWords.cannotOpen, Palette.recording)
-        } else if let note = PhoneProfileWords.note(for: profile, hasServer: uploader?.server != nil) {
+        } else if let note = PhoneProfileWords.note(for: profile, hasServer: servers[profile.id] ?? true) {
             (note, Palette.secondary)
         } else if count > 0 {
             (PhoneProfileWords.waiting(count), troubled ? Palette.recording : Palette.secondary)
@@ -115,6 +109,7 @@ struct ProfilesScreen: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(PhoneProfileWords.label(profile.name))
+        .accessibilityValue(line?.0 ?? "")
         .accessibilityAddTraits(active ? .isSelected : [])
         .swipeActions {
             if profile.source == .code, !active {
@@ -137,7 +132,7 @@ struct ProfilesScreen: View {
                 if FileManager.default.fileExists(atPath: file.path) {
                     ShareLink(item: file) { Text("Share audio") }.foregroundStyle(Palette.accent)
                 }
-                Button("Delete", role: .destructive) { deleting = (uploader, entry.id) }
+                Button("Delete", role: .destructive) { deleting = (uploader, entry.id, entry.isSent) }
                     .foregroundStyle(Palette.recording)
                     .disabled(!uploader.canRemove(entry.id, active: active(of: uploader)))
             }
@@ -147,9 +142,28 @@ struct ProfilesScreen: View {
         .padding(.vertical, 4)
     }
 
-    /// The recording that runs now, for the profile that shows: a profile that left can still show while it records.
+    /// The app's one recording that runs now, whichever profile it is in: its Delete is off.
     private func active(of uploader: ProfileUploader) -> String? {
-        uploader === profiles.store.uploader ? profiles.store.recorder.id : nil
+        profiles.recorder.id
+    }
+
+    @ViewBuilder
+    private func gone(_ items: [(profile: PhoneProfile, uploader: ProfileUploader)], title: String, footer: String) -> some View {
+        if !items.isEmpty {
+            Section {
+                ForEach(items, id: \.profile.id) { item in
+                    Text(item.profile.name).textRole(.headline).foregroundStyle(Palette.ink)
+                    ForEach(item.uploader.outbox.entries) { entry in
+                        leftRecording(entry, uploader: item.uploader)
+                    }
+                }
+            } header: {
+                PhoneLabel(title)
+            } footer: {
+                Text(footer).foregroundStyle(Palette.secondary)
+            }
+            .listRowBackground(Palette.fill)
+        }
     }
 
     private func take(_ code: String) {

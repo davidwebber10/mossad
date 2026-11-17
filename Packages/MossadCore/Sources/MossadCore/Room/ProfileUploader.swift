@@ -51,6 +51,8 @@ public final class ProfileUploader {
     @ObservationIgnored private let parts: Parts
     @ObservationIgnored private let offline: Bool
     @ObservationIgnored let background: @MainActor (String) -> @MainActor () -> Void
+    /// The app's one recorder's id: a pass that a change of store starts asks it, as every other caller does.
+    @ObservationIgnored public let liveRecording: @MainActor () -> String?
 
     /// Room recordings made here, and shared calls, that the Mac has not turned into meetings yet.
     public internal(set) var outbox = Outbox()
@@ -77,6 +79,13 @@ public final class ProfileUploader {
     /// The meetings of the store that shows, for an import's duplicates; nil reads this profile's folder. The list is
     /// nil while the store has not read its meetings: then the import memory is not cut.
     @ObservationIgnored public var known: (@MainActor () -> [CallImport.Known]?)?
+    /// Reads the meetings of this profile's folder; nil when they cannot be read. A test holds it to make two imports
+    /// meet in one place.
+    @ObservationIgnored public var readMeetings: @Sendable (Paths) async -> [CallImport.Known]? = { paths in
+        await Task.detached(priority: .utility) {
+            (try? ProcessingQueue(paths: paths).scan().records)?.map { CallImport.Known(id: $0.id, start: $0.start, end: $0.end) }
+        }.value
+    }
     /// Lists the recordings folder; nil when it cannot be listed. A test holds it to start a recording during the wait.
     @ObservationIgnored public var listAudio: @Sendable (URL) async -> Set<String>? = { dir in
         await Task.detached { RoomAudio.ids(in: dir) }.value
@@ -96,7 +105,9 @@ public final class ProfileUploader {
     @ObservationIgnored private var recovered = false
 
     public init(context: PhoneProfileContext, paths: Paths, settings: UserDefaults, listed: SyncChoice?, offline: Bool, parts: Parts,
+                active: @escaping @MainActor () -> String?,
                 background: @escaping @MainActor (String) -> @MainActor () -> Void = { _ in {} }) {
+        liveRecording = active
         self.context = context
         self.paths = paths
         self.settings = settings
@@ -115,6 +126,12 @@ public final class ProfileUploader {
     }
 
     // MARK: The store
+
+    /// Whether this profile has a server, read off the main actor: each read is a Keychain read.
+    public func hasServer() async -> Bool {
+        let parts = parts, address = settings.string(forKey: "serverAddress").flatMap(ServerConnection.address(from:))
+        return await Task.detached(priority: .utility) { (address != nil && parts.secret() != nil) || parts.pairedServer() != nil }.value
+    }
 
     /// The server this profile uses: the one set up here, or the one the Mac shared for it through iCloud Keychain.
     public var server: ServerConnection? {
@@ -166,7 +183,7 @@ public final class ProfileUploader {
     private func storeChanged() {
         engine = nil
         syncStatus.show(nil)
-        if let onStoreChange { onStoreChange() } else { Task { await pass() } }
+        if let onStoreChange { onStoreChange() } else { Task { await pass(active: liveRecording) } }
     }
 
     /// Keeps a checked server for this profile and syncs with it. The secret goes to this profile's own service.
@@ -447,7 +464,7 @@ public final class ProfileUploader {
 
     /// For a profile that does not show: pulls its store only while a sent recording waits, settles by the meetings
     /// of its own folder, then sends. A profile that shows leaves this to its store.
-    public func pass(active: @escaping @MainActor () -> String? = { nil }) async {
+    public func pass(active: @escaping @MainActor () -> String?) async {
         guard !shown else { return }
         // A profile that does not show is read only here: its outbox on disk first, then what a crash left.
         await ready()

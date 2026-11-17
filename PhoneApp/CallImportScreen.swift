@@ -43,6 +43,8 @@ struct CallImportScreen: View {
     @State private var added = false
     /// The profile the recording goes to: the last one chosen, the first time the one that shows.
     @State private var target: PhoneProfile?
+    /// The chosen profile left before the add: the file stays for a second try.
+    @State private var targetLeft: String?
 
     private var chosen: PhoneProfile { target ?? profiles.book.importDefault }
 
@@ -115,9 +117,15 @@ struct CallImportScreen: View {
         guard p.id != chosen.id else { return }
         target = p
         person = nil
+        targetLeft = nil
+        refusal = nil
         Task {
             await profiles.uploader(for: p)?.loadPeople()
-            if let draft { refusal = await profiles.importRefusal(draft, from: incoming.url, for: p) }
+            guard let draft else { return }
+            let answer = await profiles.importRefusal(draft, from: incoming.url, for: p)
+            // An answer for a profile that is no longer chosen is dropped.
+            guard chosen.id == p.id else { return }
+            refusal = answer
         }
     }
 
@@ -173,6 +181,12 @@ struct CallImportScreen: View {
             }
             .buttonStyle(.plain)
         }
+        if let targetLeft {
+            Text(targetLeft)
+                .textRole(.secondary).foregroundStyle(Palette.recording)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, Space.m)
+        }
         if refusal == .notSaved {
             Text(CallImport.Refusal.notSaved.message)
                 .textRole(.secondary).foregroundStyle(Palette.recording)
@@ -217,8 +231,12 @@ struct CallImportScreen: View {
         // `MOSSAD_IMPORT_PROFILE=<id>` picks a listed profile for the import.
         if let id = PhoneStore.hook("MOSSAD_IMPORT_PROFILE"), let p = profiles.book.listed.first(where: { $0.id == id }) { target = p }
         #endif
-        await profiles.uploader(for: chosen)?.loadPeople()
-        if let draft { refusal = await profiles.importRefusal(draft, from: url, for: chosen) }
+        let first = chosen
+        await profiles.uploader(for: first)?.loadPeople()
+        if let draft {
+            let answer = await profiles.importRefusal(draft, from: url, for: first)
+            if chosen.id == first.id { refusal = answer }
+        }
         #if DEBUG
         // Development hooks for a check with no taps: `MOSSAD_IMPORT_PERSON=<name>` names the person as typed, and
         // `MOSSAD_IMPORT_ADD=1` taps "Add to Mossad".
@@ -232,6 +250,11 @@ struct CallImportScreen: View {
         adding = true
         defer { adding = false }
         let into = chosen
+        guard profiles.book.listed.contains(where: { $0.id == into.id }) else {
+            targetLeft = PhoneProfileWords.importTargetLeft(into.name)
+            return
+        }
+        targetLeft = nil
         switch await profiles.importCall(draft, from: incoming.url, for: into) {
         case .success:
             added = true

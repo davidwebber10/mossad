@@ -38,8 +38,18 @@ public struct PhoneProfileBook: Codable, Equatable, Sendable {
     /// Gone, and never `default`.
     public var leaving: [PhoneProfile] { profiles.filter { !$0.isDefault && $0.gone != nil } }
 
+    /// Gone because the Mac dropped it.
+    public var leftTheMac: [PhoneProfile] { leaving.filter { !$0.removedHere } }
+    /// Gone because the owner removed it from this iPhone.
+    public var removedHere: [PhoneProfile] { leaving.filter(\.removedHere) }
+
     public var showsProfiles: Bool { listed.count >= 2 }
-    public var showsProfileRow: Bool { showsProfiles || !leaving.isEmpty }
+
+    /// The Profile row: with two profiles, or while a profile that is gone still holds a recording (`holding` are the
+    /// ids of the gone profiles whose outbox is not empty).
+    public func showsProfileRow(holding: Set<String>) -> Bool {
+        showsProfiles || leaving.contains { holding.contains($0.id) }
+    }
 
     public var activeProfile: PhoneProfile {
         let all = listed
@@ -84,6 +94,7 @@ public struct PhoneProfileBook: Codable, Equatable, Sendable {
                 p.syncName = entry.sync
                 p.source = .item
                 p.gone = nil
+                p.removedHere = false
                 next.append(p)
             }
             let listedIDs = Set(item.profiles.map(\.id))
@@ -107,6 +118,7 @@ public struct PhoneProfileBook: Codable, Equatable, Sendable {
             // A profile the item dropped comes back by its code, and stays until the item lists it again.
             if profiles[i].gone != nil { profiles[i].source = .code }
             profiles[i].gone = nil
+            profiles[i].removedHere = false
         } else {
             profiles.append(PhoneProfile(id: code.id, name: code.name, color: code.color, sync: SyncChoice(rawValue: code.sync), source: .code))
         }
@@ -116,6 +128,7 @@ public struct PhoneProfileBook: Codable, Equatable, Sendable {
     public mutating func removeFromPhone(_ id: String, now: Date) {
         guard id != Profile.defaultID, let i = profiles.firstIndex(where: { $0.id == id }) else { return }
         if profiles[i].gone == nil { profiles[i].gone = now }
+        profiles[i].removedHere = true
         dropMissingActive()
     }
 
@@ -179,7 +192,8 @@ public struct PhoneProfileBook: Codable, Equatable, Sendable {
         guard let outbox, let audio else { return .unknown }
         let held = max(outbox, audio)
         if held > 0 { return .holds(held) }
-        if busy || now.timeIntervalSince(gone) < removalWait { return .waits }
+        // The owner's own removal needs no week: nothing is held, and the owner asked.
+        if busy || (!profile.removedHere && now.timeIntervalSince(gone) < removalWait) { return .waits }
         return .remove
     }
 }
@@ -199,6 +213,12 @@ public enum PhoneProfileSwitch {
         return .go(id)
     }
 
+    /// After the old store closed: the profile to show. `next` only while it is still listed (it may have left in the
+    /// wait), else the book's active profile, which is the first profile when the active one is gone.
+    public static func afterClose(next: String, book: PhoneProfileBook) -> String {
+        book.listed.contains { $0.id == next } ? next : book.activeProfile.id
+    }
+
     /// The order of a `.go`.
     public enum Step: String, CaseIterable, Sendable { case closeOld, remember, buildNew }
 }
@@ -206,7 +226,7 @@ public enum PhoneProfileSwitch {
 /// Whether a profile's store may still start work. A closed store (after a switch) starts nothing new and only
 /// finishes an edit already made.
 public struct StoreLife: Equatable, Sendable {
-    public enum Work: CaseIterable, Sendable { case read, sync, index, findings, timer, finishEdit }
+    public enum Work: CaseIterable, Sendable { case read, sync, index, findings, timer, record, finishEdit }
 
     public init() {}
 
@@ -227,8 +247,35 @@ public enum PhoneProfileWords {
 
     public static let leavingTitle = "No longer on your Mac"
 
-    public static func leavingRow(name: String, count: Int) -> String {
-        count == 1 ? "1 recording of “\(name)” was not sent" : "\(count) recordings of “\(name)” were not sent"
+    /// "was not sent" only for what was not sent; a sent one is only still on this iPhone.
+    public static func leavingRow(name: String, unsent: Int, sent: Int) -> String {
+        if unsent > 0 {
+            return unsent == 1 ? "1 recording of “\(name)” was not sent" : "\(unsent) recordings of “\(name)” were not sent"
+        }
+        return sent == 1 ? "1 recording of “\(name)” is still on this iPhone" : "\(sent) recordings of “\(name)” are still on this iPhone"
+    }
+
+    /// The profile chosen for an import left while the file was read: nothing is added, and the file stays.
+    public static func importTargetLeft(_ name: String) -> String {
+        "“\(name)” is no longer on this iPhone. Choose another profile, then add the call again."
+    }
+
+    public static let removedTitle = "Removed from this iPhone"
+    public static let removedFooter = "You removed this profile from this iPhone, so Mossad does not send these recordings. Share a recording to keep it, or delete it. When none are left, Mossad removes the profile."
+
+    public static func deleteMessage(sent: Bool) -> String {
+        sent ? "The audio is deleted from this iPhone. Your Mac already has a copy." : "The audio is deleted from this iPhone. Your Mac never got it."
+    }
+
+    /// One profile: the words of before. Two or more: the profile's name.
+    public static func connected(name: String, host: String, showsProfiles: Bool) -> String {
+        showsProfiles ? connected(name: name, host: host) : "Connected to \(host)"
+    }
+
+    /// Why a scanned code does nothing. One profile: a code that is not a server code is "not from Mossad", as before.
+    public static func scanProblem(_ parsed: ProfileCode.Parsed, showsProfiles: Bool) -> String? {
+        if !showsProfiles, parsed == .damaged { return ProfileCode.Parsed.notMossad.problem }
+        return parsed.problem
     }
 
     public static let leavingFooter = "Your Mac no longer has this profile, so Mossad does not send these recordings. Share a recording to keep it, or delete it. When none are left, Mossad removes the profile from this iPhone after 7 days."

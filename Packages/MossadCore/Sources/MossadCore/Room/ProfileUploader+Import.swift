@@ -7,10 +7,19 @@ extension ProfileUploader {
 
     public var isImporting: Bool { !importing.isEmpty }
 
-    /// This profile's saved people (the owner's server sends them), read off the main actor.
-    public func loadPeople() async {
+    /// This profile's saved people (the owner's server sends them), read off the main actor. No file is no people; a
+    /// file that does not read is not known: the list of before stays, and false says so.
+    @discardableResult
+    public func loadPeople() async -> Bool {
         let dir = paths.people
-        people = await Task.detached(priority: .utility) { PeopleStore.peek(in: dir) ?? [] }.value
+        let read = await Task.detached(priority: .utility) { () -> [Person]? in
+            let file = dir.appendingPathComponent(PeopleStore.fileName)
+            guard FileManager.default.fileExists(atPath: file.path) else { return [] }
+            return PeopleStore.peek(in: dir)
+        }.value
+        guard let read else { return false }
+        people = read
+        return true
     }
 
     /// The people the store that shows has read: at once, so a choice made before the next read finds them.
@@ -33,10 +42,11 @@ extension ProfileUploader {
     /// after. The entry is saved first and the id is held in `joining` while the audio is added, so a stop in the
     /// middle is never taken for a room recording. On a failure nothing is added. The caller deletes the handed file.
     public func importCall(_ draft: CallImport.Draft, from url: URL) async -> Result<String, CallImport.Refusal> {
-        await loadPeople()
+        let peopleRead = await loadPeople()
         var draft = draft
-        // A person id goes only with a person of this profile: an id of another profile would name a stranger.
-        if let person = draft.person, let id = person.personID, !people.contains(where: { $0.id.rawValue == id }) {
+        // A person id goes only with a person of this profile: an id of another profile would name a stranger. Only a
+        // list that was read can say so; the owner picked the id from this profile's own list.
+        if peopleRead, let person = draft.person, let id = person.personID, !people.contains(where: { $0.id.rawValue == id }) {
             draft.person = CallImport.Choice(name: person.name, personID: nil)
         }
         let (planned, hash, _) = await importPlan(draft, from: url)
@@ -110,10 +120,7 @@ extension ProfileUploader {
     /// were not read.
     private func meetings() async -> [CallImport.Known]? {
         if let known { return known() }
-        let paths = paths
-        return await Task.detached(priority: .utility) {
-            (try? ProcessingQueue(paths: paths).scan().records)?.map { CallImport.Known(id: $0.id, start: $0.start, end: $0.end) }
-        }.value
+        return await readMeetings(paths)
     }
 
     /// The plan, with the file's hash and the memory it was checked against. Waits for the outbox.
@@ -123,8 +130,9 @@ extension ProfileUploader {
         let (hash, memory) = await Task.detached(priority: .utility) {
             ((try? ImportMemory.hash(of: url)), ImportMemory.load(from: file))
         }.value
-        let outbox = self.outbox.entries.map { CallImport.Known(id: $0.id, start: $0.recording.start, end: $0.recording.end) }
         let meetings = await meetings() ?? []
+        // Read after the last wait: an import that overlapped has its entry in it by now.
+        let outbox = self.outbox.entries.map { CallImport.Known(id: $0.id, start: $0.recording.start, end: $0.recording.end) }
         return (CallImport.plan(draft, hash: hash, outbox: outbox, meetings: meetings, memory: memory, now: Date()), hash, memory)
     }
 }

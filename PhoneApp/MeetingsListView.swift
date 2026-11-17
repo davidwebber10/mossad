@@ -8,8 +8,7 @@ struct MeetingsListView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var recording = PhoneStore.hook("MOSSAD_ROOM") != nil
     @State private var settings = PhoneStore.hook("MOSSAD_SETTINGS") != nil
-    /// `MOSSAD_SETTINGS=profiles` opens Settings on the Profile screen.
-    @State private var settingsOnProfiles = PhoneStore.hook("MOSSAD_SETTINGS") == "profiles"
+    @State private var settingsOnProfiles = Self.startsOnProfiles
     @Environment(PhoneProfiles.self) private var profiles
     /// The room recording the owner asked to remove, until the dialog answers.
     @State private var removing: String?
@@ -44,14 +43,24 @@ struct MeetingsListView: View {
     }
 
     /// A profile that left with recordings: one quiet row that opens Settings on the Profile screen.
-    private func leavingRow(_ name: String, _ count: Int) -> some View {
-        Button {
+    /// `MOSSAD_SETTINGS=profiles` opens Settings on the Profile screen, in a debug build.
+    private static var startsOnProfiles: Bool {
+        #if DEBUG
+        PhoneStore.hook("MOSSAD_SETTINGS") == "profiles"
+        #else
+        false
+        #endif
+    }
+
+    private func leavingRow(_ name: String, _ entries: [Outbox.Entry]) -> some View {
+        let sent = entries.filter(\.isSent).count
+        return Button {
             settingsOnProfiles = true
             settings = true
         } label: {
             HStack(spacing: Space.m) {
                 Image(systemName: "tray").foregroundStyle(Palette.secondary).accessibilityHidden(true)
-                Text(PhoneProfileWords.leavingRow(name: name, count: count)).textRole(.secondary).foregroundStyle(Palette.secondary)
+                Text(PhoneProfileWords.leavingRow(name: name, unsent: entries.count - sent, sent: sent)).textRole(.secondary).foregroundStyle(Palette.secondary)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Palette.tertiaryMark).accessibilityHidden(true)
             }
@@ -75,7 +84,7 @@ struct MeetingsListView: View {
                     }
                     if !store.outbox.entries.isEmpty { outbox }
                     ForEach(profiles.leavingWithRecordings, id: \.profile.id) { item in
-                        leavingRow(item.profile.name, item.uploader.outbox.entries.count)
+                        leavingRow(item.profile.name, item.uploader.outbox.entries)
                     }
                     if hasNewFindings || PhoneStore.hook("MOSSAD_FINDINGS_ROW") != nil { findingsRow }
                     ForEach(store.days, id: \.date) { day in
@@ -106,7 +115,7 @@ struct MeetingsListView: View {
                 // Which profile shows, only with two or more.
                 if profiles.book.showsProfiles {
                     ToolbarItem(placement: .topBarLeading) {
-                        ProfileMark(profile: profiles.book.activeProfile) {
+                        ProfileMark(profile: profiles.shownProfile) {
                             settingsOnProfiles = true
                             settings = true
                         }

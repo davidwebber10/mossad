@@ -31,7 +31,7 @@ struct MossadPhoneApp: App {
                 }
                 // The active profile left while a recording or an import ran: the switch goes once they end.
                 .onChange(of: profiles.switchHeld) { _, held in
-                    if !held { Task { await profiles.switchIfHeld() } }
+                    if !held { Task { await profiles.holdEnded() } }
                 }
                 // A shared audio file comes as a file URL, the app's own links as `mossad://`.
                 .onOpenURL { url in
@@ -43,9 +43,11 @@ struct MossadPhoneApp: App {
                 }
                 .onChange(of: phase) { _, now in
                     if now == .active {
+                        // The sync of the profile that shows does not wait for the Keychain read.
                         Task {
-                            await profiles.refresh()
+                            async let read: Void = profiles.refresh()
                             await profiles.pass()
+                            await read
                         }
                     }
                 }

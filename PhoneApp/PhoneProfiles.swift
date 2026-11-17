@@ -15,7 +15,7 @@ final class PhoneProfiles {
     /// The profile that shows.
     private(set) var store: PhoneStore
     /// The app's one recorder: a switch cannot leave a second one.
-    let recorder = RoomRecorder()
+    let recorder: RoomRecorder
     /// An audio file that iOS handed over from the share sheet, shown in the import screen until it closes.
     var incomingAudio: IncomingAudio? = PhoneStore.hook("MOSSAD_IMPORT_AFTER") == nil
         ? PhoneStore.hook("MOSSAD_IMPORT").map { IncomingAudio(url: URL(fileURLWithPath: $0)) } : nil
@@ -33,6 +33,8 @@ final class PhoneProfiles {
     private static var offline: Bool { ProcessInfo.processInfo.environment["MOSSAD_ROOT"] != nil }
 
     private init() {
+        let recorder = RoomRecorder()
+        self.recorder = recorder
         var book = PhoneProfileBook.load(.standard)
         #if DEBUG
         // `MOSSAD_PHONE_PROFILES=<file>` is the item's JSON in place of the Keychain read, and `MOSSAD_PHONE_PROFILE=<id>`
@@ -45,7 +47,7 @@ final class PhoneProfiles {
         // Kept for the next launch, so a list that drops a profile shows it as one that left.
         if PhoneStore.hook("MOSSAD_PHONE_PROFILES") != nil { book.save(to: .standard) }
         #endif
-        let uploaders = ProfileUploaders(make: Self.makeUploader)
+        let uploaders = ProfileUploaders(make: { Self.makeUploader($0, recorder: recorder) })
         for profile in book.listed + book.leaving {
             let u = uploaders.uploader(for: profile)
             u?.sends = profile.gone == nil
@@ -57,6 +59,7 @@ final class PhoneProfiles {
         self.uploaders = uploaders
         store = PhoneStore(context: uploader.context, uploader: uploader, recorder: recorder)
         store.inProfiles = book.showsProfiles
+        assert(store.recorder === recorder, "the store's recovery asks the app's one recorder")
         // Every profile's outbox is read at launch, so the Profile screen and the passes see its recordings.
         Task { for u in uploaders.all { await u.ready() } }
         #if DEBUG
@@ -67,12 +70,28 @@ final class PhoneProfiles {
                 incomingAudio = IncomingAudio(url: URL(fileURLWithPath: path))
             }
         }
+        // `MOSSAD_PHONE_SWITCH_AFTER=<seconds>:<id>` switches as a tap does, after that time; while the recorder runs it
+        // is held and goes when the recording ends. `MOSSAD_ROOM_STOP_AFTER=<seconds>` stops the recording.
+        if let text = PhoneStore.hook("MOSSAD_PHONE_SWITCH_AFTER"), let colon = text.firstIndex(of: ":"),
+           let after = Double(text[..<colon]) {
+            let id = String(text[text.index(after: colon)...])
+            Task {
+                try? await Task.sleep(for: .seconds(after))
+                await switchTo(id, byOwner: false)
+            }
+        }
+        if let after = PhoneStore.hook("MOSSAD_ROOM_STOP_AFTER").flatMap(Double.init) {
+            Task {
+                try? await Task.sleep(for: .seconds(after))
+                store.stopRecording(discard: false)
+            }
+        }
         #endif
         clearOldInbox()
     }
 
     /// A profile's uploader from its id alone. Nil when its settings cannot be made: it never gets the first one's.
-    private static func makeUploader(_ profile: PhoneProfile) -> ProfileUploader? {
+    private static func makeUploader(_ profile: PhoneProfile, recorder: RoomRecorder) -> ProfileUploader? {
         guard let context = PhoneProfileContext(id: profile.id) else { return nil }
         let environment = ProcessInfo.processInfo.environment
         guard let settings = context.settings(standard: .standard, makeSuite: { UserDefaults(suiteName: $0) }) else {
@@ -81,6 +100,7 @@ final class PhoneProfiles {
         }
         return ProfileUploader(context: context, paths: context.paths(documents: URL.documentsDirectory, environment: environment),
                                settings: settings, listed: profile.sync, offline: offline, parts: .live(context),
+                               active: { recorder.id },
                                background: { name in
                                    let time = BackgroundTime(name)
                                    return { time.end() }
@@ -149,11 +169,14 @@ final class PhoneProfiles {
                 (try? FileManager.default.removeItem(at: root)) != nil || !FileManager.default.fileExists(atPath: root.path)
             }.value
             guard removed else { continue }
+            // After the wait: the item may list it again. A scanned code waits for this cleanup (`apply`), so it wins.
+            guard book.leaving.contains(where: { $0.id == profile.id }) else { continue }
             if let suite = context.settingsSuite { UserDefaults.standard.removePersistentDomain(forName: suite) }
-            Keychain(service: context.keychainService).delete(.serverSecret)
             uploaders.drop(profile.id)
             book.forget(profile.id)
             book.save(to: .standard)
+            let service = context.keychainService
+            await Task.detached(priority: .utility) { Keychain(service: service).delete(.serverSecret) }.value
             Log.info("Profiles: the folder of a profile that left was removed")
         }
     }
@@ -161,6 +184,16 @@ final class PhoneProfiles {
     /// What holds a switch back: the recorder or its screen, an import that is added, or the import sheet with its
     /// file and the title typed in it.
     var switchHeld: Bool { recorder.busy || store.recorderScreenOpen || importing }
+
+    /// The profile whose list shows: while a switch is held, still the old one.
+    var shownProfile: PhoneProfile {
+        (book.listed + book.leaving).first { $0.id == store.context.id } ?? book.activeProfile
+    }
+
+    /// The Profile row: two profiles, or one that is gone and still holds a recording.
+    var showsProfileRow: Bool {
+        book.showsProfileRow(holding: Set(leavingWithRecordings.map(\.profile.id)))
+    }
     private var importing: Bool { incomingAudio != nil || uploaders.all.contains(where: \.isImporting) }
 
     /// The switch: refused while the recorder runs or an import is added; else the old store closes, the choice is
@@ -180,25 +213,30 @@ final class PhoneProfiles {
             if byOwner { problem = why } else { heldSwitch = id }
         case .go(let next):
             heldSwitch = nil
-            guard let profile = book.listed.first(where: { $0.id == next }), let uploader = uploaders.uploader(for: profile) else {
+            guard let wanted = book.listed.first(where: { $0.id == next }), uploaders.uploader(for: wanted) != nil else {
                 problem = PhoneProfileWords.cannotOpen
                 return
             }
             problem = nil
             await store.close()
-            book.active = next == Profile.defaultID ? nil : next
+            // After the wait: `next` may have left. Then the first profile shows (or the one that was active).
+            let target = PhoneProfileSwitch.afterClose(next: next, book: book)
+            let profile = book.listed.first { $0.id == target } ?? book.listed[0]
+            let uploader = uploaders.uploader(for: profile) ?? uploaders.uploader(for: book.listed[0])!
+            book.active = uploader.context.isDefault ? nil : uploader.context.id
             book.save(to: .standard)
             store = PhoneStore(context: uploader.context, uploader: uploader, recorder: recorder)
             store.inProfiles = book.showsProfiles
+            assert(store.recorder === recorder, "the store's recovery asks the app's one recorder")
             Task { await pass() }
         }
     }
 
-    /// The held switch, once nothing holds it: to the active profile of the book as it is now.
-    func switchIfHeld() async {
-        guard heldSwitch != nil, !switchHeld else { return }
-        let id = book.activeProfile.id
-        guard id != store.context.id else { return heldSwitch = nil }
+    /// When nothing holds a switch any more: the refusal goes, and a held switch goes on.
+    func holdEnded() async {
+        guard !switchHeld else { return }
+        problem = nil
+        guard let id = heldSwitch else { return }
         await switchTo(id, byOwner: false)
     }
 
@@ -223,15 +261,18 @@ final class PhoneProfiles {
     func apply(_ parsed: ProfileCode.Parsed) async -> Applied {
         switch parsed {
         case .notMossad, .damaged, .newer:
-            return .failed(Self.problem(parsed.problem ?? PhoneProfileWords.cannotOpen))
+            return .failed(Self.problem(PhoneProfileWords.scanProblem(parsed, showsProfiles: book.showsProfiles) ?? PhoneProfileWords.cannotOpen))
         case .server(let c):
             if let problem = await Self.check(c) { return .failed(problem) }
             let first = book.listed[0]
             guard let u = uploaders.uploader(for: first) else { return .failed(Self.problem(PhoneProfileWords.cannotOpen)) }
             u.connect(c)
-            return .done(PhoneProfileWords.connected(name: first.name, host: c.address.host ?? c.address.absoluteString))
+            return .done(PhoneProfileWords.connected(name: first.name, host: c.address.host ?? c.address.absoluteString,
+                                                     showsProfiles: book.showsProfiles))
         case .profile(let code):
             if let c = code.connection, let problem = await Self.check(c) { return .failed(problem) }
+            // A cleanup that runs now finishes first: the code then adds the profile again, and nothing of it is removed.
+            await cleaning?.value
             book.add(code, now: Date())
             book.save(to: .standard)
             guard let profile = book.listed.first(where: { $0.id == code.id }), let u = uploaders.uploader(for: profile) else {
@@ -242,7 +283,8 @@ final class PhoneProfiles {
             store.inProfiles = book.showsProfiles
             if let c = code.connection {
                 u.connect(c)
-                return .done(PhoneProfileWords.connected(name: profile.name, host: c.address.host ?? c.address.absoluteString))
+                return .done(PhoneProfileWords.connected(name: profile.name, host: c.address.host ?? c.address.absoluteString,
+                                                         showsProfiles: book.showsProfiles))
             }
             u.choose(.icloud)
             return .done(PhoneProfileWords.added(profile.name))

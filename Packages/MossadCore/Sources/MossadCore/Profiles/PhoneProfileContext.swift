@@ -16,6 +16,8 @@ public struct PhoneProfile: Codable, Equatable, Sendable, Identifiable {
     private var sourceText: String?
     /// Since when the Mac no longer lists it.
     public var gone: Date?
+    /// The owner removed it from this iPhone (a coded profile): not one that left the Mac.
+    public var removedHere = false
 
     public init(id: String, name: String, color: ProfileColor, sync: SyncChoice?, source: Source, gone: Date? = nil) {
         self.id = id
@@ -26,7 +28,7 @@ public struct PhoneProfile: Codable, Equatable, Sendable, Identifiable {
         self.gone = gone
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, color, syncName = "sync", source, gone }
+    enum CodingKeys: String, CodingKey { case id, name, color, syncName = "sync", source, gone, removedHere }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -38,6 +40,7 @@ public struct PhoneProfile: Codable, Equatable, Sendable, Identifiable {
         source = Source(rawValue: raw) ?? .item
         sourceText = Source(rawValue: raw) == nil ? raw : nil
         gone = try c.decodeIfPresent(Date.self, forKey: .gone)
+        removedHere = try c.decodeIfPresent(Bool.self, forKey: .removedHere) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -48,6 +51,7 @@ public struct PhoneProfile: Codable, Equatable, Sendable, Identifiable {
         try c.encodeIfPresent(syncName, forKey: .syncName)
         try c.encode(sourceText ?? source.rawValue, forKey: .source)
         try c.encodeIfPresent(gone, forKey: .gone)
+        if removedHere { try c.encode(true, forKey: .removedHere) }
     }
 
     /// Nil for no word or a word this build does not know.

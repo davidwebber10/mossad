@@ -102,9 +102,6 @@ final class RoomRecorder: NSObject, AVAudioRecorderDelegate {
         }
     }
 
-    /// The room recording's audio session. A setup the system refuses (OSStatus -50 on one iPhone) falls back to the
-    /// next, so recording starts whenever the microphone can record at all. No Bluetooth: with AirPods connected the
-    /// room would be recorded from the owner's ear, at telephone quality.
     #if DEBUG
     /// For a check in a headless simulator, where `record()` would use the Mac's own microphone: the state of a
     /// recorder that just started, with a silent part 1 on disk, and no session, timer, or microphone.
@@ -132,6 +129,9 @@ final class RoomRecorder: NSObject, AVAudioRecorderDelegate {
     }
     #endif
 
+    /// The room recording's audio session. A setup the system refuses (OSStatus -50 on one iPhone) falls back to the
+    /// next, so recording starts whenever the microphone can record at all. No Bluetooth: with AirPods connected the
+    /// room would be recorded from the owner's ear, at telephone quality.
     private static func prepareSession() throws {
         let session = AVAudioSession.sharedInstance()
         let setups: [(AVAudioSession.Category, AVAudioSession.Mode, AVAudioSession.CategoryOptions)] = [

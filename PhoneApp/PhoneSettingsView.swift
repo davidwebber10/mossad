@@ -21,7 +21,7 @@ struct PhoneSettingsView: View {
         NavigationStack(path: $path) {
             List {
                 // Only with two profiles or more, or one that left with a recording: else nothing new shows.
-                if profiles.book.showsProfileRow {
+                if profiles.showsProfileRow {
                     Section {
                         NavigationLink(value: "profiles") { profileRow }
                     }
@@ -98,23 +98,26 @@ struct PhoneSettingsView: View {
     }
 
     private var profileRow: some View {
-        let active = profiles.book.activeProfile
+        // The profile whose list shows: while a switch is held, the old one.
+        let active = profiles.shownProfile
         let waiting = profiles.book.listed.compactMap { p -> (String, Int)? in
             guard p.id != active.id, let n = profiles.uploader(for: p)?.outbox.entries.count, n > 0 else { return nil }
             return (p.name, n)
         }.first
+        let line = waiting.map { "\($0.0): \(PhoneProfileWords.waiting($0.1))" }
         return HStack(spacing: Space.m) {
             ProfileDot(color: active.color, size: 10)
             VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(active.name).textRole(.headline).foregroundStyle(Palette.ink)
-                if let waiting {
-                    Text("\(waiting.0): \(PhoneProfileWords.waiting(waiting.1))").textRole(.secondary).foregroundStyle(Palette.secondary)
+                if let line {
+                    Text(line).textRole(.secondary).foregroundStyle(Palette.secondary)
                 }
             }
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(PhoneProfileWords.label(active.name))
+        .accessibilityValue(line ?? "")
     }
 
     private var status: String {

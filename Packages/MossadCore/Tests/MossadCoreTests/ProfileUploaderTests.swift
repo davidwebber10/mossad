@@ -50,9 +50,10 @@ class UploaderTestCase: XCTestCase {
     func defaults() -> UserDefaults { try! MadeUpSuite(self).defaults }
 
     func uploader(_ id: String = "default", root: URL? = nil, settings: UserDefaults? = nil, listed: SyncChoice? = .icloud,
-                  world: UploaderWorld, background: @escaping @MainActor (String) -> @MainActor () -> Void = { _ in {} }) -> ProfileUploader {
+                  world: UploaderWorld, active: @escaping @MainActor () -> String? = { nil },
+                  background: @escaping @MainActor (String) -> @MainActor () -> Void = { _ in {} }) -> ProfileUploader {
         ProfileUploader(context: PhoneProfileContext(id: id)!, paths: Paths(root: root ?? temp()), settings: settings ?? defaults(),
-                        listed: listed, offline: false, parts: world.parts, background: background)
+                        listed: listed, offline: false, parts: world.parts, active: active, background: background)
     }
 
     /// A finished 3 second AAC file and its entry, as an import adds them.
@@ -156,7 +157,7 @@ final class ProfileUploaderTests: UploaderTestCase {
         u.sends = false
         XCTAssertNil(u.cloud)
         await u.sendOutbox()
-        await u.pass()
+        await u.pass(active: { nil })
         XCTAssertEqual(world.zonesAsked, [])
         XCTAssertEqual(u.outbox["20270115-090000"]?.state, .waiting)
         XCTAssertTrue(FileManager.default.fileExists(atPath: RoomAudio.finished("20270115-090000", in: u.recordingsFolder).path))
@@ -170,14 +171,14 @@ final class ProfileUploaderTests: UploaderTestCase {
         await u.sendOutbox()
         XCTAssertTrue(isSent(u, id))
         try writeMeeting(id, in: first.paths)
-        await u.pass()
+        await u.pass(active: { nil })
         XCTAssertNotNil(u.outbox[id], "a meeting of another profile settles nothing")
         try writeMeeting(id, in: u.paths, bundleID: "")
-        await u.pass()
+        await u.pass(active: { nil })
         XCTAssertNotNil(u.outbox[id], "a recording the Mac made itself at that second is no proof")
         try FileManager.default.removeItem(at: u.paths.callDirectory(id))
         try writeMeeting(id, in: u.paths)
-        await u.pass()
+        await u.pass(active: { nil })
         XCTAssertNil(u.outbox[id])
         XCTAssertFalse(FileManager.default.fileExists(atPath: RoomAudio.finished(id, in: u.recordingsFolder).path))
     }
@@ -189,7 +190,7 @@ final class ProfileUploaderTests: UploaderTestCase {
         try addFinished(u, "20270115-100000")
         u.shown = true
         try writeMeeting("20270115-100000", in: u.paths)
-        await u.pass()
+        await u.pass(active: { nil })
         XCTAssertEqual(u.outbox.entries.count, 2)
         XCTAssertEqual(world.zonesAsked, [])
         for id in ["20270115-090000", "20270115-100000"] {
@@ -204,7 +205,7 @@ final class ProfileUploaderTests: UploaderTestCase {
         try addFinished(before, "20270115-090000")
         // A new launch: a profile that does not show only ever gets a pass.
         let after = uploader(work, root: root, world: world)
-        await after.pass()
+        await after.pass(active: { nil })
         XCTAssertTrue(isSent(after, "20270115-090000"), "the outbox on disk is read before the pass")
         XCTAssertEqual(world.zonesAsked, ["Mossad-1a2b3c4d"])
     }
@@ -212,7 +213,7 @@ final class ProfileUploaderTests: UploaderTestCase {
     func testAnIdleUploaderAsksNothing() async {
         let world = UploaderWorld()
         let u = uploader(work, world: world)
-        await u.pass()
+        await u.pass(active: { nil })
         XCTAssertEqual(world.zonesAsked, [])
     }
 

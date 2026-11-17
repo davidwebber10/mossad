@@ -43,6 +43,10 @@ struct AddRecordingIntent: AppIntent {
         await uploader.ready()
         await uploader.loadPeople()
         await profiles.store.launch?.value
+        // After the waits: a profile that left gets nothing new, and the handed file stays in Shortcuts.
+        guard profiles.book.listed.contains(where: { $0.id == target.id }) else {
+            throw ImportWords(text: PhoneProfileWords.importTargetLeft(target.name))
+        }
 
         let file = await Task.detached { await CallImport.read(url) }.value
         let begin = start ?? CallImport.start(metadata: file.metadataDate, file: file.fileDate, length: file.length ?? 0, now: Date()).date
