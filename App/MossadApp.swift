@@ -5,15 +5,28 @@ import MossadCore
 @main
 struct MossadEntry {
     static func main() {
-        // First of all: a preview runs only on a made-up folder, and reads and writes its own empty settings.
+        // First of all, before anything reads a setting, the Keychain, or `Paths.live`: which profile this process
+        // is (the registry is read here and nowhere earlier). A preview runs only on a made-up folder and an unknown
+        // profile does not start. Then a preview or a profile reads and writes its own settings; the Mac-wide keys
+        // stay in the real domain (`MacDefaults`).
         let identity = AppIdentity.current
         if let refusal = identity.refusal(home: FileManager.default.homeDirectoryForCurrentUser, environment: ProcessInfo.processInfo.environment) {
             FileHandle.standardError.write(Data((refusal + "\n").utf8))
             exit(2)
         }
         if !identity.isolateDefaults() {
-            FileHandle.standardError.write(Data("Mossad: the preview could not use its own settings; not starting.\n".utf8))
+            let whose = identity.isPreview ? "the preview" : "the profile"
+            FileHandle.standardError.write(Data("Mossad: \(whose) could not use its own settings; not starting.\n".utf8))
             exit(2)
+        }
+        // An instance started by a switch waits, 10 s in all, for the old one to let go of the Mac-wide lock and then
+        // of this profile's folder, so its hot keys and its folder are free. Before the app object exists.
+        let wait = ProfileSwitch.waitSeconds(CommandLine.arguments)
+        if wait > 0, !CommandLine.arguments.contains(where: AppIdentity.commands.contains) {
+            let start = Date()
+            _ = InstanceLock.waitUntilFree(root: identity.macWideLockFolder(home: FileManager.default.homeDirectoryForCurrentUser,
+                                                                            environment: ProcessInfo.processInfo.environment), timeout: wait)
+            _ = InstanceLock.waitUntilFree(root: Paths.live.root, timeout: max(0, wait - Date().timeIntervalSince(start)))
         }
         // Before any resolver: the app, `--mcp`, and each command-line step read the same company domains.
         CompanyDomains.loadSaved()
@@ -35,7 +48,18 @@ struct MossadEntry {
             let owner = UserDefaults.standard.string(forKey: "ownerName") ?? NSFullUserName()
             // The coach's reads of how people think: on for other AI apps, unless the owner turned it off. Read at each
             // call, so a switch turned off reaches this process, which an AI app keeps for days.
-            MCPServer(paths: .live, owner: owner, settings: { ToolSettings.read(.standard) }).run()
+            // `--mcp --profile <id>` serves that profile under its own name; `--mcp` alone is the first profile, `mossad`.
+            let name = MCPCommand(profile: identity.profile, among: identity.registry.registry.live).serverName
+            // A profile deleted while an AI app keeps this process: each tool call reads the registry once and ends.
+            let check: @Sendable () -> Bool = {
+                let env = ProcessInfo.processInfo.environment
+                let home = FileManager.default.homeDirectoryForCurrentUser
+                let madeUp = env["MOSSAD_PROFILES"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+                let read = madeUp.map { ProfileRegistry.load(from: $0) } ?? ProfileRegistry.load(from: ProfileRegistry.fileURL(home: home), home: home)
+                return ProfileLaunch.stillServes(identity.profile.id, registry: read)
+            }
+            let stillServes: (@Sendable () -> Bool)? = identity.profile.isDefault ? nil : check
+            MCPServer(paths: .live, owner: owner, name: name, stillServes: stillServes, settings: { ToolSettings.read(.standard) }).run()
             exit(0)
         }
         // `--persona-eval --gold <folder> [--cap 15] [--model claude-sonnet-5-5] [--out <folder>] [--estimate-only]` runs the
@@ -55,9 +79,12 @@ struct MossadEntry {
         if CommandLine.arguments.contains("--persona-fill") {
             if Rehearsal.isOn { print("Mossad Rehearsal has no calls to read."); exit(1) }
             let args = CommandLine.arguments
-            let open = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
-                .contains { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
-            if args.contains("--go"), open { print("Quit Mossad first: the fill writes the files that the app keeps."); exit(1) }
+            // Only the app that holds this profile's folder is in the way; another profile's app may stay open.
+            // One look, as on main: the lock is let go at once, so an app that starts during the fill still records.
+            if args.contains("--go"), case .taken = InstanceLock.acquire(root: Paths.live.root) {
+                print(PersonaFill.openMessage(identity.profile))
+                exit(1)
+            }
             let defaults = UserDefaults.standard
             let typed = (defaults.string(forKey: "ownerName") ?? "").trimmingCharacters(in: .whitespaces)
             let owner = typed.isEmpty ? NSFullUserName() : typed
@@ -114,6 +141,9 @@ struct MenuBarIcon: View {
             RecordingMenuBarIcon(since: since)
         } else if Rehearsal.isOn {
             Image(nsImage: Self.rehearsal)
+        } else if let menu = controller.profileMenu {
+            // With two profiles or more, the bars carry the active profile's color as a small mark.
+            Image(nsImage: Self.marked(on: controller.isOn, color: menu.color.nsColor, name: menu.title))
         } else {
             Image(nsImage: controller.isOn ? Self.idle : Self.off)
         }
@@ -173,6 +203,20 @@ struct MenuBarIcon: View {
         return image
     }()
 
+    /// The bars with a 5 pt dot of the profile's color at the bottom trailing corner. Drawn when the menu bar
+    /// draws it, so the bars follow its light or dark look.
+    static func marked(on: Bool, color: NSColor, name: String) -> NSImage {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
+            drawBars(NSColor.labelColor.withAlphaComponent(on ? 1 : 0.35), in: rect)
+            color.setFill()
+            NSBezierPath(ovalIn: NSRect(x: rect.width - 5, y: 0, width: 5, height: 5)).fill()
+            return true
+        }
+        image.isTemplate = false
+        image.accessibilityDescription = on ? "Mossad, profile \(name)" : "Mossad is off, profile \(name)"
+        return image
+    }
+
     /// Drawn when the menu bar draws it, so the time follows its light or dark look.
     static func recording(_ time: String) -> NSImage {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
@@ -227,14 +271,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-        source.setEventHandler { MainActor.assumeIsolated { NSApp.terminate(nil) } }
+        source.setEventHandler { MainActor.assumeIsolated { Self.quit() } }
         source.resume()
         terminateSignal = source
         let event = NSAppleEventManager.shared().currentAppleEvent
-        let atLogin = event?.paramDescriptor(forKeyword: keyAELaunchedAsLogInItem) != nil
+        // A switch of profile opens the window, also in the first minutes after the Mac started.
+        let switched = CommandLine.arguments.contains("--switched")
+        let atLogin = !switched && (event?.paramDescriptor(forKeyword: keyAELaunchedAsLogInItem) != nil
             // Login items started by the system do not always say so; a start in the first minutes after
             // booting is one of them.
-            || ProcessInfo.processInfo.systemUptime < 180
+            || ProcessInfo.processInfo.systemUptime < 180)
         // `--background`: a restart after an update, which must not pull the owner away from their work.
         // Rehearsal opens straight into setup, every time.
         if Rehearsal.isOn, !CommandLine.arguments.contains("--ui-preview") {
@@ -248,6 +294,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Quit, logout, or a restart during a call ends the recording cleanly first, with no question. After 3 s the
     /// app quits anyway; the next launch recovers what reached the disk.
+    /// Quits also with a sheet open: a window with a sheet attached keeps `terminate` from going on, so a quit
+    /// from the system or a switch of profile would wait for a click on the sheet.
+    @MainActor
+    static func quit() {
+        AppController.current?.profileSheet = nil
+        for window in NSApp.windows { if let sheet = window.attachedSheet { window.endSheet(sheet) } }
+        NSApp.terminate(nil)
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // An answer to a card that is on its way to the disk gets there.
         AppController.answerWriter.sync {}

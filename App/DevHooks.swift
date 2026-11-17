@@ -36,6 +36,29 @@ enum DevHooks {
             for r in c.meetings where Calendar.current.isDateInToday(r.start) && r.status == .written { c.regenerateSummary(r.id) }
         }
         let looks = preview || debug
+        #if DEBUG
+        // `MOSSAD_PROOF_HOTKEY=1` on a made-up registry: one made-up global key (F19 with Control, Option, Shift, and
+        // Command: no keyboard has a key the owner presses by accident there, and no app uses it), for the proof
+        // that a switch hands the hot keys over. Registered with the same retries as the real keys.
+        if env["MOSSAD_PROOF_HOTKEY"] == "1", AppIdentity.current.madeUpRegistry, !preview {
+            let key = HotKeyShortcut(keyCode: 0x50, modifiers: [.control, .option, .shift, .command])
+            let held = c.hotKeys.register(.proof, key, retrying: true) {}
+            Log.info("Proof hot key: \(held ? "held at launch" : "taken by another copy at launch; trying again")")
+        }
+        // `MOSSAD_PROFILE_SWITCH=<id>` on a made-up registry: one real switch, a few seconds after launch.
+        if let id = env["MOSSAD_PROFILE_SWITCH"], let file = env["MOSSAD_PROFILES"], AppIdentity.current.madeUpRegistry, !preview {
+            let failing = env["MOSSAD_PROFILE_SWITCH_FAIL"] == "1"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { c.proofSwitch(to: id, file: URL(fileURLWithPath: file), failing: failing) }
+        }
+        #endif
+        // `MOSSAD_PROOF_DAYS=<n>` on a made-up registry: a setting written through `@AppStorage` into the profile's
+        // suite, and what Sparkle reads, for the proof that a profile's swap holds.
+        // Never as `default`, which on a made-up registry is the owner's real install (it does not start as one anyway).
+        if AppIdentity.current.madeUpRegistry, !AppIdentity.current.profile.isDefault, !preview,
+           let days = env["MOSSAD_PROOF_DAYS"].flatMap(Int.init) {
+            c.recordingDays = days
+            Log.info("Proof: updates check automatically: \(c.updater.automaticallyChecks)")
+        }
         // `--light` shows the UI in light mode, to check both looks. Before the preview's own appearance hooks.
         if looks, has("--light") { NSApp.appearance = NSAppearance(named: .aqua) }
         if preview { previewOnly(c) }
@@ -63,6 +86,19 @@ enum DevHooks {
             }
             let section = AppController.Section.allCases.first { $0.rawValue == name } ?? .meetings
             DispatchQueue.main.async { c.open(section) }
+        }
+        // `MOSSAD_PROFILES=<file>` shows a made-up registry in the switcher and Settings (loaded by `AppIdentity`).
+        // `MOSSAD_PROFILE_SHEET=add|rename|delete` opens that sheet of Settings > General > Profiles; rename and
+        // delete for the first profile that is not `default`.
+        if preview, let sheet = env["MOSSAD_PROFILE_SHEET"] {
+            let other = c.profiles.registry.live.first { !$0.isDefault }?.id
+            let chosen: ProfileSheet? = switch sheet {
+            case "add": .add
+            case "rename": other.map { .rename($0) }
+            case "delete": other.map { .delete($0) }
+            default: nil
+            }
+            if let chosen { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { c.openProfileSettings(sheet: chosen) } }
         }
         // `MOSSAD_SEARCH=<query>` opens the search palette with that query.
         if preview, let query = env["MOSSAD_SEARCH"] {

@@ -13,6 +13,16 @@ struct MenuContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // With two profiles or more, which profile will record: the dot and the name.
+            if let menu = controller.profileMenu {
+                PanelRow {
+                    ProfileDot(color: menu.color)
+                    Text(menu.title).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(ProfileSettingsWords.accessibilityLabel(controller.activeProfile))
+            }
             statusSection
             if controller.processing > 0 { processingRow }
             if !controller.waitingCalls.isEmpty, case let calls = waitingCalls, !calls.isEmpty { waitingRow(calls) }

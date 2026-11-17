@@ -30,9 +30,12 @@ extension AppController {
         return (value as? [String])?.contains("CloudKit") == true
     }()
 
+    /// Whether this copy may write or delete the iCloud Keychain items: only once the launch decided, and never inert.
+    var writesSharedItems: Bool { SharedItemsGate.appMayWrite(iCloud: Self.hasICloud, launchDecided: launchDecided, inert: isInert) }
+
     /// Puts the chosen AI provider, model, and key in iCloud Keychain for the iPhone, or removes them.
     func updateSharedAIKey() {
-        guard Self.hasICloud else { return }
+        guard writesSharedItems else { return }
         // A local model is on this Mac, where the iPhone cannot reach it.
         guard shareAIKey, !aiProvider.isLocal, let apiKey = aiProvider.key, let key = keychain.get(apiKey) else {
             SharedAIKey.delete()
@@ -54,6 +57,12 @@ extension AppController {
 
     /// Saves a checked server and makes it the sync store.
     func connectServer(_ c: ServerConnection, hello: ServerClient.Hello, syncThere: Bool) {
+        // A server is one profile's: another profile of this Mac already uses this one.
+        if let owner = serverOwner(of: c.address) {
+            Log.error("Profiles: this server belongs to another profile; not connected")
+            profileProblem = ProfileRules.serverRefusal(owner)
+            return
+        }
         serverMCP = hello.mcp?.absoluteString ?? ""
         serverHasChat = hello.chat
         serverShares = hello.shares
@@ -71,6 +80,7 @@ extension AppController {
         syncEngine = nil
         mirrorEngine = nil
         updateSharedServer()
+        noteServer(c.address)
         let owner = ownerName
         // Rehearsal never writes to a server: a setup walkthrough must not change the owner's real one.
         let personas = personasInServerMCP
@@ -91,7 +101,8 @@ extension AppController {
         if syncWith == .server { syncWith = Self.hasICloud ? .icloud : .off }
         syncEngine = nil
         mirrorEngine = nil
-        ServerPairing.unshare()
+        if writesSharedItems { ServerPairing.unshare() }
+        noteServer(nil)
         syncActivity = SyncActivity()
     }
 
@@ -106,7 +117,7 @@ extension AppController {
 
     /// The server's address and secret in iCloud Keychain for the iPhone, when the owner wants that.
     func updateSharedServer() {
-        guard Self.hasICloud else { return }
+        guard writesSharedItems else { return }
         if serverOnPhone, syncWith == .server, let c = serverConnection {
             if ServerPairing.shared() != c { try? ServerPairing.share(c) }
         } else {

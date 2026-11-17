@@ -27,6 +27,26 @@ public final class InstanceLock: @unchecked Sendable {
         return .held(InstanceLock(fd: fd))
     }
 
+    /// Waits until no process holds the lock of `root`, at most `timeout`. It only looks: it takes the lock for a
+    /// moment and lets it go, and makes no file. A folder or lock file that is not there is free.
+    public static func waitUntilFree(root: URL, timeout: TimeInterval, every: TimeInterval = 0.2) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            if isFree(root: root) { return true }
+            guard Date().addingTimeInterval(every) < deadline else { return false }
+            Thread.sleep(forTimeInterval: every)
+        }
+    }
+
+    private static func isFree(root: URL) -> Bool {
+        let fd = open(root.appendingPathComponent(".lock").path, O_RDONLY | O_CLOEXEC)
+        guard fd >= 0 else { return true }
+        defer { close(fd) }
+        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else { return errno != EWOULDBLOCK }
+        flock(fd, LOCK_UN)
+        return true
+    }
+
     deinit {
         flock(fd, LOCK_UN)
         close(fd)

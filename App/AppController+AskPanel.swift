@@ -15,17 +15,18 @@ extension AppController {
 
     /// The owner's shortcut for the quick panel: Option-Command-M until they change it; nil once they clear it.
     var askShortcut: HotKeyShortcut? {
-        guard let saved = UserDefaults.standard.string(forKey: Self.askShortcutKey) else { return .askDefault }
+        // Mac-wide: one global hot key for the Mac, whichever profile runs.
+        guard let saved = MacDefaults.store.string(forKey: Self.askShortcutKey) else { return .askDefault }
         return HotKeyShortcut(saved: saved)
     }
 
     /// Registered all the time, as the owner chose, so it opens the quick chat with no call too.
-    func registerAskShortcut() {
+    func registerAskShortcut(retrying: Bool = false) {
         guard let shortcut = askShortcut else {
             askShortcutFailed = false
             return hotKeys.unregister(.ask)
         }
-        askShortcutFailed = !hotKeys.register(.ask, shortcut) { [weak self] in self?.toggleAskPanel() }
+        askShortcutFailed = !hotKeys.register(.ask, shortcut, retrying: retrying) { [weak self] in self?.toggleAskPanel() }
     }
 
     /// The shortcut that works now, for the menu and the panel's keys; nil when cleared or not registered.
@@ -42,7 +43,7 @@ extension AppController {
             }
         }
         // A preview shares the app's settings: it changes nothing there.
-        if !isInert { UserDefaults.standard.set(shortcut?.saved ?? "", forKey: Self.askShortcutKey) }
+        if !isInert { MacDefaults.store.set(shortcut?.saved ?? "", forKey: Self.askShortcutKey) }
         if shortcut == nil { hotKeys.unregister(.ask) }
         askShortcutFailed = false
         objectWillChange.send()

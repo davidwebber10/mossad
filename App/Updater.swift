@@ -25,7 +25,14 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
     init(start: Bool, isRecording: @escaping () -> Bool) {
         self.isRecording = isRecording
         super.init()
-        controller = SPUStandardUpdaterController(startingUpdater: start, updaterDelegate: self, userDriverDelegate: nil)
+        // Sparkle's hosts keep the standard defaults they find when made: in a profile, the Mac's own domain.
+        var macOwn = false
+        controller = MacDefaults.handOver {
+            macOwn = UserDefaults.standard === MacDefaults.store
+            assert(macOwn, "Sparkle must be made with the Mac's own settings")
+            return SPUStandardUpdaterController(startingUpdater: start, updaterDelegate: self, userDriverDelegate: nil)
+        }
+        Log.info("Updates: Sparkle uses the Mac's own settings: \(macOwn)")
         observation = controller.updater.publisher(for: \.canCheckForUpdates).receive(on: RunLoop.main).sink { [weak self] in self?.canCheck = $0 }
     }
 

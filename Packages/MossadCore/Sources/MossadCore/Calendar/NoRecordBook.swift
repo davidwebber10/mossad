@@ -162,6 +162,61 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try JSONEncoder.callRecord.encode(self).write(to: dir.appendingPathComponent(Self.fileName), options: .atomic)
     }
+
+    /// Another profile's list, read only: a file that does not decode stays where it is (its own profile moves it
+    /// aside) and the book is unknown, as `load` gives it. A missing file beside a set-aside one is unknown too.
+    public static func peek(from dir: URL) -> NoRecordBook {
+        let file = dir.appendingPathComponent(fileName)
+        var book = NoRecordBook()
+        if let data = try? Data(contentsOf: file) {
+            if let read = try? JSONDecoder.callRecord.decode(NoRecordBook.self, from: data) { return read }
+        } else if !FileManager.default.fileExists(atPath: file.path),
+                  !((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []).contains(where: StoredFile.isQuarantined) {
+            return book
+        }
+        book.unreadable = true
+        return book
+    }
+
+    /// The book the gate decides with: the active profile's rules and every other profile's, so a meeting refused in
+    /// one is refused in all. Only the active profile's ended rules keep notes out; any unknown list blocks.
+    public static func forGate(own: NoRecordBook, others: [NoRecordBook]) -> NoRecordBook {
+        var book = own
+        book.rules = own.rules + others.flatMap(\.rules)
+        book.unreadable = own.unreadable || others.contains(where: \.unreadable)
+        return book
+    }
+}
+
+/// Why a call with an invite is kept off the record when no choice of the owner says so: a do-not-record list that
+/// cannot be read. Another profile's list has its own words: resetting the active profile's list does not end it.
+public enum NoRecordListProblem: Equatable, Sendable {
+    case own
+    case otherProfile(String)
+
+    /// The active profile's own list first; else the first other profile whose list is unknown.
+    public static func find(own: NoRecordBook, others: [(name: String, book: NoRecordBook)]) -> NoRecordListProblem? {
+        if own.unreadable { return .own }
+        return others.first(where: \.book.unreadable).map { .otherProfile($0.name) }
+    }
+
+    public var notificationBody: String {
+        switch self {
+        case .own:
+            "The do-not-record list could not be read. Press Record to record this call. To end this, set a choice for any upcoming meeting, or reset the list in Settings, Recording."
+        case .otherProfile:
+            settingsFooter + " Press Record to record this call."
+        }
+    }
+
+    public var settingsFooter: String {
+        switch self {
+        case .own:
+            "The do-not-record list could not be read, so calls with an invite are not recorded. Reset the list, or set a choice for any upcoming meeting, to record them again."
+        case .otherProfile(let name):
+            "Mossad cannot read the do-not-record list of the profile \(name). Switch to that profile and reset its list."
+        }
+    }
 }
 
 /// The book and the calendar for the detection queue, which cannot wait for the main actor before a call starts.
@@ -231,6 +286,33 @@ public final class NoRecordGate: @unchecked Sendable {
         lock.withLock {
             sessionFile = file
             if session == nil { session = saved }
+        }
+    }
+
+    /// After a switch: the blocked call that another profile's gate kept goes on here. Reads the other folders only.
+    /// - This gate's own call, seen later by another profile, takes that copy's end and last time, so a call that
+    ///   ended there does not block here.
+    /// - Then the newest call that has not ended is taken, unless this gate's own is newer and goes on. It comes
+    ///   without its title and its key (the other profile's meeting title and link), so neither reaches this
+    ///   profile's file; the session itself holds the block.
+    public func adopt(sessionsIn dirs: [URL]) {
+        let found = dirs.compactMap { dir -> BlockedCall? in
+            guard let data = try? Data(contentsOf: dir.appendingPathComponent(Self.sessionFileName)) else { return nil }
+            return try? JSONDecoder.callRecord.decode(BlockedCall.self, from: data)
+        }
+        lock.withLock {
+            if var own = session,
+               let later = found.filter({ $0.bundleID == own.bundleID && $0.plannedStart == own.plannedStart && $0.lastSeen > own.lastSeen })
+                   .max(by: { $0.lastSeen < $1.lastSeen }) {
+                own.ended = later.ended
+                own.lastSeen = later.lastSeen
+                save(own, at: later.lastSeen)
+            }
+            guard var newest = found.filter({ !$0.ended }).max(by: { $0.lastSeen < $1.lastSeen }) else { return }
+            if let own = session, !own.ended, own.lastSeen >= newest.lastSeen { return }
+            newest.title = nil
+            newest.key = ""
+            session = newest
         }
     }
 

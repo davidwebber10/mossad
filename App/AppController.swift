@@ -185,7 +185,8 @@ final class AppController: ObservableObject {
     /// One voice model for the pipeline and the live names, loaded once.
     private let embeddings = FluidEmbeddingProvider()
     /// 0 means on. Otherwise Mossad is off until this time (seconds since 1970; `.infinity` for "until I turn it on").
-    @AppStorage("offUntil") private var offUntil: Double = 0
+    /// Mac-wide: Off holds across a switch of profile.
+    @AppStorage("offUntil", store: MacDefaults.store) private var offUntil: Double = 0
     private var resumeTimer: Timer?
 
     var isOn: Bool { offUntil == 0 }
@@ -239,6 +240,24 @@ final class AppController: ObservableObject {
     /// The upcoming meetings the owner chose not to record.
     @Published private(set) var noRecord = NoRecordBook()
     private let noRecordGate = NoRecordGate()
+    /// The other profiles' do-not-record lists, read once at launch for the gate only: never shown, never logged.
+    var otherNoRecord: [(id: String, name: String, book: NoRecordBook)] = []
+    /// Every other live profile with its NoRecord folder; none for a copy that takes no profiles or runs on a made-up
+    /// registry.
+    var otherNoRecordFolders: [(id: String, name: String, folder: URL)] {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return AppIdentity.current.otherProfiles(in: profiles.registry).map { ($0.id, $0.name, Paths(root: $0.rootURL(home: home)).noRecord) }
+    }
+
+    /// The other profiles' lists again after the registry changed (an Add, a Rename, a Delete): a deleted profile's
+    /// list leaves the gate at once, a new profile's joins it.
+    func refreshOtherNoRecord() {
+        otherNoRecord = otherNoRecordFolders.map { ($0.id, $0.name, NoRecordBook.peek(from: $0.folder)) }
+        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord.map(\.book)))
+    }
+    /// Why calls with an invite are kept off the record with no choice of the owner: an unknown list, the active
+    /// profile's or another's.
+    var noRecordProblem: NoRecordListProblem? { NoRecordListProblem.find(own: noRecord, others: otherNoRecord.map { ($0.name, $0.book) }) }
     /// Calls still to come, without the ones being recorded or already recorded.
     /// Views ask for this each time they draw. The list changes with the events, the meetings, and the clock, so it
     /// is computed once for each of those and for each minute.
@@ -375,9 +394,24 @@ final class AppController: ObservableObject {
     let paths = Paths.live
     /// Held for the life of the app: only the copy that has it records, recovers, and processes in this folder.
     private var instanceLock: InstanceLock?
+    /// With a registry file: the Mac-wide lock, so only one profile is the foreground app.
+    var foregroundLock: InstanceLock?
+    /// The registry as the switcher and Settings show it; read again before each change.
+    @Published var profiles: ProfileRegistry.Loaded = AppIdentity.current.registry
+    /// Why the last change of profiles did not happen, in words for the owner.
+    @Published var profileProblem: String? { didSet { profileProblemSince = Date() } }
+    /// The sheet of Settings > General > Profiles that is open.
+    @Published var profileSheet: ProfileSheet?
+    /// When `profileProblem` was set, for how long it shows.
+    var profileProblemSince = Date()
+    /// A switch is going on: no other change of profiles starts until it ends.
+    var switching = false
     /// A preview, Rehearsal, or a second copy on the same folder: it shows the meetings and records, processes,
     /// and syncs nothing.
     private(set) var isInert = false
+    /// Set once the launch knows whether this copy is inert. Before it, and in an inert copy, the iCloud Keychain
+    /// items the iPhone reads are neither written nor deleted.
+    private(set) var launchDecided = false
     /// Another copy held the folder's lock at launch (+SecondCopy). The menu says so, and nothing is processed.
     @Published private(set) var isSecondCopy = false
     /// The second copy saw the lock free: the menu offers "Restart Mossad".
@@ -497,7 +531,7 @@ final class AppController: ObservableObject {
     @Published var transcribingAgainCallID: String?
     @AppStorage("coachEnabled") var coachEnabled = false
     /// "Send anonymous usage statistics" (Settings › Storage & Sync): on by default (+UsageStats).
-    @AppStorage(UsageReportPlan.enabledKey) var usageStatsEnabled = true
+    @AppStorage(UsageReportPlan.enabledKey, store: MacDefaults.store) var usageStatsEnabled = true
     /// The wait, the daily check, and the send; cancelled when the owner turns the statistics off.
     var usageStatsTask: Task<Void, Never>?
     /// The days the app ran and the failures by kind, for the statistics only.
@@ -601,8 +635,12 @@ final class AppController: ObservableObject {
         shareBook = ShareBook.load(from: paths.shares)
         rememberBucketKind()
         noRecord = NoRecordBook.load(from: paths.noRecord)
-        noRecordGate.update(book: noRecord)
+        // Not recording is Mac-wide: another profile's refusal blocks here too, and its blocked call goes on.
+        let otherFolders = otherNoRecordFolders
+        otherNoRecord = otherFolders.map { ($0.id, $0.name, NoRecordBook.peek(from: $0.folder)) }
+        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord.map(\.book)))
         noRecordGate.persistSession(in: paths.noRecord)
+        noRecordGate.adopt(sessionsIn: otherFolders.map(\.folder))
         // The chosen calendars apply before anything matches a call to an invite.
         macCalendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         loadGoogleNames()
@@ -621,20 +659,51 @@ final class AppController: ObservableObject {
         // Rehearsal only walks through setup: like a preview, it starts no detection, recording, processing, or sync.
         // A second copy on the same folder would delete or cut the first copy's live recording at launch.
         if !preview, !Rehearsal.isOn {
-            switch InstanceLock.acquire(root: paths.root) {
-            case .held(let lock): instanceLock = lock
-            case .taken:
+            // With profiles, one copy of Mossad is the foreground app for the Mac: the Mac-wide lock first, then the
+            // folder's. `LaunchLocks` decides what this copy keeps; a second copy keeps no lock.
+            var macWide: LaunchLocks.Result?
+            if ProfileLaunch.takesForegroundLock(AppIdentity.current) {
+                switch InstanceLock.acquire(root: Self.macWideLockFolder) {
+                case .held(let lock): foregroundLock = lock; macWide = .held
+                case .taken: macWide = .taken
+                case .failed(let code):
+                    macWide = .failed
+                    Log.error("Could not take the Mac-wide lock: \(String(cString: strerror(code)))")
+                }
+            }
+            var folder: LaunchLocks.Result?
+            if LaunchLocks.triesFolder(macWide: macWide) {
+                switch InstanceLock.acquire(root: paths.root) {
+                case .held(let lock): instanceLock = lock; folder = .held
+                case .taken: folder = .taken
+                case .failed(let code):
+                    folder = .failed
+                    // Not a sign of another copy, so this copy works as before the lock existed.
+                    Log.error("Could not lock \(paths.root.path): \(String(cString: strerror(code)))")
+                }
+            }
+            let decision = LaunchLocks.decide(macWide: macWide, folder: folder)
+            Log.info("Profiles: this copy is \(AppIdentity.current.profile.id)\(AppIdentity.current.madeUpRegistry ? " at \(paths.root.path)" : ""); "
+                     + "Mac-wide lock \(macWide.map { "\($0)" } ?? "not used"), folder lock \(folder.map { "\($0)" } ?? "not tried"), second copy \(decision.secondCopy)")
+            if !decision.keepsMacWide { foregroundLock = nil }
+            if decision.secondCopy {
                 isSecondCopy = true
-                Log.error("Another copy of Mossad uses \(paths.root.path); this copy only shows the meetings")
+                Log.error(macWide == .taken ? "Another copy of Mossad runs on this Mac; this copy only shows the meetings"
+                                            : "Another copy of Mossad uses \(paths.root.path); this copy only shows the meetings")
                 notifier.postSecondCopy(otherQuit: false)
                 waitForInstanceLock()
-            case .failed(let code):
-                // Not a sign of another copy, so this copy works as before the lock existed.
-                Log.error("Could not lock \(paths.root.path): \(String(cString: strerror(code)))")
             }
         }
-        let inert = preview || AppIdentity.current.isPreview || Rehearsal.isOn || isSecondCopy
+        let inert = RunMode.decide(preview: preview || AppIdentity.current.isPreview, rehearsal: Rehearsal.isOn, secondCopy: isSecondCopy,
+                                   madeUpRegistry: AppIdentity.current.madeUpRegistry) == .inert
         isInert = inert
+        launchDecided = true
+        if inert {
+            Log.info("iCloud Keychain: this copy is inert and leaves the items for the iPhone alone")
+        } else {
+            updateSharedAIKey()
+            updateSharedServer()
+        }
         // Reading the calendar records nothing. A preview lists made-up calendars, and its invites come from MOSSAD_UPCOMING.
         if inert { refreshUpcoming() }
         if !inert {
@@ -654,7 +723,7 @@ final class AppController: ObservableObject {
                 }
             }
             notifier.onNotACall = { [weak self] call in self?.quietUnconfirmed(call) }
-            for answer in UnconfirmedDismissals(data: UserDefaults.standard.data(forKey: "notACall")).active(at: Date()) {
+            for answer in UnconfirmedDismissals(data: MacDefaults.store.data(forKey: "notACall")).active(at: Date()) {
                 detection.dismissUnconfirmed(answer.call, until: answer.until)
             }
 
@@ -676,7 +745,10 @@ final class AppController: ObservableObject {
                         if let block = self.noRecordGate.currentBlock, block.listUnreadable {
                             // Not the owner's choice, so never silent: say it at each call, with a way to record.
                             Log.error("Not recording \(block.title): the do-not-record list could not be read")
-                            Task { @MainActor in self.notifier.postNotRecorded(title: block.title, bundleID: bundleID, platform: platform) }
+                            Task { @MainActor in
+                                self.notifier.postNotRecorded(title: block.title, bundleID: bundleID, platform: platform,
+                                                              problem: self.noRecordProblem ?? .own)
+                            }
                         } else {
                             Log.info("Not recording \(platform.displayName): the owner chose not to record this meeting")
                         }
@@ -737,8 +809,10 @@ final class AppController: ObservableObject {
             }
             requestPermissions()
             _ = updater
-            hotKeys.register(.bookmark, HotKeyShortcut.bookmark) { [weak self] in self?.bookmarkCurrentCall() }
-            registerAskShortcut()
+            // Tried again for a while: after a switch the instance before may still hold them for a moment.
+            hotKeys.onRegistered = { [weak self] id in if id == .ask { self?.askShortcutFailed = false } }
+            hotKeys.register(.bookmark, HotKeyShortcut.bookmark, retrying: true) { [weak self] in self?.bookmarkCurrentCall() }
+            registerAskShortcut(retrying: true)
 
             refreshUpcoming()
             // Chats and notes from the phone arrive within five minutes.
@@ -797,6 +871,7 @@ final class AppController: ObservableObject {
     private func finishLaunch(_ records: [CallRecord], held: [String], inert: Bool) {
         meetings = records
         meetingsLoaded = true
+        reportMacWideStrays()
         // The count of the cards in the sidebar, from the start, and again as cards get old.
         refreshFindings()
         Task { [weak self] in
@@ -811,6 +886,8 @@ final class AppController: ObservableObject {
             waiting.forEach { $0() }
         }
         if !inert {
+            // A delete of a profile that stopped goes on.
+            finishRemovals()
             // A recovered call whose muted parts are still in its track is held back; the pipeline tries again.
             if !held.isEmpty { notifier.postCaptureProblem(.mutedNotSilenced) }
             if isOn || (offUntilDate.map { $0 <= Date() } ?? false) {
@@ -1488,7 +1565,7 @@ final class AppController: ObservableObject {
     /// Settings › Recording: an empty do-not-record list. Also ends the block that a damaged list causes, at once.
     func resetNoRecordList() {
         noRecord.reset()
-        noRecordGate.update(book: noRecord)
+        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord.map(\.book)))
         do { try noRecord.save(to: paths.noRecord) } catch { Log.error("Saving the do-not-record list failed: \(error)") }
         Log.info("The do-not-record list was reset")
     }
@@ -1506,7 +1583,7 @@ final class AppController: ObservableObject {
     func setRecording(_ choice: RecordingChoice, for meeting: UpcomingMeeting) {
         noRecord.set(choice, for: meeting)
         noRecord.removeExpired(now: Date())
-        noRecordGate.update(book: noRecord)
+        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord.map(\.book)))
         do { try noRecord.save(to: paths.noRecord) } catch { Log.error("Saving the recording choice failed: \(error)") }
     }
 
@@ -1938,9 +2015,9 @@ final class AppController: ObservableObject {
     private func quietUnconfirmed(_ call: UnconfirmedCall) {
         let now = Date()
         let until = UnconfirmedDismissals.endOfDay(after: now)
-        var answers = UnconfirmedDismissals(data: UserDefaults.standard.data(forKey: "notACall"))
+        var answers = UnconfirmedDismissals(data: MacDefaults.store.data(forKey: "notACall"))
         answers.add(call, until: until, now: now)
-        UserDefaults.standard.set(answers.data, forKey: "notACall")
+        MacDefaults.store.set(answers.data, forKey: "notACall")
         detection.dismissUnconfirmed(call, until: until)
     }
 
@@ -2059,11 +2136,22 @@ final class AppController: ObservableObject {
         permissions.askAutomationIfNeeded(bundleID)
     }
 
+    /// A Mac-wide key in a profile's own settings means something read or wrote it past `MacDefaults`.
+    private func reportMacWideStrays() {
+        let identity = AppIdentity.current
+        guard identity.takesProfiles, !identity.profile.isDefault, let suite = identity.defaultsSuite else { return }
+        let strays = MacDefaults.strays(in: UserDefaults.standard.persistentDomain(forName: suite) ?? [:])
+        if !strays.isEmpty { Log.error("Settings: Mac-wide keys in this profile's settings: \(strays.joined(separator: ", "))") }
+        // The rule that no test of the app target can reach: every Mac-wide key (`offUntil` and `usageStatsEnabled`
+        // through `@AppStorage(store: MacDefaults.store)` among them) is read and written past the profile's swap.
+        assert(strays.isEmpty, "Mac-wide keys in this profile's settings: \(strays)")
+    }
+
     private func enableLaunchAtLoginOnce() {
-        guard !AppIdentity.current.isPreview, !UserDefaults.standard.bool(forKey: "didSetLoginItem") else { return }
+        guard !AppIdentity.current.isPreview, !MacDefaults.store.bool(forKey: "didSetLoginItem") else { return }
         do {
             try SMAppService.mainApp.register()
-            UserDefaults.standard.set(true, forKey: "didSetLoginItem")
+            MacDefaults.store.set(true, forKey: "didSetLoginItem")
         } catch {
             Log.error("Launch at login failed: \(error)")
         }

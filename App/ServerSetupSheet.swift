@@ -51,6 +51,10 @@ struct ServerSetupSheet: View {
                             Button("Open the setup guide") { NSWorkspace.shared.open(Self.guide) }.buttonStyle(.sheetSecondary)
                             Button("Copy the first commands") { copy(Self.commands) }.buttonStyle(.sheetSecondary)
                         }
+                        if controller.profileMenu != nil {
+                            Text("Each profile needs its own server: its own Worker, address, secret, database, and bucket.")
+                                .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
                         Text("Already deployed? Go on to step 2.").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                     }
                     SetupStep(number: 2, title: "Address", state: foundAddress != nil ? .done : .active,
@@ -166,6 +170,12 @@ struct ServerSetupSheet: View {
 
     private func checkAddress() {
         guard let url = ServerConnection.address(from: address) else { return }
+        // A server is one profile's: no request goes to one that another profile of this Mac uses.
+        if let owner = controller.serverOwner(of: url) {
+            foundAddress = nil
+            addressCheck = .failed(ProfileRules.serverRefusal(owner))
+            return
+        }
         addressCheck = .checking
         Task {
             do {
@@ -202,6 +212,12 @@ struct ServerSetupSheet: View {
 
     private func start() {
         guard let url = foundAddress, let hello else { return }
+        // The list of profiles can change while the sheet is open: another profile may own this server now.
+        if let owner = controller.serverOwner(of: url) {
+            foundAddress = nil
+            addressCheck = .failed(ProfileRules.serverRefusal(owner))
+            return
+        }
         started = true
         controller.connectServer(ServerConnection(address: url, secret: secret), hello: hello, syncThere: syncThere)
     }

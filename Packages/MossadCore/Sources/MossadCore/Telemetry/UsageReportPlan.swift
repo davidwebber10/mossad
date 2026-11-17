@@ -66,13 +66,13 @@ public enum UsageReportPlan {
     }
 
     /// The random id of this install, made once. Never from the hardware.
-    public static func installID(_ defaults: UserDefaults = .standard) -> UUID {
+    public static func installID(_ defaults: UserDefaults = MacDefaults.store) -> UUID {
         if let saved = defaults.string(forKey: installIDKey).flatMap(UUID.init(uuidString:)) { return saved }
         return resetInstallID(defaults)
     }
 
     @discardableResult
-    public static func resetInstallID(_ defaults: UserDefaults = .standard) -> UUID {
+    public static func resetInstallID(_ defaults: UserDefaults = MacDefaults.store) -> UUID {
         let id = UUID()
         defaults.set(id.uuidString.lowercased(), forKey: installIDKey)
         return id

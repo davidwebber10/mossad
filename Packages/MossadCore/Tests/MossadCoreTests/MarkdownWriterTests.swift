@@ -126,3 +126,33 @@ final class MarkdownWriterTests: XCTestCase {
         XCTAssertFalse(md.contains("## Decisions"), md)
     }
 }
+
+extension MarkdownWriterTests {
+    func testAProfilesNoteNamesItsOwnFolder() {
+        XCTAssertTrue(MarkdownWriter.render(fixture(), audioRoot: "~/Mossad Work").contains("\naudio: ~/Mossad Work/Audio/20261020-143000\n"))
+        XCTAssertTrue(MarkdownWriter.render(fixture()).contains("\naudio: ~/Mossad/Audio/20261020-143000\n"))
+        XCTAssertEqual(AppIdentity(bundleID: AppIdentity.mainBundleID).noteRoot, "~/Mossad")
+        XCTAssertEqual(AppIdentity(bundleID: AppIdentity.rehearsalBundleID).noteRoot, "~/Mossad")
+        var r = ProfileRegistry()
+        r.profiles.append(Profile(id: "1a2b3c4d", name: "Work", color: .blue, root: "~/Mossad Work"))
+        let loaded = ProfileRegistry.Loaded(registry: r, state: .read)
+        XCTAssertEqual(AppIdentity(bundleID: AppIdentity.mainBundleID, arguments: ["Mossad", "--profile", "1a2b3c4d"], registry: loaded).noteRoot, "~/Mossad Work")
+        XCTAssertEqual(AppIdentity(bundleID: AppIdentity.mainBundleID, arguments: ["Mossad", "--profile", "1a2b3c4d"],
+                                   environment: ["MOSSAD_ROOT": "/tmp/demo"], registry: loaded).noteRoot, "~/Mossad")
+    }
+
+    func testANoteOfAnyFolderIsFoundByItsCallID() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("note-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        let cases: [(String, Bool)] = [
+            ("audio: ~/Mossad/Audio/c1", true), ("audio: ~/Mossad Work/Audio/c1", true), ("audio: /Volumes/x/Mossad/Audio/c1", true),
+            ("audio: ~/Mossad Work/Audio/c12", false), ("audio: ~/Mossad/Audio/c1/x", false), ("note: see /Audio/c1", false),
+        ]
+        for (i, (line, expected)) in cases.enumerated() {
+            let url = dir.appendingPathComponent("\(i).md")
+            try Data("---\ntitle: \"x\"\n\(line)\n---\n".utf8).write(to: url)
+            XCTAssertEqual(MarkdownWriter.isNote(url, of: "c1"), expected, line)
+        }
+    }
+}
