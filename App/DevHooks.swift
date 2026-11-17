@@ -30,6 +30,16 @@ enum DevHooks {
     private static func has(_ flag: String) -> Bool { CommandLine.arguments.contains(flag) }
     private static var env: [String: String] { ProcessInfo.processInfo.environment }
 
+    /// `MOSSAD_PROOF_WORKERS=1` on a made-up registry, in a debug build: the window app starts the workers of the
+    /// registry's other profiles (never `default`), for the proofs. Those workers stay in their made-up folders.
+    static var proofWorkers: Bool {
+        #if DEBUG
+        env["MOSSAD_PROOF_WORKERS"] == "1" && AppIdentity.current.madeUpRegistry && !preview
+        #else
+        false
+        #endif
+    }
+
     static func run(_ c: AppController, inert: Bool) {
         // `--regenerate-summaries` writes new summaries for today's finished meetings.
         if debug, !inert, has("--regenerate-summaries") {

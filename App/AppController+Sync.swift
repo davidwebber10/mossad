@@ -27,7 +27,7 @@ extension AppController {
     static var hasICloud: Bool { CloudEntitlement.hasCloudKit }
 
     /// Whether this copy may write or delete the iCloud Keychain items: only once the launch decided, and never inert.
-    var writesSharedItems: Bool { SharedItemsGate.appMayWrite(iCloud: Self.hasICloud, launchDecided: launchDecided, inert: isInert) }
+    var writesSharedItems: Bool { SharedItemsGate.appMayWrite(iCloud: Self.hasICloud, launchDecided: launchDecided, inert: !mode.does(.sharedItems)) }
 
     /// Puts the chosen AI provider, model, and key in iCloud Keychain for the iPhone, or removes them.
     func updateSharedAIKey() {
@@ -156,7 +156,7 @@ extension AppController {
     /// Uploads new and changed meetings and pulls what the iPhone changed. One sync at a time; a sync asked for
     /// during one runs again after it.
     func syncNow() {
-        guard !isInert, !AppIdentity.current.isPreview else { return }
+        guard mode.does(.sync), !AppIdentity.current.isPreview else { return }
         let mirror = mirrorSync
         let main = currentSync
         // No store to pull from: a file that was set aside has no other copy to wait for.

@@ -12,6 +12,8 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
     /// Set when an update is ready while a call records; run once the call ends.
     private var pendingInstall: (() -> Void)?
     private let isRecording: () -> Bool
+    /// Runs right before Sparkle installs and relaunches: the workers of the other profiles stop first.
+    private let beforeInstall: () -> Void
     @Published private(set) var canCheck = false
     @Published private(set) var waitingForCall = false
     /// The newer version Sparkle found, for the sidebar's card. Cleared when the owner skips it.
@@ -22,8 +24,9 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
     @Published private(set) var problem: FriendlyError?
     private var observation: AnyCancellable?
 
-    init(start: Bool, isRecording: @escaping () -> Bool) {
+    init(start: Bool, isRecording: @escaping () -> Bool, beforeInstall: @escaping () -> Void) {
         self.isRecording = isRecording
+        self.beforeInstall = beforeInstall
         super.init()
         // Sparkle's hosts keep the standard defaults they find when made: in a profile, the Mac's own domain.
         var macOwn = false
@@ -88,6 +91,7 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
         guard let install = pendingInstall else { return }
         pendingInstall = nil
         waitingForCall = false
+        beforeInstall()
         install()
     }
 
@@ -133,7 +137,10 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
         // Sparkle calls this on the main thread; the box carries its handler into main-actor state.
         let handler = InstallHandler(run: installHandler)
         return MainActor.assumeIsolated {
-            guard isRecording() else { return false }
+            guard isRecording() else {
+                beforeInstall()
+                return false
+            }
             pendingInstall = handler.run
             waitingForCall = true
             Log.info("Update \(item.displayVersionString) waits for the call to end")

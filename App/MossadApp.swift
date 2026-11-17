@@ -321,6 +321,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var quitPending = false
 
+    /// The workers of the other profiles stop with this app: `stopping` in the file and SIGTERM, no wait.
+    func applicationWillTerminate(_ notification: Notification) {
+        AppController.current?.workers?.quit()
+    }
+
     private func finishQuit() {
         guard quitPending else { return }
         quitPending = false

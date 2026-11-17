@@ -79,6 +79,8 @@ final class AppController: ObservableObject {
     @Published private(set) var status: Status = .idle {
         // An in-person recording owns the mic until Stop; the call scan every 2 s would be thrown away.
         didSet {
+            let was = if case .recording = oldValue { true } else { false }
+            if was != isRecording { workers?.setRecording(isRecording) }
             let room = if case .recording(.inPerson, _) = status { true } else { false }
             detection.isSuspended = room
             // With detection suspended, the room's mic gets its own stall check.
@@ -223,7 +225,9 @@ final class AppController: ObservableObject {
     /// The one controller, for the app delegate's Dock handling.
     nonisolated(unsafe) static weak var current: AppController?
     /// Checks GitHub releases for new versions; never in an inert copy.
-    private(set) lazy var updater = Updater(start: !isInert && !AppIdentity.current.isPreview) { [weak self] in self?.isRecording ?? false }
+    private(set) lazy var updater = Updater(start: !isInert && !AppIdentity.current.isPreview,
+                                            isRecording: { [weak self] in self?.isRecording ?? false },
+                                            beforeInstall: { [weak self] in self?.workers?.quit() })
     /// Whether the main window can be seen. A window on another desktop or behind others keeps its views
     /// alive, so animations check this and stop while it is hidden.
     @Published private(set) var windowVisible = false
@@ -409,6 +413,13 @@ final class AppController: ObservableObject {
     /// A preview, Rehearsal, or a second copy on the same folder: it shows the meetings and records, processes,
     /// and syncs nothing.
     private(set) var isInert = false
+    /// What this process is (`RunMode`): the window app is `full` or `inert`, never a worker. Set where `isInert` is.
+    /// `full` until the launch decides, as `isInert` is false until then.
+    private(set) var mode: RunMode = .full
+    /// The workers of the other profiles; nothing with one profile.
+    private(set) var workers: WorkerManager!
+    /// The switcher's second line of each other profile, from its worker's status file.
+    @Published var workerLines: [String: String] = [:]
     /// Set once the launch knows whether this copy is inert. Before it, and in an inert copy, the iCloud Keychain
     /// items the iPhone reads are neither written nor deleted.
     private(set) var launchDecided = false
@@ -616,6 +627,8 @@ final class AppController: ObservableObject {
     }
 
     init() {
+        // A worker never makes the window app's objects (`WorkerEntry`).
+        precondition(!WorkerLaunch.isWorker(CommandLine.arguments))
         try? paths.ensureDirectories()
         Log.directory = paths.logs
         // A preview only looks: its lines would fill the owner's log with starts that recorded nothing.
@@ -696,7 +709,11 @@ final class AppController: ObservableObject {
         }
         let inert = RunMode.decide(preview: preview || AppIdentity.current.isPreview, rehearsal: Rehearsal.isOn, secondCopy: isSecondCopy,
                                    madeUpRegistry: AppIdentity.current.madeUpRegistry) == .inert
+        // The detection, the recording, the hot keys, the login item, the updater, the permissions, the notifications,
+        // the usage statistics, and the upkeep run only in a `full` copy; an `inert` one only shows.
+        mode = inert ? .inert : .full
         isInert = inert
+        workers = WorkerManager(identity: .current, mode: mode, proof: DevHooks.proofWorkers) { [weak self] in self?.workerLines = $0 }
         launchDecided = true
         if inert {
             Log.info("iCloud Keychain: this copy is inert and leaves the items for the iPhone alone")
@@ -842,10 +859,10 @@ final class AppController: ObservableObject {
         }
         // The recovery and the first list decode every record: off the main thread, so the menu bar icon and the
         // window do not wait for them. The order stays: recover, then start detection, then process.
-        let paths = paths
+        let paths = paths, recovers = mode.does(.recover)
         Task.detached(priority: .userInitiated) { [weak self] in
             // Before detection starts: a call that starts during a slow launch must not look like a crashed one.
-            let held = inert ? [] : ProcessingQueue(paths: paths).recoverInterrupted()
+            let held = recovers ? ProcessingQueue(paths: paths).recoverInterrupted() : []
             let records = Self.previewFailures(MeetingIndex(paths: paths).all())
             await self?.finishLaunch(records, held: held, inert: inert)
         }
@@ -920,6 +937,9 @@ final class AppController: ObservableObject {
             startShareWatch()
             startUsageStats()
         }
+        // The other profiles' workers, once this launch is done: none with one profile. On a made-up registry only
+        // with the proof hook.
+        workers.start(recording: isRecording)
         DevHooks.run(self, inert: inert)
     }
 
@@ -1063,7 +1083,7 @@ final class AppController: ObservableObject {
     /// labels after a rename or a merge, and the org matches by id. Off the main thread; each part compares before
     /// it writes, so it is safe to run at any time. `renamed` is a rename the owner made just now.
     func refreshPeopleReferences(renamed: (old: String, new: String)? = nil) {
-        guard !isInert, !isSecondCopy, let pipeline else { return }
+        guard mode.does(.people), !isSecondCopy, let pipeline else { return }
         let paths = paths
         Task {
             let changed = await pipeline.refreshLabels(renamed: renamed)
@@ -1791,7 +1811,7 @@ final class AppController: ObservableObject {
     /// is asked for, it then goes on with the move.
     func syncCloud() {
         // One loop at a time: two would upload the same recording together.
-        guard !isInert, let pipeline else { return }
+        guard mode.does(.backup), let pipeline else { return }
         // A request during a loop runs one more loop after it, so a recording finished meanwhile is not left out.
         if cloudSyncing { cloudSyncAgain = true; return }
         // A move that was asked for starts when the server is ready. Until then this pass works as before.
@@ -2066,14 +2086,14 @@ final class AppController: ObservableObject {
 
     /// Processes calls waiting in the queue, such as a recording that arrived from the iPhone.
     func processPending() {
-        guard !isInert else { return }
+        guard mode.does(.queue) else { return }
         Task(priority: .utility) { await track { await self.pipeline.runPending() } }
     }
 
     /// A meeting written while the next call recorded has no recording yet (the encode waited). Each time some
     /// work ends and no call records, the missing ones are made, one run at a time, and then archived.
     private func makeMissingRecordings() {
-        guard !isInert, !isRecording, !makingRecordings else { return }
+        guard mode.does(.backup), !isRecording, !makingRecordings else { return }
         makingRecordings = true
         let audio = paths.audio
         Task(priority: .background) { [weak self] in
@@ -2099,9 +2119,9 @@ final class AppController: ObservableObject {
         let audio = paths.audio, days = deleteRecordings ? max(1, recordingDays) : nil, tracks = max(1, rawTracksDays)
         // Only a backup that this Mac can read counts as "the recording exists": a mark for another server does not.
         let archive = cloudArchive
-        await Task.detached(priority: .background) {
+        if mode.does(.retention) { await Task.detached(priority: .background) {
             Retention.sweep(audioRoot: audio, rawTracksAfterDays: tracks, recordingsAfterDays: days, hasBackup: { archive?.holds($0) ?? false })
-        }.value
+        }.value }
         runCoach()
         runCommitments()
         runNextTimeCheck()
@@ -2190,7 +2210,7 @@ final class AppController: ObservableObject {
             // For Chat's and other AI apps' tools, which cannot read the calendar: the events as read, without their
             // notes (`CalendarSnapshot`). Never made-up invites.
             let access = CalendarSnapshot.Access(mac: .macCalendar, google: calendar.lastGoogleRead)
-            let dir = paths.calendar, inert = isInert, read = events, made = sampled
+            let dir = paths.calendar, inert = !mode.does(.calendarSnapshot), read = events, made = sampled
             Task.detached(priority: .utility) {
                 do { try CalendarSnapshot.write(read, access: access, saved: now, inert: inert, sampled: made, to: dir) }
                 catch { Log.error("Saving the calendar for the tools failed: \(error)") }

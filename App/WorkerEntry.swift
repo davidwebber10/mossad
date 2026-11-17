@@ -6,6 +6,10 @@ import MossadCore
 /// It never returns.
 enum WorkerEntry {
     static func run(_ identity: AppIdentity) -> Never {
+        // The app in front ignores SIGTERM and handles it itself, and a child keeps an ignored signal: a worker sets
+        // its own. Until its watch handles the signal, SIGTERM ends it at once.
+        signal(SIGTERM, SIG_DFL)
+        signal(SIGINT, SIG_DFL)
         let arguments = CommandLine.arguments
         if let refusal = WorkerLaunch.refusal(identity, arguments: arguments) {
             say(refusal)
@@ -46,6 +50,8 @@ enum WorkerEntry {
         // 2. The profile's folder lock, for the life of the process: a worker never runs beside the window app of
         // its profile.
         let paths = Paths.live
+        // The lock file lives in the folder: a profile whose folder is not there yet gets it, and nothing else.
+        try? FileManager.default.createDirectory(at: paths.root, withIntermediateDirectories: true)
         let attempt = InstanceLock.acquire(root: paths.root)
         if let code = WorkerLaunch.afterLock(attempt) {
             say("Mossad: this profile is open in another copy; the worker does not start.")

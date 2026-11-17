@@ -31,6 +31,35 @@ public enum WorkerLaunch {
         !Onboarding.opensAtLaunch(finished: finished, hasMeetings: hasMeetings, preview: false, forced: false, rehearsal: false)
     }
 
+    /// The profiles that get a worker: each other live profile, only from the app in front (`startWorkers`), never
+    /// from a copy that takes no profiles. One profile: none. `proof` (a debug hook) lets the window app of a made-up
+    /// registry start them, and never for `default`, which on a made-up registry is the owner's real folder.
+    public static func profiles(_ identity: AppIdentity, mode: RunMode, proof: Bool = false) -> [Profile] {
+        if proof && identity.madeUpRegistry && identity.takesProfiles && mode != .worker {
+            return identity.registry.registry.live.filter { $0.id != identity.profile.id && !$0.isDefault }
+        }
+        guard mode.does(.startWorkers) else { return [] }
+        return identity.otherProfiles
+    }
+
+    /// The app writes `foreground.json` only when it starts a worker: with one profile there is no file.
+    public static func writesForegroundFile(profiles: [Profile]) -> Bool { !profiles.isEmpty }
+
+    public enum Restart: Equatable, Sendable { case after(TimeInterval), never, gaveUp }
+    public static let restartWaits: [TimeInterval] = [5, 30, 120]
+    /// A worker that ran this long starts the count of failed starts again.
+    public static let longRun: TimeInterval = 600
+
+    /// What the app does when a worker ended. `failures`: the failed starts in a row before this exit.
+    /// Never after a stop of the app's own, a refusal, or a profile whose setup is not done.
+    public static func restart(exit: Int32, failures: Int, stopping: Bool) -> Restart {
+        if stopping || exit == Exit.refused.rawValue || exit == Exit.setupNotDone.rawValue { return .never }
+        return failures < restartWaits.count ? .after(restartWaits[failures]) : .gaveUp
+    }
+
+    /// The `failures` of an exit: the count so far, or 0 when the worker ran `longRun` or more.
+    public static func failures(after count: Int, ranSeconds: TimeInterval) -> Int { ranSeconds >= longRun ? 0 : count }
+
     /// A worker's whole arguments: nothing else, never a secret.
     public static func arguments(for profile: Profile) -> [String] { ["--profile", profile.id, argument] }
 

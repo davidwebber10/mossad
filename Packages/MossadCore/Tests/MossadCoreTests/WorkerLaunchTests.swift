@@ -70,4 +70,59 @@ final class WorkerLaunchTests: XCTestCase {
         XCTAssertTrue(WorkerLaunch.setupDone(finished: true, hasMeetings: false))
         XCTAssertTrue(WorkerLaunch.setupDone(finished: false, hasMeetings: true))
     }
+
+    private func three() -> ProfileRegistry.Loaded {
+        var r = ProfileRegistry()
+        r.profiles.append(work)
+        var gone = Profile(id: "9f8e7d6c", name: "Old", color: .green, root: "~/Mossad Old")
+        gone.removing = true
+        r.profiles.append(gone)
+        return .init(registry: r, state: .read)
+    }
+
+    func testEachOtherProfileGetsAWorkerAndOnlyFromTheForegroundApp() {
+        func ids(_ identity: AppIdentity, _ mode: RunMode, proof: Bool = false) -> [String] {
+            WorkerLaunch.profiles(identity, mode: mode, proof: proof).map(\.id)
+        }
+        XCTAssertEqual(ids(AppIdentity(bundleID: main, arguments: ["Mossad", "--profile", "default"], registry: three()), .full), ["1a2b3c4d"])
+        XCTAssertEqual(ids(AppIdentity(bundleID: main, arguments: ["Mossad", "--profile", "1a2b3c4d"], registry: three()), .full), ["default"])
+        XCTAssertEqual(ids(AppIdentity(bundleID: main, arguments: ["Mossad", "--profile", "default"], registry: three()), .inert), [])
+        XCTAssertEqual(ids(AppIdentity(bundleID: main), .full), [])
+        XCTAssertEqual(ids(AppIdentity(bundleID: main, arguments: ["Mossad", "--profile", "1a2b3c4d"], registry: three(), madeUpRegistry: true), .full), [])
+        XCTAssertEqual(ids(AppIdentity(bundleID: AppIdentity.rehearsalBundleID, registry: three()), .full), [])
+        XCTAssertEqual(ids(AppIdentity(bundleID: main, arguments: ["Mossad", "--profile", "default"], registry: three()), .worker), [])
+    }
+
+    func testOnlyAProofOnAMadeUpRegistryLiftsTheRuleAndNeverForTheFirstProfile() {
+        var r = ProfileRegistry()
+        r.profiles.append(work)
+        r.profiles.append(Profile(id: "0b1c2d3e", name: "Other", color: .green, root: "/tmp/made up/Mossad Other"))
+        let made = AppIdentity(bundleID: main, arguments: ["Mossad", "--profile", "1a2b3c4d"], registry: .init(registry: r, state: .read), madeUpRegistry: true)
+        XCTAssertEqual(WorkerLaunch.profiles(made, mode: .inert, proof: true).map(\.id), ["0b1c2d3e"], "never `default`: on a made-up registry it is the real folder")
+        XCTAssertEqual(WorkerLaunch.profiles(made, mode: .inert, proof: false).map(\.id), [])
+        // The hook does nothing on the real registry.
+        let real = AppIdentity(bundleID: main, arguments: ["Mossad", "--profile", "default"], registry: three())
+        XCTAssertEqual(WorkerLaunch.profiles(real, mode: .inert, proof: true).map(\.id), [])
+    }
+
+    func testOneProfileStartsNothingAndWritesNoFile() {
+        let one = AppIdentity(bundleID: main)
+        XCTAssertTrue(WorkerLaunch.profiles(one, mode: .full).isEmpty)
+        XCTAssertFalse(WorkerLaunch.writesForegroundFile(profiles: []))
+        XCTAssertTrue(WorkerLaunch.writesForegroundFile(profiles: [work]))
+    }
+
+    func testAStoppedWorkerIsNotStartedAgain() {
+        for code: Int32 in [0, 3, 4, 9, 11] { XCTAssertEqual(WorkerLaunch.restart(exit: code, failures: 0, stopping: true), .never) }
+        XCTAssertEqual(WorkerLaunch.restart(exit: 5, failures: 0, stopping: false), .never)
+        XCTAssertEqual(WorkerLaunch.restart(exit: 2, failures: 0, stopping: false), .never)
+    }
+
+    func testAWorkerThatKeepsFailingIsGivenUp() {
+        XCTAssertEqual([0, 1, 2, 3, 7].map { WorkerLaunch.restart(exit: 4, failures: $0, stopping: false) },
+                       [.after(5), .after(30), .after(120), .gaveUp, .gaveUp])
+        XCTAssertEqual(WorkerLaunch.restart(exit: 11, failures: 0, stopping: false), .after(5))
+        XCTAssertEqual(WorkerLaunch.failures(after: 3, ranSeconds: 600), 0, "a worker that ran 10 minutes starts the count again")
+        XCTAssertEqual(WorkerLaunch.failures(after: 1, ranSeconds: 30), 1)
+    }
 }

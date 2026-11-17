@@ -16,11 +16,11 @@ extension AppController {
     }
 
     /// The switcher's menu; nil with one profile.
-    var profileMenu: ProfileMenu? { ProfileMenu(profiles.registry, active: activeProfile.id, recording: isRecording) }
+    var profileMenu: ProfileMenu? { ProfileMenu(profiles.registry, active: activeProfile.id, recording: isRecording, status: workerLines) }
 
     /// Only the real app changes the real registry: never a preview, an inert copy, or a run on a made-up registry.
     private var changesProfiles: Bool {
-        ProfileSwitch.mayChange(inert: isInert, mayChangeRegistry: AppIdentity.current.mayChangeRegistry, switching: switching)
+        ProfileSwitch.mayChange(inert: !mode.does(.registry), mayChangeRegistry: AppIdentity.current.mayChangeRegistry, switching: switching)
     }
 
     /// The problem as the switcher and Settings show it: for a while, and a refusal for a call only during one.

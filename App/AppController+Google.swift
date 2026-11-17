@@ -225,7 +225,7 @@ extension AppController {
     /// Reads the directory and the contacts, at most once a day unless forced, and fills the saved people by their
     /// addresses. Off the main thread; nothing in a preview, Rehearsal, or a second copy.
     func refreshGoogleDirectory(force: Bool = false) {
-        guard !isInert, google.has(.directory) || google.has(.contacts) else { return }
+        guard mode.does(.upkeep), google.has(.directory) || google.has(.contacts) else { return }
         let last = UserDefaults.standard.double(forKey: "googleDirectoryRead")
         guard force || Date().timeIntervalSince1970 - last > 86_400 else { return }
         let session = google, paths = paths, library = library, names = googleNames
@@ -256,7 +256,7 @@ extension AppController {
     /// Every 15 minutes, for the last 2 days: the notes of meetings that ended become notes-only meetings, or the
     /// second source of a recorded one. Never while a call records; nothing without Calendar and Docs.
     func runGeminiCheck() {
-        guard !isInert, google.has(.calendar), google.has(.docs), !googleRunning, let pipeline else { return }
+        guard mode.does(.geminiNotes), google.has(.calendar), google.has(.docs), !googleRunning, let pipeline else { return }
         let lastSeconds = UserDefaults.standard.object(forKey: "geminiLastCheck") as? Double
         guard GeminiImport.isDue(last: lastSeconds.map(Date.init(timeIntervalSince1970:)), now: Date(), recording: isRecording) else { return }
         googleRunning = true
@@ -287,7 +287,7 @@ extension AppController {
     /// Finds the past meetings with notes in the chosen days, and says what an import would cost.
     func findPastNotes() {
         let connector = googleConnector
-        guard !isInert, google.has(.calendar), google.has(.docs), !connector.pastSearching, let pipeline else { return }
+        guard mode.does(.geminiNotes), google.has(.calendar), google.has(.docs), !connector.pastSearching, let pipeline else { return }
         connector.pastSearching = true
         connector.pastResult = nil
         connector.pastPerHour = notesPerHour
