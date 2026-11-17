@@ -103,6 +103,11 @@ extension AppController {
             return
         }
         Log.info("Profiles: added one")
+        // The first file of the Mac: this copy started with no Mac-wide lock. It takes it now, so the new instance
+        // waits for it to quit, as after every later switch.
+        if foregroundLock == nil, case .held(let lock) = InstanceLock.acquire(root: ProfileRegistry.folder(home: Self.home)) {
+            foregroundLock = lock
+        }
         switchProfile(to: profile.id)
     }
 

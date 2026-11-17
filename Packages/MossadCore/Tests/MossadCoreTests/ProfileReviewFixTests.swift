@@ -144,11 +144,9 @@ final class ProfileReviewFixTests: XCTestCase {
     // MARK: 11. The tests hold the production lines
 
     func testTheInstallIDIsReadFromTheHeldMacDomain() throws {
-        let suite = "com.dwebber.mossad.test-macwide"
-        let held = try XCTUnwrap(UserDefaults(suiteName: suite))
-        held.removePersistentDomain(forName: suite)
+        let held = try MadeUpSuite(self).defaults
         MacDefaults.hold(held)
-        defer { MacDefaults.release(); held.removePersistentDomain(forName: suite) }
+        defer { MacDefaults.release() }
         let id = UsageReportPlan.installID()
         XCTAssertEqual(held.string(forKey: UsageReportPlan.installIDKey), id.uuidString.lowercased())
         XCTAssertEqual(UsageReportPlan.resetInstallID().uuidString.lowercased(), held.string(forKey: UsageReportPlan.installIDKey))
@@ -169,7 +167,8 @@ final class ProfileReviewFixTests: XCTestCase {
         let fake = Profile(id: "zzzzzzzz", name: "Test", color: .blue, root: "~/Mossad Test")
         let identity = AppIdentity(bundleID: main, arguments: ["Mossad", "--profile", "zzzzzzzz"], registry: loaded([fake]))
         let real = UserDefaults.standard
-        XCTAssertTrue(identity.isolateDefaults())
+        let made = try MadeUpSuite(self)
+        XCTAssertTrue(identity.isolateDefaults(makeSuite: { _ in made.defaults }))
         defer { AppIdentity.undoIsolation() }
         let suite = UserDefaults.standard
         XCTAssertFalse(suite === real)

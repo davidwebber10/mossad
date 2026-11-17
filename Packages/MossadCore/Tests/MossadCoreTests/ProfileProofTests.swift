@@ -161,19 +161,20 @@ final class ProfileProofTests: XCTestCase {
     }
 
     func testAProfilesSettingsAreNeverEmptied() throws {
-        let suite = "com.dwebber.mossad.profile.zzzzzzzz"
-        UserDefaults(suiteName: suite)?.set("Sam Carter", forKey: "ownerName")
-        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
-        let s = try XCTUnwrap(testProfile().profileSettings())
-        XCTAssertEqual(s.persistentDomain(forName: suite)?["ownerName"] as? String, "Sam Carter")
+        let made = try MadeUpSuite(self)
+        made.defaults.set("Sam Carter", forKey: "ownerName")
+        var asked: String?
+        let s = try XCTUnwrap(testProfile().profileSettings(makeSuite: { asked = $0; return made.defaults }))
+        XCTAssertEqual(asked, "com.dwebber.mossad.profile.zzzzzzzz")
+        XCTAssertEqual(s.persistentDomain(forName: made.name)?["ownerName"] as? String, "Sam Carter")
         XCTAssertEqual(s.string(forKey: "ownerName"), "Sam Carter")
     }
 
     func testAProfileSuiteNeverReadsTheStandardDomain() throws {
         let key = "profileProof.\(UUID().uuidString)"
         UserDefaults.standard.set("real", forKey: key); defer { UserDefaults.standard.removeObject(forKey: key) }
-        let s = try XCTUnwrap(testProfile().profileSettings())
-        defer { s.removePersistentDomain(forName: "com.dwebber.mossad.profile.zzzzzzzz") }
+        let made = try MadeUpSuite(self)
+        let s = try XCTUnwrap(testProfile().profileSettings(makeSuite: { _ in made.defaults }))
         XCTAssertNil(s.object(forKey: key))
         s.set("profile", forKey: key)
         XCTAssertEqual(UserDefaults.standard.string(forKey: key), "real")

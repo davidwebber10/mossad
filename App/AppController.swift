@@ -388,7 +388,7 @@ final class AppController: ObservableObject {
     /// Held for the life of the app: only the copy that has it records, recovers, and processes in this folder.
     private var instanceLock: InstanceLock?
     /// With a registry file: the Mac-wide lock, so only one profile is the foreground app.
-    private var foregroundLock: InstanceLock?
+    var foregroundLock: InstanceLock?
     /// The registry as the switcher and Settings show it; read again before each change.
     @Published var profiles: ProfileRegistry.Loaded = AppIdentity.current.registry
     /// Why the last change of profiles did not happen, in words for the owner.

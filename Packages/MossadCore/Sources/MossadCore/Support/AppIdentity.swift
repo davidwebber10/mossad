@@ -178,8 +178,13 @@ extension AppIdentity {
 
     /// A profile's own settings, untouched: never emptied, no registered defaults. Nil for `default` and a preview.
     public func profileSettings() -> UserDefaults? {
+        profileSettings(makeSuite: { UserDefaults(suiteName: $0) })
+    }
+
+    /// `makeSuite` makes the suite of that name; a test gives one that keeps its file in a temporary folder.
+    func profileSettings(makeSuite: (String) -> UserDefaults?) -> UserDefaults? {
         guard !isPreview, let suite = defaultsSuite else { return nil }
-        return UserDefaults(suiteName: suite)
+        return makeSuite(suite)
     }
 
     /// In a preview or a profile other than `default`, points `UserDefaults.standard` (and `@AppStorage`) at its own
