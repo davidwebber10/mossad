@@ -49,8 +49,17 @@ struct ProfileSwitcher: View {
                 Button {
                     controller.switchProfile(to: row.id)
                 } label: {
-                    if row.active { Label(row.name, systemImage: "checkmark") } else { Text(row.name) }
+                    if row.active {
+                        Label(row.name, systemImage: "checkmark")
+                    } else if let status = row.status {
+                        // The menu shows the second Text as the item's second line, in its own secondary style.
+                        Text(row.name)
+                        Text(status)
+                    } else {
+                        Text(row.name)
+                    }
                 }
+                .accessibilityLabel(row.status.map { "\(row.name), \($0)" } ?? row.name)
                 .disabled(menu.note != nil || row.active)
             }
             Divider()
