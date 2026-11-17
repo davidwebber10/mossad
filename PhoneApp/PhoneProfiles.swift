@@ -38,7 +38,9 @@ final class PhoneProfiles {
            let item = ProfilesItem.decode(data) {
             book.take(.found(item), now: Date())
         }
-        if let id = PhoneStore.hook("MOSSAD_PHONE_PROFILE") { book.active = id }
+        if let id = PhoneStore.hook("MOSSAD_PHONE_PROFILE") { book.active = id == Profile.defaultID ? nil : id }
+        // Kept for the next launch, so a list that drops a profile shows it as one that left.
+        if PhoneStore.hook("MOSSAD_PHONE_PROFILES") != nil { book.save(to: .standard) }
         #endif
         let uploaders = ProfileUploaders(make: Self.makeUploader)
         for profile in book.listed + book.leaving {
@@ -51,6 +53,9 @@ final class PhoneProfiles {
         self.book = book
         self.uploaders = uploaders
         store = PhoneStore(context: uploader.context, uploader: uploader, recorder: recorder)
+        store.inProfiles = book.showsProfiles
+        // Every profile's outbox is read at launch, so the Profile screen and the passes see its recordings.
+        Task { for u in uploaders.all { await u.ready() } }
         #if DEBUG
         // `MOSSAD_IMPORT_AFTER=<seconds>` hands the `MOSSAD_IMPORT` file over later, as a share while a sheet is open.
         if let after = PhoneStore.hook("MOSSAD_IMPORT_AFTER").flatMap(Double.init), let path = PhoneStore.hook("MOSSAD_IMPORT") {
@@ -99,12 +104,14 @@ final class PhoneProfiles {
             u?.sends = true
         }
         for profile in book.leaving { uploaders.uploader(for: profile)?.sends = false }
+        for u in uploaders.all { await u.ready() }
+        store.inProfiles = book.showsProfiles
         if book.activeProfile.id != store.context.id { await switchTo(book.activeProfile.id) }
         await cleanUp()
     }
 
     /// Removes the folder of a profile that left, only by the rule: a week gone, nothing waiting, nothing running.
-    private func cleanUp() async {
+    func cleanUp() async {
         let now = Date(), environment = ProcessInfo.processInfo.environment, documents = URL.documentsDirectory
         for profile in book.leaving {
             guard let context = PhoneProfileContext(id: profile.id) else { continue }
@@ -150,6 +157,7 @@ final class PhoneProfiles {
             book.active = next == Profile.defaultID ? nil : next
             book.save(to: .standard)
             store = PhoneStore(context: uploader.context, uploader: uploader, recorder: recorder)
+            store.inProfiles = book.showsProfiles
             Task { await pass() }
         }
     }
@@ -158,6 +166,70 @@ final class PhoneProfiles {
     func pass() async {
         await store.sync()
         for u in uploaders.all where u !== store.uploader { await u.pass() }
+    }
+
+    /// The recordings that wait in profiles the Mac no longer has, by profile, for Meetings and Settings.
+    var leavingWithRecordings: [(profile: PhoneProfile, uploader: ProfileUploader)] {
+        book.leaving.compactMap { p in uploaders.uploader(for: p).flatMap { $0.outbox.entries.isEmpty ? nil : (p, $0) } }
+    }
+
+    /// A scanned code: an old server code connects the first profile; a profile code adds that profile (or changes
+    /// it), and with a server its secret goes only to that profile's own Keychain service. The code is never stored
+    /// or logged. Returns the words of what it did, or why not.
+    /// What a scanned code did, in words, or why not.
+    enum Applied { case done(String), failed(FriendlyError) }
+
+    func apply(_ parsed: ProfileCode.Parsed) async -> Applied {
+        switch parsed {
+        case .notMossad, .damaged, .newer:
+            return .failed(Self.problem(parsed.problem ?? PhoneProfileWords.cannotOpen))
+        case .server(let c):
+            if let problem = await Self.check(c) { return .failed(problem) }
+            let first = book.listed[0]
+            guard let u = uploaders.uploader(for: first) else { return .failed(Self.problem(PhoneProfileWords.cannotOpen)) }
+            u.connect(c)
+            return .done(PhoneProfileWords.connected(name: first.name, host: c.address.host ?? c.address.absoluteString))
+        case .profile(let code):
+            if let c = code.connection, let problem = await Self.check(c) { return .failed(problem) }
+            book.add(code, now: Date())
+            book.save(to: .standard)
+            guard let profile = book.listed.first(where: { $0.id == code.id }), let u = uploaders.uploader(for: profile) else {
+                return .failed(Self.problem(PhoneProfileWords.cannotOpen))
+            }
+            u.sends = true
+            u.listed = profile.sync
+            store.inProfiles = book.showsProfiles
+            if let c = code.connection {
+                u.connect(c)
+                return .done(PhoneProfileWords.connected(name: profile.name, host: c.address.host ?? c.address.absoluteString))
+            }
+            u.choose(.icloud)
+            return .done(PhoneProfileWords.added(profile.name))
+        }
+    }
+
+    /// The owner's "Remove from this iPhone" of a profile from a code. Its folder goes by the cleanup rule.
+    func remove(_ id: String) {
+        book.removeFromPhone(id, now: Date())
+        book.save(to: .standard)
+        if let gone = book.leaving.first(where: { $0.id == id }) { uploaders.uploader(for: gone)?.sends = false }
+        store.inProfiles = book.showsProfiles
+        Task { await cleanUp() }
+    }
+
+    /// The server answers and takes the secret, as the screen that connects a server checks it.
+    private static func check(_ c: ServerConnection) async -> FriendlyError? {
+        do {
+            let hello = try await ServerClient(c).hello()
+            return hello.authorized ? nil : FriendlyError(kind: .wrongSecret, context: .connectingServer)
+        } catch {
+            Log.error("Checking the server failed: \(error)")
+            return FriendlyError(error, context: .connectingServer, service: "your server")
+        }
+    }
+
+    private static func problem(_ sentence: String) -> FriendlyError {
+        FriendlyError(kind: .other, context: .connectingServer, said: sentence, retries: false)
     }
 
     func remember(importTarget id: String) {

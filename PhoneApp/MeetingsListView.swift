@@ -8,6 +8,9 @@ struct MeetingsListView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var recording = PhoneStore.hook("MOSSAD_ROOM") != nil
     @State private var settings = PhoneStore.hook("MOSSAD_SETTINGS") != nil
+    /// `MOSSAD_SETTINGS=profiles` opens Settings on the Profile screen.
+    @State private var settingsOnProfiles = PhoneStore.hook("MOSSAD_SETTINGS") == "profiles"
+    @Environment(PhoneProfiles.self) private var profiles
     /// The room recording the owner asked to remove, until the dialog answers.
     @State private var removing: String?
     /// A meeting opens out of its row.
@@ -40,6 +43,26 @@ struct MeetingsListView: View {
         .padding(.top, Space.s)
     }
 
+    /// A profile that left with recordings: one quiet row that opens Settings on the Profile screen.
+    private func leavingRow(_ name: String, _ count: Int) -> some View {
+        Button {
+            settingsOnProfiles = true
+            settings = true
+        } label: {
+            HStack(spacing: Space.m) {
+                Image(systemName: "tray").foregroundStyle(Palette.secondary).accessibilityHidden(true)
+                Text(PhoneProfileWords.leavingRow(name: name, count: count)).textRole(.secondary).foregroundStyle(Palette.secondary)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Palette.tertiaryMark).accessibilityHidden(true)
+            }
+            .padding(.horizontal, Space.l).padding(.vertical, Space.m)
+            .background(Palette.fill, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .padding(.top, Space.s)
+    }
+
     var body: some View {
         @Bindable var store = store
         NavigationStack(path: $store.path) {
@@ -51,6 +74,9 @@ struct MeetingsListView: View {
                             .padding(.vertical, Space.s)
                     }
                     if !store.outbox.entries.isEmpty { outbox }
+                    ForEach(profiles.leavingWithRecordings, id: \.profile.id) { item in
+                        leavingRow(item.profile.name, item.uploader.outbox.entries.count)
+                    }
                     if hasNewFindings || PhoneStore.hook("MOSSAD_FINDINGS_ROW") != nil { findingsRow }
                     ForEach(store.days, id: \.date) { day in
                         PhoneLabel(day.title).padding(.top, Space.l).padding(.bottom, 2)
@@ -77,13 +103,26 @@ struct MeetingsListView: View {
             .phonePage()
             .navigationTitle("Meetings")
             .toolbar {
+                // Which profile shows, only with two or more.
+                if profiles.book.showsProfiles {
+                    ToolbarItem(placement: .topBarLeading) {
+                        ProfileMark(profile: profiles.book.activeProfile) {
+                            settingsOnProfiles = true
+                            settings = true
+                        }
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Settings", systemImage: "gearshape") { settings = true }.tint(Palette.ink)
+                    Button("Settings", systemImage: "gearshape") {
+                        settingsOnProfiles = false
+                        settings = true
+                    }
+                    .tint(Palette.ink)
                 }
             }
             .fullScreenCover(isPresented: $recording) { RecordingView() }
             .onChange(of: recording, initial: true) { _, open in store.recorderScreenOpen = open }
-            .sheet(isPresented: $settings) { PhoneSettingsView() }
+            .sheet(isPresented: $settings) { PhoneSettingsView(startsOnProfiles: settingsOnProfiles) }
             .sheet(isPresented: $findings) {
                 NavigationStack {
                     FindingsScreen(close: { findings = false })

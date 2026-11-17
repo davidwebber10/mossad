@@ -197,6 +197,18 @@ final class ProfileUploaderTests: UploaderTestCase {
         }
     }
 
+    func testAPassAfterALaunchReadsTheOutboxOnDiskAndSends() async throws {
+        let world = UploaderWorld()
+        let root = temp()
+        let before = uploader(work, root: root, world: world)
+        try addFinished(before, "20270115-090000")
+        // A new launch: a profile that does not show only ever gets a pass.
+        let after = uploader(work, root: root, world: world)
+        await after.pass()
+        XCTAssertTrue(isSent(after, "20270115-090000"), "the outbox on disk is read before the pass")
+        XCTAssertEqual(world.zonesAsked, ["Mossad-1a2b3c4d"])
+    }
+
     func testAnIdleUploaderAsksNothing() async {
         let world = UploaderWorld()
         let u = uploader(work, world: world)

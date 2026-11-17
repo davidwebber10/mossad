@@ -6,13 +6,27 @@ import VisionKit
 /// Settings on the iPhone: where meetings come from (iCloud or the owner's server), and how to connect.
 struct PhoneSettingsView: View {
     @Environment(PhoneStore.self) private var store
+    @Environment(PhoneProfiles.self) private var profiles
     @Environment(\.dismiss) private var dismiss
     @State private var connecting = PhoneStore.hook("MOSSAD_CONNECT") != nil
     @State private var confirmDisconnect = false
+    /// The pages pushed over Settings: "profiles" is the Profile screen.
+    @State private var path: [String]
+
+    init(startsOnProfiles: Bool = false) {
+        _path = State(initialValue: startsOnProfiles ? ["profiles"] : [])
+    }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             List {
+                // Only with two profiles or more, or one that left with a recording: else nothing new shows.
+                if profiles.book.showsProfileRow {
+                    Section {
+                        NavigationLink(value: "profiles") { profileRow }
+                    }
+                    .listRowBackground(Palette.fill)
+                }
                 Section {
                     choice(.icloud, symbol: "icloud", title: "iCloud",
                            detail: "Your Mac sends meetings through your private iCloud. Nothing to set up.")
@@ -73,6 +87,7 @@ struct PhoneSettingsView: View {
                     Button("Done") { dismiss() }.buttonStyle(.glassProminent).tint(Palette.accentFill)
                 }
             }
+            .navigationDestination(for: String.self) { _ in ProfilesScreen(close: { dismiss() }) }
             .sheet(isPresented: $connecting) { ConnectServerView() }
             .confirmationDialog("Disconnect your server?", isPresented: $confirmDisconnect, titleVisibility: .visible) {
                 Button("Disconnect", role: .destructive) { store.disconnectServer() }
@@ -80,6 +95,26 @@ struct PhoneSettingsView: View {
                 Text("This iPhone goes back to iCloud. Your server and its data stay as they are.")
             }
         }
+    }
+
+    private var profileRow: some View {
+        let active = profiles.book.activeProfile
+        let waiting = profiles.book.listed.compactMap { p -> (String, Int)? in
+            guard p.id != active.id, let n = profiles.uploader(for: p)?.outbox.entries.count, n > 0 else { return nil }
+            return (p.name, n)
+        }.first
+        return HStack(spacing: Space.m) {
+            ProfileDot(color: active.color, size: 10)
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                Text(active.name).textRole(.headline).foregroundStyle(Palette.ink)
+                if let waiting {
+                    Text("\(waiting.0): \(PhoneProfileWords.waiting(waiting.1))").textRole(.secondary).foregroundStyle(Palette.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(PhoneProfileWords.label(active.name))
     }
 
     private var status: String {
@@ -120,6 +155,7 @@ struct PhoneSettingsView: View {
 /// or type it in. Each way is checked before it is used.
 struct ConnectServerView: View {
     @Environment(PhoneStore.self) private var store
+    @Environment(PhoneProfiles.self) private var profiles
     @Environment(\.dismiss) private var dismiss
     @State private var scanning = false
     @State private var address = ""
@@ -127,27 +163,30 @@ struct ConnectServerView: View {
     @State private var checking = false
     @State private var error: FriendlyError? = PhoneStore.hook("MOSSAD_CONNECT_ERROR").flatMap(ErrorPreview.sample)
     @State private var connected: ServerConnection?
+    /// What a scanned code did: "Connected “Mossad” to notes.example.com." or "Added “Work”."
+    @State private var done: String?
+    private var finished: Bool { connected != nil || done != nil }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Space.l) {
                     VStack(spacing: Space.s) {
-                        Image(systemName: connected == nil ? "qrcode" : "checkmark")
+                        Image(systemName: !finished ? "qrcode" : "checkmark")
                             .font(.system(size: 28, weight: .medium))
-                            .foregroundStyle(connected == nil ? Palette.accent : Palette.ok)
+                            .foregroundStyle(!finished ? Palette.accent : Palette.ok)
                             .frame(width: 64, height: 64)
-                            .background(connected == nil ? Palette.accentTint : Palette.fill, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                            .background(!finished ? Palette.accentTint : Palette.fill, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
                             .contentTransition(.symbolEffect(.replace))
                             .accessibilityHidden(true)
-                        Text(connected == nil ? "Connect your server" : "Connected to \(connected?.address.host ?? "")")
+                        Text(!finished ? "Connect your server" : done ?? "Connected to \(connected?.address.host ?? "")")
                             .textRole(.title).foregroundStyle(Palette.ink)
-                        Text(connected == nil ? "On your Mac, open Mossad › Settings › Storage & Sync, and click Show code." : "Your meetings are on the way.")
+                        Text(!finished ? "On your Mac, open Mossad › Settings › Storage & Sync, and click Show code." : "Your meetings are on the way.")
                             .textRole(.body).foregroundStyle(Palette.secondary)
                     }
                     .multilineTextAlignment(.center)
                     .padding(.top, Space.s)
-                    if connected == nil {
+                    if !finished {
                         Button { scanning = true } label: {
                             Label("Scan code", systemImage: "camera")
                         }
@@ -208,19 +247,32 @@ struct ConnectServerView: View {
             .navigationTitle("Your server")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: connected == nil ? .cancellationAction : .confirmationAction) {
-                    Button(connected == nil ? "Cancel" : "Done") { dismiss() }.tint(Palette.ink)
+                ToolbarItem(placement: !finished ? .cancellationAction : .confirmationAction) {
+                    Button(!finished ? "Cancel" : "Done") { dismiss() }.tint(Palette.ink)
                 }
             }
             .fullScreenCover(isPresented: $scanning) {
                 CodeScanner { code in
                     scanning = false
-                    if let c = ServerPairing.connection(fromCode: code) { check(c) } else { error = Self.problem("That code isn't from Mossad. Show the code on your Mac again.") }
+                    take(code)
                 }
                 .ignoresSafeArea()
                 .overlay(alignment: .topTrailing) {
                     Button("Cancel") { scanning = false }.buttonStyle(.borderedProminent).padding()
                 }
+            }
+        }
+    }
+
+    /// A scanned code: a server code connects the first profile, a profile code adds or connects that profile.
+    private func take(_ code: String) {
+        checking = true
+        error = nil
+        Task {
+            defer { checking = false }
+            switch await profiles.apply(ProfileCode.parse(code)) {
+            case .done(let words): withAnimation { done = words }
+            case .failed(let problem): error = problem
             }
         }
     }
@@ -247,8 +299,8 @@ struct ConnectServerView: View {
     }
 }
 
-/// The camera, looking for one QR code.
-private struct CodeScanner: UIViewControllerRepresentable {
+/// The camera, looking for one Mossad code: a server code or a profile code.
+struct CodeScanner: UIViewControllerRepresentable {
     let found: (String) -> Void
 
     func makeUIViewController(context: Context) -> DataScannerViewController {
@@ -272,7 +324,7 @@ private struct CodeScanner: UIViewControllerRepresentable {
         func dataScanner(_ scanner: DataScannerViewController, didAdd items: [RecognizedItem], allItems: [RecognizedItem]) {
             guard !done else { return }
             for case .barcode(let code) in items {
-                if let text = code.payloadStringValue, text.hasPrefix("mossad-server:") {
+                if let text = code.payloadStringValue, ProfileCode.isCode(text) {
                     done = true
                     scanner.stopScanning()
                     found(text)

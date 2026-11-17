@@ -422,6 +422,9 @@ public final class ProfileUploader {
     /// For a profile that does not show: pulls its store only while a sent recording waits, settles by the meetings
     /// of its own folder, then sends. A profile that shows leaves this to its store.
     public func pass() async {
+        guard !shown else { return }
+        // A profile that does not show is read only here: its outbox on disk first.
+        await ready()
         // With nothing to send no store is made.
         guard !shown, !outbox.entries.isEmpty, let engine = cloud else { return }
         if outbox.entries.contains(where: \.isSent) {

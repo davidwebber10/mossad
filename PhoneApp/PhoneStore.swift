@@ -64,6 +64,8 @@ final class PhoneStore {
     var notice: String?
     /// The room recorder's screen is open: the import screen shows over it.
     var recorderScreenOpen = false
+    /// The phone shows two profiles or more: a meeting that is not here may be in another one.
+    var inProfiles = false
 
     /// The pages open in the Analytics tab; People lives there.
     var analyticsPath = NavigationPath()
@@ -497,7 +499,8 @@ final class PhoneStore {
     }
 
     private func notOnThisPhone() {
-        notice = loaded ? "That meeting isn't on this iPhone yet. It arrives after your Mac syncs it." : nil
+        notice = !loaded ? nil
+            : inProfiles ? PhoneProfileWords.notInProfile : "That meeting isn't on this iPhone yet. It arrives after your Mac syncs it."
     }
 
     // MARK: Chat
