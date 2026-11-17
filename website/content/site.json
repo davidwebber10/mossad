@@ -840,11 +840,12 @@
             "Each profile has its own keys, people, voices, coach, sync, and backup",
             "A call is recorded by the profile you are in, and the menu bar shows which one",
             "An AI app that you connect to one profile never reads the other",
+            "The profile you are not in still finishes its meetings and keeps its sync and backup up to date",
             "With one profile, nothing changes"
           ],
           "icon": "person.2.crop.square.stack",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Profiles/ProfileRegistry.swift", "Packages/MossadCore/Sources/MossadCore/Support/AppIdentity.swift", "App/ProfileSwitcher.swift", "App/ProfileSettings.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Profiles/ProfileRegistry.swift", "Packages/MossadCore/Sources/MossadCore/Support/AppIdentity.swift", "App/ProfileSwitcher.swift", "App/ProfileSettings.swift", "Packages/MossadCore/Sources/MossadCore/Worker/ProfileWorker.swift"]
         }
       ]
     },
