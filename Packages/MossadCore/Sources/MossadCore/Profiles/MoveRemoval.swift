@@ -176,6 +176,9 @@ public enum MoveRemoval {
                     try? fm.removeItem(atPath: note)
                 }
                 ReferenceBackup.forget(callID: callID, paths: paths)
+                // The log keeps the note's file name (its title) and the id: those lines go too, before the folder,
+                // so a run after a stop does it again from the record.
+                guard Log.forget(naming: [callID, r.markdownPath.map { ($0 as NSString).lastPathComponent } ?? ""], in: paths.logs) else { return false }
             }
             try stop("folder: delete")
             try fm.removeItem(at: out)

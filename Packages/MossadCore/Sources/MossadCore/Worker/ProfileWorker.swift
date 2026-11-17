@@ -308,7 +308,7 @@ public actor ProfileWorker {
         let taken = moveIntake.run()
         for (callID, event) in events.sorted(by: { $0.key < $1.key }) {
             switch event {
-            case .moved: Log.info("Worker: a meeting moved to another profile (\(callID))")
+            case .moved: Log.info("Worker: a meeting moved to another profile")
             case .cancelled(let why): Log.info("Worker: a move ended without moving (\(callID), \(why.rawValue))")
             default: break
             }

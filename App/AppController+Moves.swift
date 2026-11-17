@@ -32,7 +32,7 @@ extension AppController {
                         switch event {
                         case .moved:
                             ended = true
-                            Log.info("Moves: a meeting moved to another profile (\(callID))")
+                            Log.info("Moves: a meeting moved to another profile")
                         case .cancelled(let why):
                             ended = true
                             Log.info("Moves: a move ended without moving (\(callID), \(why.rawValue))")
