@@ -41,6 +41,7 @@ public enum MoveRules {
         if r.isNotesOnly { return .refused(MoveWords.notesOnly) }
         let sent = sent(r, hasLiveFile: files.contains(LiveTranscript.fileName), usage: usage)
         if busy || MovedFiles.inWork(files) || r.platform == .unknown || sent == .inWork { return .refused(MoveWords.inWork) }
+        if !MovedFiles.unknown(files).isEmpty { return .refused(MoveWords.unknownFile) }
         return .offer
     }
 
@@ -97,6 +98,17 @@ public enum MoveWords {
     public static let menu = "Move to", confirm = "Move", cancelMove = "Cancel move", processHere = "Process here"
     public static let notesOnly = "A meeting made from Gemini notes stays with its Google account."
     public static let inWork = "Mossad is working on this meeting. Move it when its notes are ready."
+    public static let unknownFile = "This meeting has a file that Mossad does not know, so it cannot move. The meeting stays here."
+
+    /// The chats of the meeting that also read other things (`MovedChats`): nil for none.
+    public static func chatsDeleted(_ n: Int) -> String? {
+        switch n {
+        case 0: nil
+        case 1: "1 chat about this meeting also read other meetings. It is deleted, not moved."
+        default: "\(n) chats about this meeting also read other meetings. They are deleted, not moved."
+        }
+    }
+
     public static let heldForGone = "This call was for a profile that is gone. Mossad does not process it until you choose."
 
     public static func title(_ meeting: String, to target: String) -> String { "Move “\(meeting)” to “\(target)”?" }

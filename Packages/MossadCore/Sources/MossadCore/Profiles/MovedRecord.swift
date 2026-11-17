@@ -78,19 +78,33 @@ public enum MovedRecord {
 
 /// The rule of each file of a call folder in a move.
 public enum MovedFiles {
-    public enum Rule: Equatable, Sendable { case asIs, prepared, never, inWork }
+    /// `unknown`: a name this table does not know. It refuses the move: a file is never dropped with no word.
+    public enum Rule: Equatable, Sendable { case asIs, prepared, never, inWork, unknown }
 
     private static let asIs: Set<String> = ["me.caf", "them.caf", Recording.fileName, FrameIndex.fileName, FrameIndex.folder]
+    /// Every file that never goes, by name: the Undo copy of "Transcribe again", the first profile's coach and points,
+    /// names that were not final, and files made again on demand.
+    private static let never: Set<String> = [Pipeline.previousFileName, CoachReview.fileName, CallFindings.fileName, LiveTranscript.fileName,
+                                             LivePointMarks.fileName, "upload-me.m4a", "upload-them.m4a"]
     private static let inWorkNames: Set<String> = [Pipeline.quietFileName, Pipeline.MergePlan.recordFile, Pipeline.MergePlan.fileName,
                                                    FrameStore.mergedFileName]
 
-    /// The rule of a file by the first path component of its path in the call folder. Only the names that go are
-    /// listed; every other name never goes (leftovers and files made again on demand).
+    /// The rule of a file by the first path component of its path in the call folder.
     public static func rule(_ name: String) -> Rule {
         if name == CallRecord.fileName { return .prepared }
         if asIs.contains(name) { return .asIs }
         if inWorkNames.contains(name) || name.hasPrefix(Pipeline.MergePlan.backup) || name.hasPrefix("joined-") { return .inWork }
-        return .never
+        // A hidden file (the Finder's own) is no part of the meeting.
+        if never.contains(name) || name.hasPrefix(".") { return .never }
+        // A clip of a voice, and a track that a recorder left under a UUID name.
+        if name.hasPrefix("clip-"), name.hasSuffix(".caf") { return .never }
+        if name.hasSuffix(".caf"), UUID(uuidString: String(name.dropLast(4))) != nil { return .never }
+        return .unknown
+    }
+
+    /// The names that refuse the move.
+    public static func unknown(_ names: [String]) -> [String] {
+        names.filter { rule($0) == .unknown }
     }
 
     /// A run or a merge that is not finished: the move is refused.
@@ -98,20 +112,25 @@ public enum MovedFiles {
         names.contains { rule($0) == .inWork }
     }
 
-    /// The relative paths that go as they are, sorted.
-    public static func list(in dir: URL) -> [String] {
+    /// The relative paths that go as they are, sorted, without hidden files. Throws when the folder, a folder in it, or
+    /// a file's kind cannot be read: unknown is not "not there".
+    public static func list(in dir: URL) throws -> [String] {
         let fm = FileManager.default
-        guard let e = fm.enumerator(at: dir, includingPropertiesForKeys: [.isRegularFileKey]) else { return [] }
+        var failure: Error?
+        _ = try fm.contentsOfDirectory(atPath: dir.path)
+        guard let e = fm.enumerator(at: dir, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles],
+                                    errorHandler: { _, error in failure = error; return false }) else { throw CocoaError(.fileReadUnknown) }
         var out: [String] = []
         let base = dir.resolvingSymlinksInPath().path + "/"
         for case let url as URL in e {
-            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+            guard try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { continue }
             let full = url.resolvingSymlinksInPath().path
             guard full.hasPrefix(base) else { continue }
             let path = String(full.dropFirst(base.count))
             guard let first = path.split(separator: "/").first, rule(String(first)) == .asIs else { continue }
             out.append(path)
         }
+        if let failure { throw failure }
         return out.sorted()
     }
 }

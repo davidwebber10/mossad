@@ -62,6 +62,9 @@ final class MoveRulesTests: XCTestCase {
         var unknown = record(.written)
         unknown.platform = .unknown
         XCTAssertEqual(MoveRules.offer(unknown, busy: false, files: [], usage: [], move: nil), .refused(MoveWords.inWork))
+        XCTAssertEqual(MoveRules.offer(record(.written), busy: false, files: ["call.json", "notes.txt"], usage: [], move: nil),
+                       .refused(MoveWords.unknownFile), "I6")
+        XCTAssertEqual(MoveWords.unknownFile, "This meeting has a file that Mossad does not know, so it cannot move. The meeting stays here.")
         var waiting = MoveOut(callID: id, to: work, started: t0)
         waiting.state = .waiting
         XCTAssertEqual(MoveRules.offer(record(.written), busy: false, files: [], usage: [], move: waiting), .moving(to: work))

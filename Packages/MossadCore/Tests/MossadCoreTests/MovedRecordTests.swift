@@ -35,6 +35,18 @@ final class MovedRecordTests: XCTestCase {
         XCTAssertEqual(MovedRecord.fields.count, 61)
     }
 
+    /// `fullRecord` sets every field to a value that is not its default, so the kept and cleared checks mean something
+    /// also for a new field with a default that is not optional.
+    func testTheFullRecordSetsEveryField() throws {
+        let full = try json(fullRecord())
+        let fresh = try json(CallRecord(id: "20261101-100000", platform: .zoom, bundleID: "us.zoom.xos",
+                                        start: Date(timeIntervalSince1970: 1_793_520_000), end: Date(timeIntervalSince1970: 1_793_521_800),
+                                        status: .written))
+        for key in MovedRecord.fields.keys where !["id", "platform", "bundleID", "start", "end"].contains(key) {
+            XCTAssertFalse(same(full[key], fresh[key]), "fullRecord leaves \(key) at its default")
+        }
+    }
+
     func testTheFieldsOfAMovedRecord() throws {
         let before = try json(fullRecord())
         let after = try json(MovedRecord.prepared(fullRecord(), to: "1a2b3c4d"))
@@ -108,16 +120,24 @@ final class MovedRecordTests: XCTestCase {
         XCTAssertEqual(MovedFiles.rule("call.json"), .prepared)
         for name in ["me.caf", "them.caf", "recording.m4a", "frames.json", "frames"] { XCTAssertEqual(MovedFiles.rule(name), .asIs, name) }
         for name in ["call.previous.json", "coach.json", "findings.json", "live.json", "live-points.json", "upload-me.m4a", "upload-them.m4a",
-                     "clip-them-A.caf", "3F2504E0-4F89-11D3-9A0C-0305E82C3301.caf", "notes.txt"] {
+                     "clip-them-A.caf", "3F2504E0-4F89-11D3-9A0C-0305E82C3301.caf", ".DS_Store", ".hidden"] {
             XCTAssertEqual(MovedFiles.rule(name), .never, name)
         }
+        // I6: a name the table does not know refuses the move; it is never dropped with no word.
+        for name in ["notes.txt", "summary.json", "clip.caf", "3F2504E0.caf", "live-chat.json"] {
+            XCTAssertEqual(MovedFiles.rule(name), .unknown, name)
+        }
+        XCTAssertEqual(MovedFiles.unknown(["call.json", "me.caf", "notes.txt", ".DS_Store"]), ["notes.txt"])
         for name in ["call.quiet.json", "call.merged.json", "merge.json", "premerge-me.caf", "joined-them.caf", "frames.merged.json"] {
             XCTAssertEqual(MovedFiles.rule(name), .inWork, name)
         }
         let paths = temp()
         try writtenCall(in: paths)
-        XCTAssertEqual(MovedFiles.list(in: paths.callDirectory("20261101-100000")),
-                       ["frames.json", "frames/000012000.heic", "me.caf", "recording.m4a", "them.caf"])
+        let dir = paths.callDirectory("20261101-100000")
+        try Data().write(to: dir.appendingPathComponent("frames/.DS_Store"))
+        XCTAssertEqual(try MovedFiles.list(in: dir), ["frames.json", "frames/000012000.heic", "me.caf", "recording.m4a", "them.caf"],
+                       "a hidden file under frames is not copied")
+        XCTAssertThrowsError(try MovedFiles.list(in: paths.root.appendingPathComponent("none")), "a folder that does not list is not empty")
         XCTAssertTrue(MovedFiles.inWork(["call.json", "merge.json"]))
         XCTAssertFalse(MovedFiles.inWork(["call.json", "me.caf"]))
     }
@@ -135,6 +155,7 @@ final class MovedRecordTests: XCTestCase {
         XCTAssertEqual(moved.messages.map(\.text), chat.messages.map(\.text))
         XCTAssertEqual(moved.messages.map(\.steps), chat.messages.map(\.steps))
         XCTAssertTrue(moved.messages.allSatisfy { $0.actions == nil })
+        XCTAssertTrue(moved.messages.allSatisfy { $0.steps.isEmpty }, "a chat that goes read this call alone: it has no step of another")
     }
 
     func testTheOwnersKeysComeFromTheFirstProfile() {
