@@ -55,7 +55,7 @@ extension Data {
 public enum ServerError: Error, LocalizedError, Equatable {
     case notMossad
     /// The address may be right, but a network gateway answers in its place (`HelloAnswer.blocked`).
-    case networkBlocked(host: String)
+    case networkBlocked(host: String, sign: BlockSign)
     case wrongSecret
     /// The server is from before this call, or its database is: the owner must update it.
     case needsUpdate
@@ -64,7 +64,7 @@ public enum ServerError: Error, LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .notMossad: "That address does not answer like a Mossad server."
-        case .networkBlocked(let host): "A network gateway answers in place of \(host)."
+        case .networkBlocked(let host, _): "A network gateway answers in place of \(host)."
         case .wrongSecret: "The server does not accept this secret."
         case .needsUpdate: "Your server is an older version. Update it to use this."
         case .http(let code, let message): message.isEmpty ? "The server answered with HTTP \(code)." : message
@@ -119,8 +119,8 @@ public struct ServerClient: Sendable {
             (data, response) = try await session.data(for: request)
         } catch let error as URLError {
             // Offline or no such host keeps its own words; only a certificate that is not the server's is a block.
-            if HelloAnswer(status: nil, contentType: nil, body: Data(), error: error.code, host: host, finalHost: nil) == .blocked {
-                throw ServerError.networkBlocked(host: host)
+            if case .blocked(let sign) = HelloAnswer(status: nil, contentType: nil, body: Data(), error: error.code, host: host, finalHost: nil) {
+                throw ServerError.networkBlocked(host: host, sign: sign)
             }
             throw error
         }
@@ -128,7 +128,7 @@ public struct ServerClient: Sendable {
         switch HelloAnswer(status: http?.statusCode, contentType: http?.value(forHTTPHeaderField: "Content-Type"), body: data, error: nil,
                            host: host, finalHost: response.url?.host) {
         case .mossad: break
-        case .blocked: throw ServerError.networkBlocked(host: host)
+        case .blocked(let sign): throw ServerError.networkBlocked(host: host, sign: sign)
         case .noAnswer, .notMossad: throw ServerError.notMossad
         }
         guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ServerError.notMossad }

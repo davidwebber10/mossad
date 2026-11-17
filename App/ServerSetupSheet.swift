@@ -185,7 +185,8 @@ struct ServerSetupSheet: View {
             } catch {
                 foundAddress = nil
                 Log.error("Checking the server address failed: \(error)")
-                addressCheck = .problem(FriendlyError(ServerSetupSheet.addressProblem(error), context: .connectingServer, service: "your server"))
+                addressCheck = .problem(FriendlyError(HelloAnswer.setupError(error, typedHost: url.host, connectedHost: controller.serverConnection?.address.host),
+                                                        context: .connectingServer, service: "your server"))
             }
         }
     }
@@ -303,14 +304,5 @@ private struct CheckLabel: View {
             Label { Text(message).foregroundStyle(Palette.ink) } icon: { WarningMark(size: 13).foregroundStyle(Palette.accent) }
                 .font(.system(size: Rhythm.secondarySize)).fixedSize(horizontal: false, vertical: true)
         }
-    }
-}
-
-extension ServerSetupSheet {
-    /// The address check's error: a blocked network keeps its own words; any other answer from the server that is
-    /// not Mossad's says so; no answer keeps the words of the connection.
-    static func addressProblem(_ error: Error) -> Error {
-        if case ServerError.networkBlocked = error { return error }
-        return error is ServerError ? ServerError.notMossad : error
     }
 }
