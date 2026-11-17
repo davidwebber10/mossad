@@ -203,14 +203,11 @@ public actor ProfileWorker {
         if runs(.backup), !calling {
             pass.ran.insert(.backup)
             let archive = services.archive
-            for dir in Recording.missing(audioRoot: paths.audio, hasBackup: { archive?.holds($0) ?? false }) {
-                // A call that starts meanwhile gets the processor; the rest waits for the next pass.
-                guard !calling else { break }
-                Recording.makeIfMissing(in: dir)
-            }
+            Self.makeMissing(Recording.missing(audioRoot: paths.audio, hasBackup: { archive?.holds($0) ?? false }),
+                             calling: { setup.callRecords() }, make: { Recording.makeIfMissing(in: $0) })
             if let archive {
                 // Uploads only: the removal of old local copies waits for the window app, like retention.
-                let report = await archive.sync(keepLocalDays: nil, pipeline: pipeline)
+                let report = await archive.sync(keepLocalDays: Self.keepLocalDays, pipeline: pipeline)
                 failures.set(backup: report.failed.count)
             }
         }
@@ -304,11 +301,8 @@ public actor ProfileWorker {
             }
         }
         let stores = settings.syncStores(server: server, hasICloud: false)
-        var inputs = SyncPass.Inputs(main: main, mirror: mirror, serverIsMain: stores.serverIsMain, place: stores.place, connection: server,
-                                     owner: owner, personasInMCP: personasHere, personas: nil, calling: calling, callStarted: callRecords,
-                                     keptDigest: kept, makeDigest: makeDigest)
-        // The phone's notices stay for the window app of this profile: a worker cannot show them.
-        inputs.tellsRecordings = false
+        let inputs = Self.syncInputs(main: main, mirror: mirror, stores: stores, server: server, owner: owner, personasHere: personasHere,
+                                     calling: calling, callStarted: callRecords, kept: kept, makeDigest: makeDigest)
         let result = await SyncPass.run(inputs)
         if result.digestArrived {
             digestSent = key
@@ -370,6 +364,34 @@ public actor ProfileWorker {
     static func stamp(_ paths: Paths) -> [String: String] {
         Dictionary(ProcessingQueue(paths: paths).allRecords().map { ($0.id, "\($0.status.rawValue)|\($0.attempts)|\($0.cloudKey ?? "")") },
                    uniquingKeysWith: { a, _ in a })
+    }
+
+    /// A worker never removes a local recording: that waits for the window app, like retention.
+    static let keepLocalDays: Int? = nil
+
+    /// Makes the missing recordings one at a time, and stops when a call starts: that call gets the processor, and
+    /// the rest waits for the next pass. Returns how many it made.
+    @discardableResult
+    static func makeMissing(_ dirs: [URL], calling: () -> Bool, make: (URL) -> Void) -> Int {
+        var made = 0
+        for dir in dirs {
+            guard !calling() else { break }
+            make(dir)
+            made += 1
+        }
+        return made
+    }
+
+    /// The sync pass of a worker: no personas for the phone (the window app sends them) and no phone notices (the
+    /// window app tells them).
+    static func syncInputs(main: CloudSync?, mirror: CloudSync?, stores: ServiceSettings.SyncStores, server: ServerConnection?,
+                           owner: String, personasHere: Bool, calling: Bool, callStarted: @escaping @Sendable () -> Bool,
+                           kept: [SharedPayload]?, makeDigest: (@Sendable () -> [SharedPayload]?)?) -> SyncPass.Inputs {
+        var inputs = SyncPass.Inputs(main: main, mirror: mirror, serverIsMain: stores.serverIsMain, place: stores.place, connection: server,
+                                     owner: owner, personasInMCP: personasHere, personas: nil, calling: calling, callStarted: callStarted,
+                                     keptDigest: kept, makeDigest: makeDigest)
+        inputs.tellsRecordings = false
+        return inputs
     }
 
     static func hasOpenPoint(_ paths: Paths) -> Bool {

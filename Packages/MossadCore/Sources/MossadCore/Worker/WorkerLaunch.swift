@@ -92,7 +92,7 @@ public enum WorkerLaunch {
         arguments.contains("--switched") ? WorkerSwitch.waitSeconds : 0
     }
 
-    /// What Sparkle says after the app stopped its workers for an install: it aborted (an error, or the owner
+    /// What the updater says after the app stopped its workers for an install: it aborted (an error, or the owner
     /// cancelled the authorization), its cycle ended with the app still running, or it relaunches now.
     public enum UpdateEvent: Sendable { case aborted, cycleEnded, willRelaunch }
 

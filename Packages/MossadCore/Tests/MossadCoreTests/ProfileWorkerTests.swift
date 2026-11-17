@@ -180,4 +180,48 @@ final class ProfileWorkerTests: XCTestCase {
         XCTAssertEqual(remembered.keys("personaSince").count, 1)
         XCTAssertEqual(remembered.keys("commitmentsSince").count, 1)
     }
+
+    func testAWorkerStopsMakingRecordingsWhenACallStarts() {
+        let dirs = ["a", "b", "c"].map { URL(fileURLWithPath: "/tmp/made-up/\($0)") }
+        var made: [String] = []
+        var calling = false
+        let n = ProfileWorker.makeMissing(dirs, calling: { calling }, make: { made.append($0.lastPathComponent); calling = true })
+        XCTAssertEqual(n, 1)
+        XCTAssertEqual(made, ["a"], "a call started after the first: the rest waits")
+    }
+
+    func testAWorkersSyncSendsNoPersonasAndTellsNoNotices() {
+        let stores = ServiceSettings.SyncStores(main: nil, mirror: nil, mainKey: nil, place: "iCloud", serverIsMain: false)
+        let i = ProfileWorker.syncInputs(main: nil, mirror: nil, stores: stores, server: nil, owner: "Avery Lane", personasHere: true,
+                                         calling: false, callStarted: { false }, kept: nil, makeDigest: nil)
+        XCTAssertNil(i.personas)
+        XCTAssertFalse(i.tellsRecordings)
+    }
+
+    func testAWorkerNeverRemovesALocalRecording() async throws {
+        XCTAssertNil(ProfileWorker.keepLocalDays)
+        let id = try recorded()
+        let place = FakeArchive(.bucket)
+        let archive = CloudArchive(target: .bucket, places: [place], paths: paths)
+        let w = try worker(archive: archive)
+        _ = await w.start()
+        _ = await w.pass([.queue])
+        XCTAssertEqual(place.puts.count, 1, "uploaded")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: Recording.url(in: paths.callDirectory(id)).path), "and kept here")
+    }
+
+    func testDuringACallAWorkerRunsNoPersonasAndNoNextTimeCheck() async throws {
+        var book = NextTimeBook()
+        _ = try XCTUnwrap(book.add("Hiring plan", personID: "id-dana", personName: "Dana Cole", at: start))
+        try book.save(to: paths.nextTime)
+        XCTAssertTrue(ProfileWorker.hasOpenPoint(paths))
+        let quiet = try worker(coach: true, llm: FakeModel(output: [:]))
+        _ = await quiet.start()
+        let free = await quiet.pass([.queue])
+        XCTAssertTrue(free.ran.isSuperset(of: [.personas, .nextTime]), "\(free.ran)")
+        let busy = try worker(calling: true, coach: true, llm: FakeModel(output: [:]))
+        _ = await busy.start()
+        let during = await busy.pass([.queue])
+        XCTAssertFalse(during.ran.contains(.personas)); XCTAssertFalse(during.ran.contains(.nextTime))
+    }
 }
