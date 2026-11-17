@@ -102,3 +102,23 @@ extension View {
         }
     }
 }
+
+/// In place of a chat's field while its meeting moves: the sentence, in the field's own glass. Nothing can be typed or
+/// sent, so no request goes to this profile's services.
+struct MoveChatOff: View {
+    let text: String
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Detail.composerHeight / 2, style: .continuous)
+        Text(text)
+            .font(.system(size: Rhythm.secondarySize))
+            .foregroundStyle(Palette.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, minHeight: Detail.composerSend, alignment: .leading)
+            .padding(.horizontal, 18).padding(.vertical, 6)
+            .frame(minHeight: Detail.composerHeight)
+            .background(.ultraThinMaterial, in: shape)
+            .chromeGlass(in: shape, shadow: .floating)
+            .accessibilityAddTraits(.isStaticText)
+    }
+}

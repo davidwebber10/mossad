@@ -32,3 +32,46 @@ public enum MovedChats {
         return (moved, deleted)
     }
 }
+
+/// The chats from the iPhone that came in for a meeting whose move waits and were not kept: a count for each meeting
+/// in `Moves/<id>.phone-chats` (never a word of a chat), until the window app has said so once.
+public enum MovingChats {
+    static let suffix = ".phone-chats"
+
+    public static func url(_ callID: String, paths: Paths) -> URL {
+        paths.moves.appendingPathComponent((MovePaths.isID(callID) ? callID : MovePaths.notAnID) + suffix)
+    }
+
+    public static func refused(_ callID: String, paths: Paths) {
+        guard MovePaths.isID(callID) else { return }
+        let n = (all(paths)[callID] ?? 0) + 1
+        try? FileManager.default.createDirectory(at: paths.moves, withIntermediateDirectories: true)
+        try? Data(String(n).utf8).write(to: url(callID, paths: paths), options: .atomic)
+    }
+
+    /// Each meeting with chats not kept, and how many.
+    public static func all(_ paths: Paths) -> [String: Int] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: paths.moves.path)) ?? []
+        var out: [String: Int] = [:]
+        for name in names where name.hasSuffix(suffix) {
+            let id = String(name.dropLast(suffix.count))
+            guard MovePaths.isID(id), let text = try? String(contentsOf: url(id, paths: paths), encoding: .utf8),
+                  let n = Int(text.trimmingCharacters(in: .whitespacesAndNewlines)), n > 0 else { continue }
+            out[id] = n
+        }
+        return out
+    }
+
+    public static func shown(_ callID: String, paths: Paths) {
+        guard MovePaths.isID(callID) else { return }
+        try? FileManager.default.removeItem(at: url(callID, paths: paths))
+    }
+}
+
+extension MoveWords {
+    /// The chats from the iPhone that were not kept while their meeting was moving.
+    public static func phoneChatsNotKept(_ n: Int) -> String {
+        n == 1 ? "A chat from your iPhone about this meeting came in while it was moving. It was not kept."
+            : "\(n) chats from your iPhone about a meeting that was moving came in. They were not kept."
+    }
+}

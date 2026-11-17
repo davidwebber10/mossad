@@ -69,9 +69,9 @@ public enum MoveShow {
     public static func arriving(_ r: CallRecord, me: String?) -> Bool { me != nil && r.moveTo == me }
 
     /// The chat field of a meeting whose move waits is off, with this sentence, before any request is sent.
-    public static func chatOff(_ r: CallRecord?, name: String?) -> String? {
+    public static func chatOff(_ r: CallRecord?, name: String?, me: String? = nil) -> String? {
         guard let r else { return nil }
-        return refusesCommand(r, name: name)
+        return refusesCommand(r, name: name, me: me)
     }
 
     public enum Menu: Equatable, Sendable {

@@ -60,6 +60,14 @@ extension AppController {
 
     func isArriving(_ r: CallRecord) -> Bool { MoveShow.arriving(r, me: activeProfile.id) }
 
+    /// The sentence in place of a chat's field while its meeting moves; nil when it may ask. Read before any request.
+    /// Not the call that records now: its reasons are `LiveOffReason`.
+    func chatOff(_ callID: String?) -> String? {
+        guard let callID, var r = meetings.first(where: { $0.id == callID }), r.status != .recording else { return nil }
+        if r.moveTo == nil, let to = moves[callID]?.to { r.moveTo = to }
+        return MoveShow.chatOff(r, name: profileName(r.moveTo), me: activeProfile.id)
+    }
+
     /// One line above the list, for its time. Text only.
     func showMoveLine(_ line: MoveShow.Line) {
         moveLine = line
@@ -220,6 +228,7 @@ extension AppController {
             // What the rows show: the moves that are not done, the reasons kept, and why a target cannot take a meeting.
             let open = MoveOut.all(paths).moves.filter { $0.state != .done }
             let kept = MoveEnded.all(paths)
+            let phoneChats = MovingChats.all(paths)
             var reach: [String: MoveShow.Reach] = [:]
             for (id, worker) in workerReach where open.contains(where: { $0.to == id }) {
                 if case .paths = place(id) { reach[id] = worker } else { reach[id] = .unreachable }
@@ -230,6 +239,10 @@ extension AppController {
                 self.moveProgress = self.moveProgress.filter { id, _ in open.contains { $0.callID == id && $0.state == .copying } }
                 self.moveReach = reach
                 self.showEnded(kept)
+                for (callID, n) in phoneChats.sorted(by: { $0.key < $1.key }) {
+                    self.showMoveLine(.refusal(MoveWords.phoneChatsNotKept(n), at: Date()))
+                    Task.detached { MovingChats.shown(callID, paths: paths) }
+                }
                 for (callID, to) in moved { self.movedHere(callID, to: to) }
                 guard ended || !taken.isEmpty else { return }
                 self.refresh()

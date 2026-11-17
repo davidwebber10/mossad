@@ -177,9 +177,10 @@ public enum ChatRunRules {
         case nothing, send(String), toField(String)
     }
 
-    public static func next(queued: String?, failed: Bool, stopped: Bool, callRecords: Bool) -> Next {
+    /// `off`: the chat's field is off now (its meeting moves to another profile): a waiting question is not sent.
+    public static func next(queued: String?, failed: Bool, stopped: Bool, callRecords: Bool, off: Bool = false) -> Next {
         guard let queued else { return .nothing }
-        if failed && !stopped || !callRecords { return .toField(queued) }
+        if failed && !stopped || !callRecords || off { return .toField(queued) }
         return .send(queued)
     }
 

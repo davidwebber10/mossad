@@ -38,7 +38,7 @@ struct MeetingChatView: View {
             .onChange(of: messages.count) { _, _ in withAnimation { proxy.scrollTo(messages.last?.id, anchor: .top) } }
             .onChange(of: steps.count) { _, _ in withAnimation { proxy.scrollTo("running", anchor: .bottom) } }
         }
-        .floatingComposer(composer)
+        .floatingComposer(field)
         .environment(\.openURL, OpenURLAction { url in
             if let link = ChatLink.parse(url), link.callID == record.id, let at = link.at {
                 seek(at)
@@ -88,6 +88,11 @@ struct MeetingChatView: View {
         "Write a short follow-up email from me.",
     ]
 
+    /// The field, or the sentence in its place while the meeting moves to another profile.
+    @ViewBuilder private var field: some View {
+        if let off = controller.chatOff(record.id) { MoveChatOff(text: off) } else { composer }
+    }
+
     private var composer: some View {
         FloatingComposer(prompt: messages.isEmpty ? "Ask about this meeting" : "Ask a follow-up", text: $question,
                          focused: $focused, hasLeading: chat != nil, send: { send() }) {
@@ -116,7 +121,7 @@ struct MeetingChatView: View {
 
     private func send(again: ChatMessage? = nil) {
         let q = (again?.text ?? question).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty, !running else { return }
+        guard !q.isEmpty, !running, controller.chatOff(record.id) == nil else { return }
         var current = chat ?? {
             var c = Chat(title: Chat.title(from: q))
             c.callID = record.id

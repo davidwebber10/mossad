@@ -557,14 +557,8 @@ public actor CloudSync {
                 FindingStore.mirror(merged.answers, callID: callID, paths: paths)
             }
         case Self.chatType:
-            let remote = try await decoded(Chat.self)
-            let chats = ChatStore(directory: paths.chats)
-            // A chat deleted here stays deleted; the next push deletes it in the store.
-            guard !chats.deleted().contains(remote.id) else { return false }
-            let local = try chats.load(remote.id)
-            let kept = local.map { Chat.merged($0, remote) } ?? remote
-            guard kept != local else { return false }
-            do { try chats.save(kept) } catch is ChatStore.MovingCall { return false }
+            // The phone pulls the meetings; only the Mac moves a meeting and counts what it did not keep.
+            guard try Self.takeChat(try await decoded(Chat.self), paths: paths, mac: !includeMeetings) else { return false }
         case Self.commitmentsType:
             let remote = try await decoded(CommitmentBook.self)
             let local = try CommitmentBook.load(from: paths.commitments)
@@ -606,6 +600,30 @@ public actor CloudSync {
             guard merged != review else { return false }
             try merged.save(in: dir)
         default:
+            return false
+        }
+        return true
+    }
+}
+
+extension CloudSync {
+    /// A chat from the other device, merged with the one here. A chat about a meeting whose move waits is not kept
+    /// (`ChatStore.MovingCall`): it is counted for the owner's sentence (`MovingChats`), and one that is new here is
+    /// deleted as a chat deleted here, so the next push takes it out of the store and it never comes back to this
+    /// profile after the meeting left. A chat that is here already stays as it is: a cancelled move keeps it.
+    static func takeChat(_ remote: Chat, paths: Paths, mac: Bool = true) throws -> Bool {
+        let chats = ChatStore(directory: paths.chats)
+        // A chat deleted here stays deleted; the next push deletes it in the store.
+        guard !chats.deleted().contains(remote.id) else { return false }
+        let local = try chats.load(remote.id)
+        let kept = local.map { Chat.merged($0, remote) } ?? remote
+        guard kept != local else { return false }
+        do {
+            try chats.save(kept)
+        } catch is ChatStore.MovingCall {
+            guard mac else { return false }
+            if let callID = remote.callID { MovingChats.refused(callID, paths: paths) }
+            if local == nil { chats.delete(remote.id) }
             return false
         }
         return true
