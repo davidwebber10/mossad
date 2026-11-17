@@ -181,8 +181,16 @@ final class PhoneStore {
             }
         }
         #if DEBUG
-        // `MOSSAD_ROOM_START=1` starts the room recorder at launch, while the recovery reads the folder.
-        if Self.hook("MOSSAD_ROOM_START") != nil { Task { [weak self] in await self?.startRecording() } }
+        // `MOSSAD_ROOM_START=1` starts the room recorder at launch, while the recovery reads the folder. Without the
+        // microphone: in a headless simulator the recorder would use the Mac's own.
+        if Self.hook("MOSSAD_ROOM_START") != nil {
+            Task { [weak self] in
+                guard let self else { return }
+                await uploader.ready()
+                guard let rec = recorder.startWithoutMicrophone(into: recordingsFolder) else { return }
+                uploader.begin(rec)
+            }
+        }
         #endif
     }
 

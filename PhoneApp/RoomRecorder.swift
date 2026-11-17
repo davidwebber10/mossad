@@ -105,6 +105,33 @@ final class RoomRecorder: NSObject, AVAudioRecorderDelegate {
     /// The room recording's audio session. A setup the system refuses (OSStatus -50 on one iPhone) falls back to the
     /// next, so recording starts whenever the microphone can record at all. No Bluetooth: with AirPods connected the
     /// room would be recorded from the owner's ear, at telephone quality.
+    #if DEBUG
+    /// For a check in a headless simulator, where `record()` would use the Mac's own microphone: the state of a
+    /// recorder that just started, with a silent part 1 on disk, and no session, timer, or microphone.
+    func startWithoutMicrophone(into dir: URL) -> PhoneRecording? {
+        guard state == .idle, id == nil, !starting else { return nil }
+        let now = Date()
+        let id = CallID.make(now)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let file = try AVAudioFile(forWriting: RoomAudio.part(id, 1, in: dir),
+                                       settings: [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 16_000, AVNumberOfChannelsKey: 1])
+            let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 32_000)!
+            buffer.frameLength = 32_000
+            try file.write(from: buffer)
+        } catch {
+            Log.error("Room recording could not start: \(error)")
+            return nil
+        }
+        self.dir = dir
+        self.id = id
+        started = now
+        rules = RoomRecording()
+        rules.start(at: now)
+        return PhoneRecording(id: id, start: now, end: now, title: nil)
+    }
+    #endif
+
     private static func prepareSession() throws {
         let session = AVAudioSession.sharedInstance()
         let setups: [(AVAudioSession.Category, AVAudioSession.Mode, AVAudioSession.CategoryOptions)] = [
