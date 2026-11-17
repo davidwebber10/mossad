@@ -127,6 +127,10 @@ private struct Sidebar: View {
             if !controller.fullScreen {
                 WindowDragArea().frame(height: Chrome.lightsRow + Chrome.lightsToNav)
             }
+            // The call that records now, above everything else, so it can be found from any page.
+            if let now = controller.nowCall {
+                SidebarNowCard(navigation: controller.navigation, now: now).padding(.bottom, Rhythm.rowGap)
+            }
             VStack(alignment: .leading, spacing: Chrome.navRowGap) {
                 ForEach(AppController.Section.topLevel) { section in
                     switch section {
@@ -243,8 +247,8 @@ private struct Sidebar: View {
     }
 }
 
-/// What Mossad is doing, pinned under the sidebar: a call being recorded, then permissions that need the owner as
-/// a card, then calls being processed. Nothing when all is well, so the sidebar stays quiet.
+/// What Mossad is doing, pinned under the sidebar: the calls that wait for the one being recorded, then permissions
+/// that need the owner as a card, then calls being processed. Nothing when all is well, so the sidebar stays quiet.
 private struct SidebarStatus: View {
     @EnvironmentObject var controller: AppController
     @EnvironmentObject var permissions: PermissionsMonitor
@@ -253,16 +257,8 @@ private struct SidebarStatus: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s) {
-            if case .recording(_, let since) = controller.status {
-                HStack(spacing: Space.s) {
-                    StatusDot(color: Palette.recording, size: 7, pulsing: !controller.isPaused)
-                    TimelineView(.periodic(from: since, by: 1)) { context in
-                        Text("Recording \(elapsed(since, context.date))\(controller.isMuted ? " · muted" : "")").monospacedDigit()
-                    }
-                }
-                .font(.system(size: Rhythm.secondarySize, weight: .medium))
-                .foregroundStyle(Palette.ink)
-                .padding(.horizontal, 10)
+            // The call itself is the Now card at the top of the sidebar.
+            if case .recording = controller.status {
                 // One click releases every call that waits; the words say how many.
                 if let first = waiting.first, let line = ProcessNowLabel.line(waiting: waiting.count),
                    let title = ProcessNowLabel.title(waiting: waiting.count) {
@@ -295,7 +291,7 @@ private struct SidebarStatus: View {
     }
 }
 
-/// "1 call waits · Process now", under the recording line. Only while a call waits.
+/// "1 call waits · Process now", at the foot of the sidebar while a call records. Only while a call waits.
 private struct WaitingLine: View {
     let line: String
     let title: String

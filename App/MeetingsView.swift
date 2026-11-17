@@ -39,7 +39,8 @@ struct MeetingsView: View {
     private static let searchPrompt = "Search titles, transcripts, people"
 
     /// The meetings that the search text and the filter leave. The call that records now stays under any search and
-    /// filter: it has no transcript, people, or summary to match yet, and the owner must see that it records.
+    /// filter (Calendar mode draws it; the list leaves it to the sidebar's Now card): it has no transcript, people,
+    /// or summary to match yet, and the owner must see that it records.
     private var results: [CallRecord] {
         MeetingListRows.visible(controller.meetings, found: controller.meetingMatches, kept: filters.matches)
     }
@@ -113,7 +114,8 @@ struct MeetingsView: View {
             TranscribeAgainSheet(record: r)
         }
         .onAppear {
-            if controller.selectedMeetingID == nil { controller.selectedMeetingID = controller.meetings.first?.id }
+            // The first row of the list: the call that records now has no row, only the sidebar's Now card.
+            if controller.selectedMeetingID == nil { controller.selectedMeetingID = controller.meetings.first { $0.status != .recording }?.id }
             let preview = CommandLine.arguments.contains("--ui-preview")
             // Development hook for screenshots: MOSSAD_MEETING=<call id> opens that meeting.
             if preview, let id = ProcessInfo.processInfo.environment["MOSSAD_MEETING"], controller.meetings.contains(where: { $0.id == id }) {
@@ -165,7 +167,7 @@ struct MeetingsView: View {
 
     /// The invite whose page is open in the list view. An invite leaves the list when its call starts to record.
     /// Its page stays open until the recording or the invite ends: the first minutes of the call are when the
-    /// open items and the promises are needed. The live call is one click away in the list.
+    /// open items and the promises are needed. The live call is one click away in the sidebar's Now card.
     private var openInvite: UpcomingMeeting? {
         guard let id = controller.selectedMeetingID else { return nil }
         if let m = controller.calendarUpcoming.first(where: { $0.id == id }) {
@@ -185,8 +187,8 @@ struct MeetingsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10).padding(.top, 2).padding(.bottom, Space.xs)
                 CoachMoment(compact: true).padding(.horizontal, 10).padding(.top, Space.s)
+                // The call that records now is the sidebar's Now card, not a row.
                 MeetingList(days: MeetingGroups.byDay(results.filter { $0.status != .recording }),
-                            live: results.filter { $0.status == .recording },
                             selection: $controller.selectedMeetingID, deleting: $deleting, showCalendar: { showCalendar(at: $0) })
             }
             DetailColumn { toolbar } content: {

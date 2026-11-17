@@ -302,8 +302,8 @@ struct RecordingStatus: View {
             }
             .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 10))
             TalkShareStrip(model: controller.live, owner: controller.ownerName)
-            if controller.isMuted, !controller.isPaused {
-                MutedBanner(platform: platform, compact: true).padding(.horizontal, 6).padding(.bottom, 6)
+            if controller.shownMute.shows, !controller.isPaused {
+                MutedBanner(mute: controller.shownMute, platform: platform, compact: true).padding(.horizontal, 6).padding(.bottom, 6)
             }
             CallControls(compact: true, showsStop: false)
                 .padding(.horizontal, 12).padding(.bottom, 8)

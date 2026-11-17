@@ -83,6 +83,8 @@ final class NavigationModel: ObservableObject {
 
     func report(_ section: AppController.Section, _ part: Part) {
         guard parts[section] != part else { return }
+        // The sidebar's Now card reads the Meetings part: in Calendar mode it says which meeting is open.
+        objectWillChange.send()
         parts[section] = part
         note()
     }

@@ -357,6 +357,35 @@ final class DetectionServiceTests: XCTestCase {
         XCTAssertEqual(changes(), [true, false])
     }
 
+    /// The owner muted, then selected another tab of Chrome. The recorder records the mic again after 10 s, but the
+    /// app still says the owner was muted when last seen, until a sure reading says otherwise.
+    func testUnreadableMuteShowsMutedWhenLastSeen() {
+        let mute = FakeMute()
+        let (service, changes) = meetCall(mute)
+        var shown: [ShownMute] = []
+        service.onShownMute = { shown.append($0) }
+        mute.labels = ["Turn on microphone"]
+        service.checkMute(at: now)
+        XCTAssertEqual(shown, [.muted])
+        mute.labels = nil
+        for s in 1...11 { service.checkMute(at: now.addingTimeInterval(Double(s))) }
+        XCTAssertEqual(changes(), [true, false], "the recorder records the mic again")
+        XCTAssertEqual(shown, [.muted, .mutedWhenLastSeen])
+        for s in 12...20 { service.checkMute(at: now.addingTimeInterval(Double(s))) }
+        XCTAssertEqual(shown, [.muted, .mutedWhenLastSeen], "unknown changes nothing more")
+        mute.labels = ["Turn off microphone"]
+        // Unmuted, the state is read every 3 s: the last read was at 20.
+        service.checkMute(at: now.addingTimeInterval(23))
+        XCTAssertEqual(changes(), [true, false], "the tracker was already unmuted")
+        XCTAssertEqual(shown, [.muted, .mutedWhenLastSeen, .none])
+        service.checkMute(at: now.addingTimeInterval(26))
+        XCTAssertEqual(shown.count, 3, "the same state is not sent again")
+        mute.labels = ["Turn on microphone"]
+        service.checkMute(at: now.addingTimeInterval(29))
+        XCTAssertEqual(shown, [.muted, .mutedWhenLastSeen, .none, .muted])
+        XCTAssertEqual(changes(), [true, false, true])
+    }
+
     /// A new call starts with no mute state from the call before.
     func testEachCallStartsWithItsOwnMuteState() {
         let mute = FakeMute()

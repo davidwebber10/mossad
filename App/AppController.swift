@@ -101,8 +101,12 @@ final class AppController: ObservableObject {
     }
     private var roomMicTimer: Timer?
     @Published private(set) var isPaused = false
-    /// Muted in the call app: the mic track records silence meanwhile.
-    @Published private(set) var isMuted = false
+    /// What the app shows of the owner's mute in the call app (`ShownMute`). The recorder does not read it: it
+    /// follows the detection's own changes.
+    @Published private(set) var shownMute = ShownMute.none
+    /// A preview's made-up call for the sidebar's Now card (`MOSSAD_NOW`). Nothing records, and the menu bar does
+    /// not show a recording.
+    @Published private(set) var previewNow: NowCall?
     /// The sub-step each call is in while processing, such as "AssemblyAI is transcribing".
     @Published private(set) var stepDetails: [String: String] = [:]
     /// Each call's progress while it is processed, for the progress card.
@@ -828,13 +832,13 @@ final class AppController: ObservableObject {
                 if self?.noRecordGate.isBlockingCall == true { return }
                 CaptureQueue.queue.async { recorder.setMuted(muted, lastSeenMuted: lastMutedSeen) }
             }
-            detection.onMuteChange = { @Sendable [weak self] muted in
+            detection.onShownMute = { @Sendable [weak self] shown in
                 // A call that stays off the record has no recorder and no menu state to follow.
                 if self?.noRecordGate.isBlockingCall == true { return }
                 Task { @MainActor in
                     // A change that arrives after the end of its call must not leave the menu on "muted".
                     guard let self, self.isRecording else { return }
-                    self.isMuted = muted
+                    self.shownMute = shown
                 }
             }
             // A recording that loses one side of the call (no permission, a full disk, a dead source) says so once.
@@ -1255,7 +1259,7 @@ final class AppController: ObservableObject {
             Task { @MainActor in self.update(record); self.refresh() }
             Task { @MainActor in self.endOfCall(record) }
         }
-        isMuted = false
+        shownMute = .none
         status = .idle
         isPaused = false
         stopLive()
@@ -1278,9 +1282,11 @@ final class AppController: ObservableObject {
 
     /// Development hooks for screenshots, in a preview only, with nothing recorded or sent:
     /// `MOSSAD_LIVE=<live.json>` shows those lines and some audio levels for a meeting saved as recording,
-    /// `MOSSAD_MUTED=1` shows the muted note, and `MOSSAD_PROGRESS=upload|queued|summarizing` shows that progress
-    /// for each meeting being processed. `--show-recording` shows the recording state (MOSSAD_RECORDING_PLATFORM=
-    /// inPerson|zoom|teams|meet and MOSSAD_RECORDING_SECONDS pick it), and `--show-muted` the muted state.
+    /// `MOSSAD_MUTED=1` shows the muted note (`last`: muted when last seen), `MOSSAD_NOW=<call id>` shows the
+    /// sidebar's Now card for that meeting (`MOSSAD_NOW_MINUTES` long so far, without a recording), and
+    /// `MOSSAD_PROGRESS=upload|queued|summarizing` shows that progress for each meeting being processed.
+    /// `--show-recording` shows the recording state (MOSSAD_RECORDING_PLATFORM=inPerson|zoom|teams|meet and
+    /// MOSSAD_RECORDING_SECONDS pick it), and `--show-muted` the muted state.
     /// Called by `DevHooks` in a preview only.
     func applyLivePreview() {
         let env = ProcessInfo.processInfo.environment
@@ -1289,7 +1295,7 @@ final class AppController: ObservableObject {
             let seconds = env["MOSSAD_RECORDING_SECONDS"].flatMap(Double.init) ?? 75
             status = .recording(platform, since: Date().addingTimeInterval(-seconds))
         }
-        if CommandLine.arguments.contains("--show-muted") { isMuted = true }
+        if CommandLine.arguments.contains("--show-muted") { shownMute = .muted }
         if let path = env["MOSSAD_LIVE"], let transcript = try? LiveTranscript.load(from: URL(fileURLWithPath: path)) {
             live.show(transcript)
             for i in 0..<160 {
@@ -1301,7 +1307,11 @@ final class AppController: ObservableObject {
                 recorder.themMeter.record(speech(1.7))
             }
         }
-        if env["MOSSAD_MUTED"] == "1" { isMuted = true }
+        if env["MOSSAD_MUTED"] != nil { shownMute = ShownMute(preview: env["MOSSAD_MUTED"]) }
+        if let id = env["MOSSAD_NOW"] {
+            let minutes = env["MOSSAD_NOW_MINUTES"].flatMap(Double.init) ?? 12
+            previewNow = NowCall(id: id, since: Date().addingTimeInterval(-minutes * 60))
+        }
         // `MOSSAD_WAITING=1`: each meeting being processed waits for the call that records, with "Process now".
         if env["MOSSAD_WAITING"] == "1" {
             for r in meetings {
@@ -1384,7 +1394,7 @@ final class AppController: ObservableObject {
         let start = Date()
         status = .recording(.inPerson, since: start)
         isPaused = false
-        isMuted = false
+        shownMute = .none
         // A room has no link and no call app: nothing carries, and the decision is made before the live transcript.
         carryChoice(to: MoveAfterCall.Call(callID: CallRecorder.callID(for: start), platform: .inPerson, bundleID: nil, meetingID: nil, start: start))
         let recorder = recorder
@@ -2146,7 +2156,7 @@ final class AppController: ObservableObject {
             if failedStarts.remove(at) != nil { return }
             status = .recording(platform, since: at)
             isPaused = false
-            isMuted = false
+            shownMute = .none
             // Before the live transcript and any other send, from the detector's own values: the same call going on
             // keeps the owner's choice, for sure or as a guess.
             carryChoice(to: MoveAfterCall.Call(callID: CallRecorder.callID(for: at), platform: platform, bundleID: bundleID,
@@ -2159,7 +2169,7 @@ final class AppController: ObservableObject {
             forgetLiveCall(end: at)
             status = .idle
             isPaused = false
-            isMuted = false
+            shownMute = .none
             stopLive()
         }
     }
