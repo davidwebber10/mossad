@@ -265,9 +265,9 @@ struct MeetingsView: View {
     /// Opens the meeting that another page asked for, in either mode.
     private func takeOpenRequest() {
         guard let id = controller.meetingToOpen else { return }
-        // A call in its first moment is not in the list yet: Calendar mode keeps the request until its record arrives.
-        if mode == .calendar, !controller.meetings.contains(where: { $0.id == id }),
-           !controller.calendarUpcoming.contains(where: { $0.id == id }) { return }
+        // A call in its first moment is not in the list yet: Calendar mode keeps that one request until its record arrives.
+        let known = controller.meetings.contains { $0.id == id } || controller.calendarUpcoming.contains { $0.id == id }
+        if MeetingOpenRoute.waits(calendarMode: mode == .calendar, request: id, known: known, liveID: controller.nowCall?.id) { return }
         controller.meetingToOpen = nil
         // A recorded meeting or an invite: Prepare opens an invite's page in Calendar mode too.
         if let shown = MeetingOpenRoute.fullPane(calendarMode: mode == .calendar, request: id, shown: opened), shown != opened {
