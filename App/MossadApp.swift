@@ -19,6 +19,14 @@ struct MossadEntry {
             FileHandle.standardError.write(Data("Mossad: \(whose) could not use its own settings; not starting.\n".utf8))
             exit(2)
         }
+        // An instance started by a switch waits, 10 s in all, for the old one to let go of the Mac-wide lock and then
+        // of this profile's folder, so its hot keys and its folder are free. Before the app object exists.
+        let wait = ProfileSwitch.waitSeconds(CommandLine.arguments)
+        if wait > 0, !CommandLine.arguments.contains(where: AppIdentity.commands.contains) {
+            let start = Date()
+            _ = InstanceLock.waitUntilFree(root: ProfileRegistry.folder(home: FileManager.default.homeDirectoryForCurrentUser), timeout: wait)
+            _ = InstanceLock.waitUntilFree(root: Paths.live.root, timeout: max(0, wait - Date().timeIntervalSince(start)))
+        }
         // Before any resolver: the app, `--mcp`, and each command-line step read the same company domains.
         CompanyDomains.loadSaved()
         // The build flag says what this copy does; the bundle id picks its folder and Keychain. They must agree.
@@ -242,10 +250,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.resume()
         terminateSignal = source
         let event = NSAppleEventManager.shared().currentAppleEvent
-        let atLogin = event?.paramDescriptor(forKeyword: keyAELaunchedAsLogInItem) != nil
+        // A switch of profile opens the window, also in the first minutes after the Mac started.
+        let switched = CommandLine.arguments.contains("--switched")
+        let atLogin = !switched && (event?.paramDescriptor(forKeyword: keyAELaunchedAsLogInItem) != nil
             // Login items started by the system do not always say so; a start in the first minutes after
             // booting is one of them.
-            || ProcessInfo.processInfo.systemUptime < 180
+            || ProcessInfo.processInfo.systemUptime < 180)
         // `--background`: a restart after an update, which must not pull the owner away from their work.
         // Rehearsal opens straight into setup, every time.
         if Rehearsal.isOn, !CommandLine.arguments.contains("--ui-preview") {

@@ -387,6 +387,12 @@ final class AppController: ObservableObject {
     let paths = Paths.live
     /// Held for the life of the app: only the copy that has it records, recovers, and processes in this folder.
     private var instanceLock: InstanceLock?
+    /// With a registry file: the Mac-wide lock, so only one profile is the foreground app.
+    private var foregroundLock: InstanceLock?
+    /// The registry as the switcher and Settings show it; read again before each change.
+    @Published var profiles: ProfileRegistry.Loaded = AppIdentity.current.registry
+    /// Why the last change of profiles did not happen, in words for the owner.
+    @Published var profileProblem: String?
     /// A preview, Rehearsal, or a second copy on the same folder: it shows the meetings and records, processes,
     /// and syncs nothing.
     private(set) var isInert = false
@@ -640,16 +646,30 @@ final class AppController: ObservableObject {
         // Rehearsal only walks through setup: like a preview, it starts no detection, recording, processing, or sync.
         // A second copy on the same folder would delete or cut the first copy's live recording at launch.
         if !preview, !Rehearsal.isOn {
-            switch InstanceLock.acquire(root: paths.root) {
-            case .held(let lock): instanceLock = lock
-            case .taken:
+            // With profiles, one copy of Mossad is the foreground app for the Mac: the Mac-wide lock first.
+            var foreground = InstanceLock.Attempt.failed(0)
+            if ProfileLaunch.takesForegroundLock(AppIdentity.current) {
+                foreground = InstanceLock.acquire(root: ProfileRegistry.folder(home: FileManager.default.homeDirectoryForCurrentUser))
+                if case .held(let lock) = foreground { foregroundLock = lock }
+                if case .failed(let code) = foreground { Log.error("Could not take the Mac-wide lock: \(String(cString: strerror(code)))") }
+            }
+            if case .taken = foreground {
                 isSecondCopy = true
-                Log.error("Another copy of Mossad uses \(paths.root.path); this copy only shows the meetings")
+                Log.error("Another copy of Mossad runs on this Mac; this copy only shows the meetings")
                 notifier.postSecondCopy(otherQuit: false)
                 waitForInstanceLock()
-            case .failed(let code):
-                // Not a sign of another copy, so this copy works as before the lock existed.
-                Log.error("Could not lock \(paths.root.path): \(String(cString: strerror(code)))")
+            } else {
+                switch InstanceLock.acquire(root: paths.root) {
+                case .held(let lock): instanceLock = lock
+                case .taken:
+                    isSecondCopy = true
+                    Log.error("Another copy of Mossad uses \(paths.root.path); this copy only shows the meetings")
+                    notifier.postSecondCopy(otherQuit: false)
+                    waitForInstanceLock()
+                case .failed(let code):
+                    // Not a sign of another copy, so this copy works as before the lock existed.
+                    Log.error("Could not lock \(paths.root.path): \(String(cString: strerror(code)))")
+                }
             }
         }
         let inert = RunMode.decide(preview: preview || AppIdentity.current.isPreview, rehearsal: Rehearsal.isOn, secondCopy: isSecondCopy,

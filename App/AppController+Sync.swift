@@ -57,6 +57,12 @@ extension AppController {
 
     /// Saves a checked server and makes it the sync store.
     func connectServer(_ c: ServerConnection, hello: ServerClient.Hello, syncThere: Bool) {
+        // A server is one profile's: another profile of this Mac already uses this one.
+        if let owner = serverOwner(of: c.address) {
+            Log.error("Profiles: this server belongs to another profile; not connected")
+            profileProblem = ProfileRules.serverRefusal(owner)
+            return
+        }
         serverMCP = hello.mcp?.absoluteString ?? ""
         serverHasChat = hello.chat
         serverShares = hello.shares
@@ -74,6 +80,7 @@ extension AppController {
         syncEngine = nil
         mirrorEngine = nil
         updateSharedServer()
+        noteServer(c.address)
         let owner = ownerName
         // Rehearsal never writes to a server: a setup walkthrough must not change the owner's real one.
         let personas = personasInServerMCP
@@ -95,6 +102,7 @@ extension AppController {
         syncEngine = nil
         mirrorEngine = nil
         if writesSharedItems { ServerPairing.unshare() }
+        noteServer(nil)
         syncActivity = SyncActivity()
     }
 

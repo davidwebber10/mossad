@@ -196,6 +196,13 @@ final class OnboardingTests: XCTestCase {
         XCTAssertEqual(Pricing.hourEstimate(transcription: .local, ai: .anthropic, model: "claude-haiku-5-5"), 0.0044, accuracy: 0.0005)
         XCTAssertTrue(Onboarding.costLine(Pricing.hourCost(transcription: .assemblyai, ai: .anthropic, model: "")).contains("$0.63"))
     }
+
+    func testANewProfileStartsSetupWithThePermissionsDone() {
+        let facts = OnboardingFacts(granted: Set(OnboardingPermissions.required))
+        XCTAssertTrue(Onboarding.opensAtLaunch(finished: false, hasMeetings: false, preview: false, forced: false, rehearsal: false))
+        XCTAssertEqual(OnboardingProgress().state(of: .permissions, facts: facts), .done)
+        XCTAssertEqual(OnboardingProgress().state(of: .welcome, facts: facts), .current)
+    }
 }
 
 final class RehearsalFeedbackTests: XCTestCase {

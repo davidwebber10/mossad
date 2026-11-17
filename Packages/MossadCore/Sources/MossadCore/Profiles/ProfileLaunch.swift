@@ -5,6 +5,12 @@ import Foundation
 public enum ProfileLaunch {
     public enum Choice: Equatable, Sendable { case profile(Profile), refused(String) }
 
+    /// Whether the window app also takes the Mac-wide lock (`~/Library/Application Support/Mossad/.lock`), so only one
+    /// profile is the foreground app. Only with a real registry file: with none, nothing new is made on disk.
+    public static func takesForegroundLock(_ identity: AppIdentity) -> Bool {
+        identity.takesProfiles && identity.registry.state != .none && !identity.madeUpRegistry
+    }
+
     public static func choice(arguments: [String], registry: ProfileRegistry.Loaded) -> Choice {
         // `--profile=<id>` and the like would read as no profile, and a command would then serve `default`.
         if let typo = arguments.first(where: { $0.hasPrefix("--profile") && $0 != "--profile" }) {

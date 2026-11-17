@@ -153,4 +153,35 @@ final class ProfileRulesTests: XCTestCase {
         XCTAssertNil(ProfileRules.serverOwner(of: URL(string: "https://other.example.com")!, in: r, except: "1a2b3c4d"))
         XCTAssertEqual(ProfileRules.serverRefusal(.default), "The profile “Mossad” already uses this server. Each profile needs its own server.")
     }
+
+    // MARK: Task 7: the launch of a switch, and one foreground app
+
+    func testTheNewInstanceWaitsForTheLocks() throws {
+        let dir = try tempFolder()
+        nonisolated(unsafe) var held: InstanceLock?
+        if case .held(let lock) = InstanceLock.acquire(root: dir) { held = lock }
+        XCTAssertNotNil(held)
+        let gone = expectation(description: "let go")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { held = nil; gone.fulfill() }
+        XCTAssertTrue(InstanceLock.waitUntilFree(root: dir, timeout: 2, every: 0.05))
+        wait(for: [gone], timeout: 2)
+        XCTAssertNil(held)
+        guard case .held(let kept) = InstanceLock.acquire(root: dir) else { return XCTFail("no lock") }
+        XCTAssertFalse(InstanceLock.waitUntilFree(root: dir, timeout: 0.3, every: 0.05))
+        withExtendedLifetime(kept) {}
+        let missing = dir.appendingPathComponent("not-there")
+        XCTAssertTrue(InstanceLock.waitUntilFree(root: missing, timeout: 0.3))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: missing.path))
+    }
+
+    func testOnlyOneForegroundAppForTheMac() {
+        let main = AppIdentity.mainBundleID
+        XCTAssertFalse(ProfileLaunch.takesForegroundLock(AppIdentity(bundleID: main)))
+        XCTAssertTrue(ProfileLaunch.takesForegroundLock(AppIdentity(bundleID: main, registry: read)))
+        XCTAssertTrue(ProfileLaunch.takesForegroundLock(AppIdentity(bundleID: main, registry: newer)))
+        XCTAssertFalse(ProfileLaunch.takesForegroundLock(AppIdentity(bundleID: main, arguments: ["Mossad", "--profile", "1a2b3c4d"], registry: read, madeUpRegistry: true)))
+        XCTAssertFalse(ProfileLaunch.takesForegroundLock(AppIdentity(bundleID: main, arguments: ["--ui-preview"], environment: ["MOSSAD_ROOT": "/tmp/demo"], registry: read)))
+        XCTAssertFalse(ProfileLaunch.takesForegroundLock(AppIdentity(bundleID: AppIdentity.rehearsalBundleID, registry: read)))
+        XCTAssertFalse(ProfileLaunch.takesForegroundLock(AppIdentity(bundleID: main, environment: ["MOSSAD_ROOT": "/tmp/demo"], registry: read)))
+    }
 }

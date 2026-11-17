@@ -13,6 +13,11 @@ extension AppController {
                 // Only a look: the lock is free again at once.
                 var free = false
                 if case .held = InstanceLock.acquire(root: paths.root) { free = true }
+                // With profiles, the other copy may be another profile: its Mac-wide lock must be free too.
+                if free, ProfileLaunch.takesForegroundLock(AppIdentity.current),
+                   !InstanceLock.waitUntilFree(root: ProfileRegistry.folder(home: FileManager.default.homeDirectoryForCurrentUser), timeout: 0) {
+                    free = false
+                }
                 if free != otherCopyQuit {
                     otherCopyQuit = free
                     if free { notifier.postSecondCopy(otherQuit: true) }
