@@ -85,6 +85,68 @@ extension AppController {
         return true
     }
 
+    // MARK: "This call is for"
+
+    /// The choice of a call: `callChoice` while that call records; after it, the mark on its record.
+    func choice(forCall callID: String) -> MoveAfterCall.Choice {
+        if let c = callChoice, c.callID == callID { return c.choice }
+        return MoveAfterCall.choice(of: meetings.first { $0.id == callID }?.moveTo)
+    }
+
+    /// The panel's row while a call records; nil with one profile, or no call.
+    var callForMenu: MoveAfterCall.Menu? {
+        guard !moveTargets.isEmpty else { return nil }
+        let callID: String
+        if case .recording(_, let since) = status { callID = CallRecorder.callID(for: since) }
+        // A preview shows the made-up call of `MOSSAD_CALL_FOR`; it records nothing.
+        else if AppIdentity.current.isPreview, let c = callChoice { callID = c.callID } else { return nil }
+        return MoveAfterCall.menu(profiles.registry, active: activeProfile.id, choice: choice(forCall: callID))
+    }
+
+    /// "This call is for ▸ <profile>". The record has the choice first (saved by the recorder, so a crash keeps it);
+    /// for another profile the live transcript, its title, the names, the points' check, and the answer of a live
+    /// chat stop, and `live.json` goes, so `current_call` has nothing to give. Taken back, nothing starts again.
+    func setCallProfile(_ profileID: String) {
+        guard !moveTargets.isEmpty, profileID == activeProfile.id || moveTargets.contains(where: { $0.id == profileID }) else { return }
+        let callID: String
+        if case .recording(_, let since) = status { callID = CallRecorder.callID(for: since) }
+        else if AppIdentity.current.isPreview, let c = callChoice { callID = c.callID } else { return }
+        let now = choice(forCall: callID)
+        let next = MoveAfterCall.next(now, picked: profileID, active: activeProfile.id)
+        guard next != now else { return }
+        if AppIdentity.current.isPreview {
+            callChoice = (callID, next)
+            liveOff = MoveAfterCall.liveOff(next)
+            return
+        }
+        let recorder = recorder, mark = next.moveTo
+        CaptureQueue.queue.async {
+            recorder.setMoveTarget(mark, forCall: callID)
+            Task { @MainActor in self.refresh() }
+        }
+        callChoice = (callID, next)
+        if case .other = next {
+            stopLive()
+            live.removeFile(paths.callDirectory(callID).appendingPathComponent(LiveTranscript.fileName))
+            liveChatSessions[callID]?.stop()
+            Log.info("Live: the call \(callID) is for another profile; nothing more of it is sent from here")
+        }
+        liveOff = MoveAfterCall.liveOff(next)
+    }
+
+    /// The end of a call marked for another profile: it moves as "recorded"; a move that fails or is refused keeps
+    /// the mark (`MoveSource.keepsMark`), and the row offers "Process here" and "Move to".
+    func moveAfterCall(_ callID: String, to profileID: String) {
+        guard !AppIdentity.current.isPreview, let pipeline else { return }
+        let source = moveHalves(pipeline).source
+        Task {
+            // A start that is refused leaves the mark: the call waits here, and the next look tries again.
+            _ = await source.start(callID, to: profileID, name: profileName(profileID), afterCall: true)
+            refresh()
+            checkMoves()
+        }
+    }
+
     // MARK: The owner's acts
 
     /// "Move to ▸ <profile>": reads what was sent and which chats are deleted, off the main actor, then opens the
@@ -191,6 +253,12 @@ extension AppController {
         var halves = moveHalves(pipeline)
         halves.source = MoveSource(halves.setup) { [weak self] id, share in
             Task { @MainActor in self?.moveProgress[id] = share }
+        }
+        // A call marked during its recording that has no move yet (a quit, a crash, a copy that failed to start):
+        // its move starts now, or it waits for the owner.
+        let recordingID = meetings.first { isLive($0) }?.id
+        for r in meetings where r.status == .recorded && r.moveTo != nil && r.id != recordingID && moves[r.id] == nil && moveEnded[r.id] == nil {
+            if case .move(let to) = MoveAfterCall.atEnd(r, targets: moveTargets.map(\.id)) { moveAfterCall(r.id, to: to) }
         }
         let paths = paths, home = FileManager.default.homeDirectoryForCurrentUser
         let targets = profiles.registry.live.filter { $0.id != activeProfile.id }
@@ -308,7 +376,7 @@ extension AppController {
 
     /// The two halves with this app's own objects. The removal's changes of what the app holds in memory (the coach's
     /// memory, the share links, the reads) go through the app's own paths, on the main actor.
-    private func moveHalves(_ pipeline: Pipeline) -> (source: MoveSource, intake: MoveIntake, setup: MoveSource.Setup) {
+    func moveHalves(_ pipeline: Pipeline) -> (source: MoveSource, intake: MoveIntake, setup: MoveSource.Setup) {
         let paths = paths, library = library, usage = usage, archive = cloudArchive
         let owner = ownerName, prints = voiceFingerprints, backs = mode.does(.backup)
         let identity = AppIdentity.current, env = ProcessInfo.processInfo.environment

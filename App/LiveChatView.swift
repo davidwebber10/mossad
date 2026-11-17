@@ -39,7 +39,7 @@ struct LiveChatView: View {
             .onChange(of: messages.count) { _, _ in withAnimation { proxy.scrollTo(messages.last?.id, anchor: .top) } }
             .onChange(of: session.partial) { _, _ in proxy.scrollTo("running", anchor: .bottom) }
         }
-        .floatingComposer(composerStack)
+        .floatingComposer(field)
         .environment(\.chatMomentVerb, "Show")
         .environment(\.openURL, OpenURLAction { url in
             if let link = ChatLink.parse(url), link.callID == record.id, let at = link.at {
@@ -57,11 +57,17 @@ struct LiveChatView: View {
     private var welcome: some View {
         VStack(alignment: .leading, spacing: Rhythm.rowGap) {
             Text("Ask about this call").font(.system(size: Rhythm.leadSize, weight: .medium))
-            Text(controller.liveOffReason.map { "There is no live transcript in this call. \($0) Answers can still use the invite and your earlier meetings." }
+            Text(controller.liveOff.flatMap { $0.chatOff ? $0.panelText : nil }
+                 ?? controller.liveOffReason.map { "There is no live transcript in this call. \($0) Answers can still use the invite and your earlier meetings." }
                  ?? "Answers come from what was said so far, the invite, and your earlier meetings. Times in an answer show the moment in the live transcript.")
                 .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: ChatThread.answerMax, alignment: .leading)
+    }
+
+    /// The field, or the reason in its place when the call is for another profile: no question is sent from here.
+    @ViewBuilder private var field: some View {
+        if let off = controller.liveOff, off.chatOff { MoveChatOff(text: off.text) } else { composerStack }
     }
 
     private var composerStack: some View {

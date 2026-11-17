@@ -122,3 +122,39 @@ struct MoveChatOff: View {
             .accessibilityAddTraits(.isStaticText)
     }
 }
+
+/// "This call is for ▸ <profile>" in the menu bar panel while a call records, with the note of the choice. Only with
+/// two profiles or more (`MoveAfterCall.menu`).
+struct CallForRow: View {
+    @EnvironmentObject var controller: AppController
+    let menu: MoveAfterCall.Menu
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+            HStack(spacing: Space.m) {
+                Text(MoveAfterCall.Menu.title).font(.system(size: Rhythm.bodySize)).lineLimit(1)
+                Spacer(minLength: Space.s)
+                // The dot beside the menu: a menu's own label shows text only.
+                if let chosen = menu.rows.first(where: \.chosen) { ProfileDot(color: chosen.color) }
+                Menu {
+                    ForEach(menu.rows) { row in
+                        Button { controller.setCallProfile(row.id) } label: {
+                            if row.chosen { Label(row.name, systemImage: "checkmark") } else { Text(row.name) }
+                        }
+                    }
+                } label: {
+                    Text(menu.rows.first(where: \.chosen)?.name ?? "").font(.system(size: Rhythm.bodySize)).lineLimit(1)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .accessibilityLabel(MoveAfterCall.Menu.title)
+            }
+            if let note = menu.note {
+                Text(note)
+                    .font(.system(size: Rhythm.secondarySize))
+                    .foregroundStyle(Palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}

@@ -174,7 +174,8 @@ extension AppController {
     }
 
     private func hearPoints(callID: String) async {
-        guard !isPaused, liveOffReason == nil, liveTranscriptEnabled, let record = meetings.first(where: { $0.id == callID }) else { return }
+        guard !isPaused, liveOffReason == nil, liveTranscriptEnabled, MoveAfterCall.allows(.livePoints, choice(forCall: callID)),
+              let record = meetings.first(where: { $0.id == callID }) else { return }
         // No open point at all: nothing to make or to read.
         series.reload(paths)
         guard series.book.points.contains(where: \.isOpen) else { return }

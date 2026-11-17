@@ -30,7 +30,7 @@ struct MeetingChatView: View {
                     if running { ChatAnswering(steps: steps, callID: record.id).id("running") }
                     if let error { ErrorCard(error: error, retry: error.canRetry ? { retry() } : nil) }
                     // Questions not asked yet, under the last answer.
-                    if !messages.isEmpty, !running, !followUps.isEmpty { chips(followUps) }
+                    if !messages.isEmpty, !running, !followUps.isEmpty, controller.chatOff(record.id) == nil { chips(followUps) }
                 }
                 // Room for the floating composer, as the canvas leaves 80 pt under the last answer.
                 .detailColumn(top: top, bottom: 80)
@@ -57,7 +57,8 @@ struct MeetingChatView: View {
             Text("Ask about this meeting").font(.system(size: Rhythm.leadSize, weight: .medium))
             Text("Claude reads this meeting's summary and transcript, and can look at your other meetings when that helps. Times in the answer play the moment.")
                 .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
-            chips(examples).padding(.top, 4)
+            // No question to tap while the meeting moves: the field's sentence says why.
+            if controller.chatOff(record.id) == nil { chips(examples).padding(.top, 4) }
         }
         .frame(maxWidth: ChatThread.answerMax, alignment: .leading)
     }

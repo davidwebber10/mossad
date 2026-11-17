@@ -167,6 +167,8 @@ final class AppController: ObservableObject {
     var liveCoverage = LiveCoverage()
     /// Why this call has no live transcript; nil when it runs. The live chat and the quick panel say it.
     @Published var liveOff: LiveOffReason?
+    /// "This call is for": the choice of the call that records now (`MoveAfterCall`); nil is `.here`.
+    @Published var callChoice: (callID: String, choice: MoveAfterCall.Choice)?
     var liveOffReason: String? { liveOff?.text }
     /// The live chat of each call, so an answer that runs survives a change of tab or of view (the Chat tab and
     /// the quick panel show the same one).
@@ -1242,8 +1244,7 @@ final class AppController: ObservableObject {
             }
             // The stopped record goes into the list at once, so its row stops saying "recording".
             Task { @MainActor in self.update(record); self.refresh() }
-            // Utility: the next call may start in the same minute, and the call app comes first.
-            Task(priority: .utility) { @MainActor in await self.track { await self.pipeline.process(record.id) } }
+            Task { @MainActor in self.endOfCall(record) }
         }
         isMuted = false
         status = .idle
@@ -1419,6 +1420,9 @@ final class AppController: ObservableObject {
             liveCoverage = LiveCoverage()
         }
         guard case .recording(_, let since) = status else { return }
+        // A call for another profile, or one taken back from it: the streams never open again for it.
+        let choice = self.choice(forCall: CallRecorder.callID(for: since))
+        guard MoveAfterCall.allows(.liveTranscript, choice) else { liveOff = MoveAfterCall.liveOff(choice); return }
         guard liveTranscriptEnabled else { liveOff = .setting; return }
         guard let key = keychain.get(.assemblyai) else { liveOff = .noKey; return }
         // The two audio streams take about half a megabit of upload. On a network the owner marked to save data
@@ -1479,6 +1483,7 @@ final class AppController: ObservableObject {
     /// Once per call, after about 5 minutes of live transcript, asks a small model for a provisional title so the
     /// menu and the list show it while the call runs. The summary's title replaces it.
     private func startLiveTitling(callID: String) {
+        guard MoveAfterCall.allows(.liveTitle, choice(forCall: callID)) else { return }
         let chosen = aiProvider.resolvedModel(aiModel)
         let key = aiProvider.key.flatMap { keychain.get($0) }
         guard key != nil || !aiProvider.requiresKey, let model = aiProvider.smallModel ?? (chosen.isEmpty ? nil : chosen) else { return }
@@ -1487,7 +1492,7 @@ final class AppController: ObservableObject {
         liveTitling?.cancel()
         liveTitling = Task { [weak self] in
             try? await Task.sleep(for: .seconds(300))
-            guard !Task.isCancelled, let self, self.isRecording(callID) else { return }
+            guard !Task.isCancelled, let self, self.isRecording(callID), MoveAfterCall.allows(.liveTitle, self.choice(forCall: callID)) else { return }
             // A calendar title or the owner's title wins, so no model call is spent on a title nobody shows.
             let recorder = self.recorder
             let hasTitle = await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in
@@ -1510,6 +1515,7 @@ final class AppController: ObservableObject {
     /// After the call: the namer, the events around the call, and the chat runs are not needed any more. A chat
     /// answer still on its way keeps its own session and saves its chat.
     private func forgetLiveCall() {
+        callChoice = nil
         liveNamer = nil
         liveCalendar = nil
         liveChatSessions = [:]
@@ -1574,7 +1580,7 @@ final class AppController: ObservableObject {
         }
     }
 
-    private func stopLive() {
+    func stopLive() {
         liveRestart?.cancel()
         liveRestart = nil
         live.save()
@@ -2048,8 +2054,20 @@ final class AppController: ObservableObject {
                 return
             }
             Task { @MainActor in self.update(record); self.refresh() }
+            Task { @MainActor in self.endOfCall(record) }
+        }
+    }
+
+    /// The end of a kept call: processed here, or moved as "recorded" to the profile it is for, or held for the owner.
+    func endOfCall(_ record: CallRecord) {
+        switch MoveAfterCall.atEnd(record, targets: moveTargets.map(\.id)) {
+        case .process:
             // Utility: the next call may start in the same minute, and the call app comes first.
             Task(priority: .utility) { @MainActor in await self.track { await self.pipeline.process(record.id) } }
+        case .move(let to):
+            moveAfterCall(record.id, to: to)
+        case .hold, .nothing:
+            break
         }
     }
 
@@ -2388,6 +2406,11 @@ final class LiveTranscriptModel: ObservableObject {
         var snapshot = pending
         snapshot.clock = clock?()
         saves.async { try? snapshot.save(to: url) }
+    }
+
+    /// Deletes the saved file after any save on its way, so nothing puts it back.
+    func removeFile(_ url: URL) {
+        saves.async { try? FileManager.default.removeItem(at: url) }
     }
 
     func reset() {

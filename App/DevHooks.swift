@@ -11,7 +11,7 @@ enum DevHooks {
     /// `MOSSAD_PROOF_INTAKE_STOP=takingIn`, `MOSSAD_PROOF_INTAKE_REFUSE=1`, `MOSSAD_PROOF_COPY_HOLD=<seconds>` with
     /// `MOSSAD_PROOF_CANCEL_AFTER=<seconds>` (in `WorkerEntry`, on a made-up registry only),
     /// and in a preview
-    /// `MOSSAD_WORKER_LINES`, and the move's `MOSSAD_MOVE`, `MOSSAD_MOVE_ENDED`, `MOSSAD_MOVE_LINE`, `MOSSAD_MOVE_SHEET`.
+    /// `MOSSAD_WORKER_LINES`, and the move's `MOSSAD_MOVE`, `MOSSAD_MOVE_ENDED`, `MOSSAD_MOVE_LINE`, `MOSSAD_MOVE_SHEET`, `MOSSAD_CALL_FOR`.
     /// `--ui-preview` opens the UI on $MOSSAD_ROOT with no detection, recording, or processing, so the screens can
     /// be checked while the installed copy records a call.
     static let preview = CommandLine.arguments.contains("--ui-preview")
@@ -98,6 +98,12 @@ enum DevHooks {
                 DispatchQueue.main.async { c.openAskPanelPreview() }
                 return
             }
+            // `CallPanel` in a preview: the panel's part for a call that records, for the made-up call of
+            // `MOSSAD_CALL_FOR`, in a window of its own. Nothing records.
+            if preview, name == "CallPanel" {
+                DispatchQueue.main.async { c.openCallPanelPreview() }
+                return
+            }
             // `--open-window Onboarding` opens setup alone; MOSSAD_ONBOARDING_STEP picks the step in a preview.
             if name == "Onboarding" {
                 DispatchQueue.main.async { c.openOnboarding() }
@@ -150,6 +156,7 @@ enum DevHooks {
     /// a made-up ledger of a move to the first other profile of `MOSSAD_PROFILES` (started 0 s ago, or 120 s for `slow`;
     /// `copying` at 42%; `removing` waits at the backup step).
     /// `MOSSAD_MOVE_ENDED="<call id>=<reason>"`: a move of a call marked during its recording that ended (its row is held).
+    /// `MOSSAD_CALL_FOR=<profile id>|back|here` (with `MOSSAD_ASK_CALL`): the choice of "This call is for".
     /// `MOSSAD_MOVE_LINE=<text>`: the line above the list. `MOSSAD_MOVE_SHEET=<call id>`: the confirmation for the first target.
     private static func moveHooks(_ c: AppController) {
         guard let to = c.moveTargets.first else { return }
@@ -182,12 +189,22 @@ enum DevHooks {
         for (id, why) in pairs("MOSSAD_MOVE_ENDED") {
             c.moveEnded[id] = MoveEnded(callID: id, to: to.id, why: MovePlan.Cancel(rawValue: why) ?? .refusedIDTaken, afterCall: true, at: Date())
         }
+        callFor(c)
         if let text = env["MOSSAD_MOVE_LINE"] { c.moveLine = MoveShow.Line(text: text, since: Date(), lasts: 3600) }
         if let id = env["MOSSAD_MOVE_SHEET"] {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 if let r = c.meetings.first(where: { $0.id == id }) { c.askMove(r, to: to) }
             }
         }
+    }
+
+    /// `MOSSAD_CALL_FOR=<profile id>|back|here` with `MOSSAD_ASK_CALL=<call id>`, in a preview: the choice of "This call
+    /// is for" for that made-up call, and the reason the live transcript is off. Nothing records.
+    static func callFor(_ c: AppController) {
+        guard preview, let pick = env["MOSSAD_CALL_FOR"], let callID = env["MOSSAD_ASK_CALL"] else { return }
+        let choice: MoveAfterCall.Choice = pick == "here" ? .here : pick == "back" ? .backHere : .other(pick)
+        c.callChoice = (callID, choice)
+        c.liveOff = MoveAfterCall.liveOff(choice)
     }
 
     /// `MOSSAD_ASK_POINTS=open|closed` in a preview: the quick panel's points row shown open or closed, without

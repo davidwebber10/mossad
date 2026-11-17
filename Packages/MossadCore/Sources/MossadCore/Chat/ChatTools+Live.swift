@@ -11,6 +11,8 @@ extension ChatTools {
 
     func currentCall(minutes: Double?, now: Date = Date()) -> String {
         guard let r = live, let paths else { return "No call is recording now." }
+        // A call the owner marked for another profile: nothing of it is read here, for this chat or another AI app.
+        guard MoveAfterCall.allows(.currentCall, MoveAfterCall.choice(of: r.moveTo)) else { return LiveOffReason.forOtherProfile.text }
         let clockTime = now.timeIntervalSince(r.start)
         let url = paths.callDirectory(r.id).appendingPathComponent(LiveTranscript.fileName)
         let transcript = try? LiveTranscript.load(from: url)

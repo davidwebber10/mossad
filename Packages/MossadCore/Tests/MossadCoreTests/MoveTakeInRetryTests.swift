@@ -106,7 +106,7 @@ final class MoveTakeInRetryTests: XCTestCase {
         XCTAssertEqual(out.targetWaits, .record)
         let row = MoveShow.row(try CallRecord.load(from: a.callDirectory(id)), move: out, name: "Personal", copied: nil, reach: .open,
                                held: nil, now: clock.now)
-        XCTAssertEqual(row?.text, "“Personal” took the meeting but has not finished: it cannot save the meeting here yet. It tries again.")
+        XCTAssertEqual(row?.text, "“Personal” took the meeting but has not finished: it cannot save the meeting there yet. It tries again.")
         XCTAssertEqual(row?.cancels, false)
         // It keeps trying at the last wait, and goes on once the cause is gone.
         broken.set(false)

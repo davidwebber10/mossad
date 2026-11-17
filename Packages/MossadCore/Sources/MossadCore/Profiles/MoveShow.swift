@@ -191,7 +191,7 @@ extension MoveWords {
     public static func notFinished(_ target: String, _ waits: MoveMarker.TakeInWait) -> String {
         let why = switch waits {
         case .voices: "it cannot save the voices it learned from it yet."
-        case .record: "it cannot save the meeting here yet."
+        case .record: "it cannot save the meeting there yet."
         case .chats: "it cannot save the meeting's chats yet."
         case .failed: "one step does not work yet."
         }

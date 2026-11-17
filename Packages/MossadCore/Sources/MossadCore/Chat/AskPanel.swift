@@ -4,6 +4,10 @@ import Foundation
 /// Why a call that records has no live transcript, and where in Settings the owner can change it.
 public enum LiveOffReason: String, Equatable, Sendable {
     case setting, noKey, lowData
+    /// "This call is for" another profile: nothing of the call is sent from here (`MoveAfterCall`).
+    case forOtherProfile
+    /// That choice was taken back: the live transcript does not start again for this call.
+    case afterOtherProfile
 
     /// The line the live chat's prompt and the Chat tab use.
     public var text: String {
@@ -11,6 +15,8 @@ public enum LiveOffReason: String, Equatable, Sendable {
         case .setting: "Live transcript is off in Settings."
         case .noKey: "Live transcript needs an AssemblyAI key."
         case .lowData: "Live transcript is off on a network in Low Data Mode."
+        case .forOtherProfile: "This call is for another profile, so nothing of it is sent from here."
+        case .afterOtherProfile: "The live transcript stays off for the rest of this call."
         }
     }
 
@@ -21,15 +27,20 @@ public enum LiveOffReason: String, Equatable, Sendable {
         case .setting: "The live transcript is off, \(rest)"
         case .noKey: "The live transcript needs an AssemblyAI key, \(rest)"
         case .lowData: "The live transcript is off on a network in Low Data Mode, \(rest)"
+        case .forOtherProfile: "This call is for another profile, so Mossad cannot answer during the call. The recording is safe, and that profile writes the notes."
+        case .afterOtherProfile: "The live transcript stays off for the rest of this call, \(rest)"
         }
     }
+
+    /// The call's choice of profile: the live chat is off too, not only the transcript (`MoveAfterCall`).
+    public var chatOff: Bool { self == .forOtherProfile || self == .afterOtherProfile }
 
     /// The Settings page that turns it on; nil when no setting does (a network in Low Data Mode).
     public var fix: LiveOffFix? {
         switch self {
         case .setting: .recordingSettings
         case .noKey: .aiSettings
-        case .lowData: nil
+        case .lowData, .forOtherProfile, .afterOtherProfile: nil
         }
     }
 }

@@ -272,7 +272,7 @@ private struct StatusRow<Dot: View, Action: View>: View {
 
 /// While a call records: the red pulse, "Recording · In person · 12:41", who has spoken, Stop, the live
 /// talk-share strip, then pause, bookmark, and skip.
-private struct RecordingStatus: View {
+struct RecordingStatus: View {
     @EnvironmentObject var controller: AppController
     @Environment(\.dismiss) private var dismiss
     let platform: Platform
@@ -305,6 +305,8 @@ private struct RecordingStatus: View {
             }
             CallControls(compact: true, showsStop: false)
                 .padding(.horizontal, 12).padding(.bottom, 8)
+            // With two profiles or more: which profile this call is for (`MoveAfterCall`).
+            if let menu = controller.callForMenu { CallForRow(menu: menu).padding(.horizontal, 12).padding(.bottom, Rhythm.itemGap) }
             PanelRow(action: {
                 dismiss()
                 // After the menu's own panel closes, so it does not take the keyboard back from the quick panel.
