@@ -5,9 +5,11 @@ import Foundation
 /// `identify`). A voice the target knows gets the target's name; one it does not know keeps the name it had, and is
 /// learned as the owner's naming; a voice with no name stays a letter. No line of the transcript changes.
 public enum MovedVoices {
-    public enum Learn: Equatable, Sendable { case none, autoMatch(Float), ownerNamed, inviteInference }
+    public enum Learn: Codable, Equatable, Sendable { case none, autoMatch(Float), ownerNamed, inviteInference }
 
-    public struct Naming: Equatable, Sendable {
+    /// Codable, so the target saves its decision once before it learns anything: a next run after a stop learns the
+    /// same samples again (which adds nothing) and never decides again on a library that already learned from the call.
+    public struct Naming: Codable, Equatable, Sendable {
         /// Speaker key to the name in this profile.
         public var names: [String: String]
         public var learn: [String: Learn]
@@ -139,6 +141,13 @@ public enum MovedVoices {
     /// Puts the names into the record, swaps the changed names in the summary's words, and teaches the library.
     /// `callID` is the id here. No line of the transcript changes.
     public static func apply(_ naming: Naming, to record: inout CallRecord, callID: String, library: VoiceLibrary) throws {
+        let before = record
+        name(naming, in: &record)
+        try learn(naming, from: before, callID: callID, library: library)
+    }
+
+    /// The names, the unknown voices, and the summary's words; with fingerprints off, no fingerprint stays.
+    public static func name(_ naming: Naming, in record: inout CallRecord) {
         record.speakerNames = naming.names
         record.unknownSpeakers = naming.unknown
         record.fromInvite = naming.fromInvite.isEmpty ? nil : naming.fromInvite
@@ -150,6 +159,11 @@ public enum MovedVoices {
             record.fromInvite = nil
             return
         }
+    }
+
+    /// Teaches the library from the record's fingerprints. Running it again for the same call adds nothing.
+    public static func learn(_ naming: Naming, from record: CallRecord, callID: String, library: VoiceLibrary) throws {
+        guard naming.fingerprints else { return }
         for (key, how) in naming.learn.sorted(by: { $0.key < $1.key }) {
             guard let e = record.speakerEmbeddings[key], let name = naming.names[key] else { continue }
             let origin: VoiceSample.Origin
