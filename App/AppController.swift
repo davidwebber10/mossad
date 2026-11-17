@@ -429,6 +429,18 @@ final class AppController: ObservableObject {
     }
     /// The look at the moves of this profile (`AppController+Moves`); nothing with one profile.
     var moveLook = MoveLook()
+    /// This profile's moves that are not done, by call id, read by the look; empty with one profile.
+    @Published var moves: [String: MoveOut] = [:]
+    /// The share of a copy made, by call id, for a long recording.
+    @Published var moveProgress: [String: Double] = [:]
+    /// "Moved to Work", or the sentence of a refusal, above the list for a short time.
+    @Published var moveLine: MoveShow.Line?
+    /// Why a move ended that the owner has not seen yet, or that holds a call marked during its recording.
+    @Published var moveEnded: [String: MoveEnded] = [:]
+    /// Why each other profile cannot take a meeting in now, as far as the app can tell.
+    @Published var moveReach: [String: MoveShow.Reach] = [:]
+    /// The confirmation of "Move to" that is open.
+    @Published var moveRequest: MoveRequest?
     /// Set once the launch knows whether this copy is inert. Before it, and in an inert copy, the iCloud Keychain
     /// items the iPhone reads are neither written nor deleted.
     private(set) var launchDecided = false
@@ -1330,6 +1342,7 @@ final class AppController: ObservableObject {
             refresh()
             return live
         }
+        guard !refusedForMove(callID) else { return nil }
         await pipeline.addBookmark(callID: callID, offset: offset)
         refresh()
         return offset
@@ -1344,7 +1357,7 @@ final class AppController: ObservableObject {
                     done.resume(returning: recorder.currentRecord?.id == callID && recorder.setBookmarkNote(at: offset, note))
                 }
             }
-            if !live { await pipeline.setBookmarkNote(callID: callID, offset: offset, note: note) }
+            if !live, !refusedForMove(callID) { await pipeline.setBookmarkNote(callID: callID, offset: offset, note: note) }
             refresh()
         }
     }
@@ -1676,6 +1689,7 @@ final class AppController: ObservableObject {
     }
 
     func applyNames(callID: String, names: [String: String], emails: [String: String] = [:]) {
+        guard !refusedForMove(callID) else { return }
         Task {
             await pipeline.applyNames(callID: callID, names: names, emails: emails)
             refresh()
@@ -1684,6 +1698,7 @@ final class AppController: ObservableObject {
 
     /// The owner's own title; nil or blank goes back to the automatic one.
     func setTitle(callID: String, _ title: String?) {
+        guard !refusedForMove(callID) else { return }
         Task {
             await pipeline.setTitle(callID: callID, title)
             refresh()
@@ -1691,6 +1706,7 @@ final class AppController: ObservableObject {
     }
 
     func setTags(callID: String, _ tags: [String]) {
+        guard !refusedForMove(callID) else { return }
         Task {
             await pipeline.setTags(callID: callID, tags)
             refresh()
@@ -1700,7 +1716,7 @@ final class AppController: ObservableObject {
     /// Deletes one shared screen of a meeting: its picture, its entry in the frames list, and its line in the
     /// transcript. The note is written again.
     func deleteScreen(callID: String, file: String) {
-        guard !isSecondCopy else { return }
+        guard !isSecondCopy, !refusedForMove(callID) else { return }
         Task {
             await pipeline.deleteScreen(callID: callID, file: file)
             // After the file is gone, so a decode that was on its way cannot put the picture back in memory.
@@ -1923,20 +1939,23 @@ final class AppController: ObservableObject {
     }
 
     func transcribeAgain(_ id: String, speakers: Int?) {
+        guard !refusedForMove(id) else { return }
         Task(priority: .utility) { await track { await self.pipeline.transcribeAgain(id, speakers: speakers) } }
     }
 
     func restorePreviousTranscript(_ id: String) {
+        guard !refusedForMove(id) else { return }
         Task(priority: .utility) { await track { await self.pipeline.restorePreviousTranscript(id) } }
     }
 
     func regenerateSummary(_ id: String) {
+        guard !refusedForMove(id) else { return }
         Task(priority: .utility) { await track { await self.pipeline.regenerateSummary(id) } }
     }
 
     /// Joins the meetings into the earliest one and opens it.
     func mergeMeetings(_ ids: [String]) {
-        guard !isSecondCopy else { return }
+        guard !isSecondCopy, !ids.contains(where: refusedForMove) else { return }
         Task {
             let merged = await pipeline.merge(callIDs: ids)
             refresh()
@@ -1979,6 +1998,7 @@ final class AppController: ObservableObject {
     }
 
     func retry(_ callID: String) {
+        guard !refusedForMove(callID) else { return }
         Task(priority: .utility) {
             await track { await self.pipeline.retry(callID) }
         }

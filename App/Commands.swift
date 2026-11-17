@@ -45,6 +45,7 @@ struct MossadCommands: Commands {
             }
             .keyboardShortcut("s", modifiers: [.command, .shift])
             .disabled(selected?.status != .written)
+            if let r = selected { MoveMenuItems(controller: controller, record: r) }
             Divider()
             Button("Ask About This Call…") { controller.askAboutCall() }
                 .keyboardShortcut("k", modifiers: [.command, .option])

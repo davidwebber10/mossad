@@ -11,7 +11,7 @@ enum DevHooks {
     /// `MOSSAD_PROOF_INTAKE_STOP=takingIn`, `MOSSAD_PROOF_INTAKE_REFUSE=1`, `MOSSAD_PROOF_COPY_HOLD=<seconds>` with
     /// `MOSSAD_PROOF_CANCEL_AFTER=<seconds>` (in `WorkerEntry`, on a made-up registry only),
     /// and in a preview
-    /// `MOSSAD_WORKER_LINES`.
+    /// `MOSSAD_WORKER_LINES`, and the move's `MOSSAD_MOVE`, `MOSSAD_MOVE_ENDED`, `MOSSAD_MOVE_LINE`, `MOSSAD_MOVE_SHEET`.
     /// `--ui-preview` opens the UI on $MOSSAD_ROOT with no detection, recording, or processing, so the screens can
     /// be checked while the installed copy records a call.
     static let preview = CommandLine.arguments.contains("--ui-preview")
@@ -116,6 +116,7 @@ enum DevHooks {
                 return parts.count == 2 ? (parts[0], parts[1]) : nil
             }, uniquingKeysWith: { $1 })
         }
+        if preview { moveHooks(c) }
         if preview, let sheet = env["MOSSAD_PROFILE_SHEET"] {
             let other = c.profiles.registry.live.first { !$0.isDefault }?.id
             let chosen: ProfileSheet? = switch sheet {
@@ -143,6 +144,47 @@ enum DevHooks {
     }
 
     private static let launch = Date()
+
+    /// The move's states, shown from made-up values; nothing moves in a preview.
+    /// `MOSSAD_MOVE="<call id>=moving|copying|slow|slow:notSetUp|slow:unreachable|cancelling|removing"` (more with `;`):
+    /// a made-up ledger of a move to the first other profile of `MOSSAD_PROFILES` (started 0 s ago, or 120 s for `slow`;
+    /// `copying` at 42%; `removing` waits at the backup step).
+    /// `MOSSAD_MOVE_ENDED="<call id>=<reason>"`: a move of a call marked during its recording that ended (its row is held).
+    /// `MOSSAD_MOVE_LINE=<text>`: the line above the list. `MOSSAD_MOVE_SHEET=<call id>`: the confirmation for the first target.
+    private static func moveHooks(_ c: AppController) {
+        guard let to = c.moveTargets.first else { return }
+        func pairs(_ key: String) -> [(String, String)] {
+            (env[key] ?? "").split(separator: ";").compactMap { pair in
+                let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
+                return parts.count == 2 ? (parts[0], parts[1]) : nil
+            }
+        }
+        for (id, state) in pairs("MOSSAD_MOVE") {
+            let parts = state.split(separator: ":").map(String.init)
+            var m = MoveOut(callID: id, to: to.id, started: Date().addingTimeInterval(parts[0] == "slow" ? -120 : 0))
+            switch parts[0] {
+            case "copying": m.state = .copying; c.moveProgress[id] = 0.42
+            case "cancelling": m.state = .cancelling
+            case "removing":
+                m.state = .removing
+                m.removed = ["voices", "people", "coach", "books", "shares"]
+                m.because = .backupNotDone
+                m.waitsAt = MoveOut.Step.backup.rawValue
+            default: m.state = .waiting
+            }
+            if parts.count > 1 { c.moveReach[to.id] = parts[1] == "notSetUp" ? .notSetUp : parts[1] == "unreachable" ? .unreachable : .notRunning }
+            c.moves[id] = m
+        }
+        for (id, why) in pairs("MOSSAD_MOVE_ENDED") {
+            c.moveEnded[id] = MoveEnded(callID: id, to: to.id, why: MovePlan.Cancel(rawValue: why) ?? .refusedIDTaken, afterCall: true, at: Date())
+        }
+        if let text = env["MOSSAD_MOVE_LINE"] { c.moveLine = MoveShow.Line(text: text, since: Date(), lasts: 3600) }
+        if let id = env["MOSSAD_MOVE_SHEET"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                if let r = c.meetings.first(where: { $0.id == id }) { c.askMove(r, to: to) }
+            }
+        }
+    }
 
     /// `MOSSAD_ASK_POINTS=open|closed` in a preview: the quick panel's points row shown open or closed, without
     /// the owner's saved choice.

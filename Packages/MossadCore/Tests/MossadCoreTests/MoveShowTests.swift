@@ -142,4 +142,24 @@ final class MoveShowTests: XCTestCase {
         // A held call keeps "Process here" when no other profile is left.
         XCTAssertEqual(MoveShow.menu(.moving(to: "9f9f9f9f"), record: record(.recorded, moveTo: "9f9f9f9f"), targets: [], held: true), .held([]))
     }
+
+    /// A removal that waits after the other profile took the meeting: where, why, and "Try again".
+    func testARemovalThatWaitsSaysSoAndOffersTryAgain() {
+        var m = move(.removing, started: t0)
+        m.because = .backupNotDone
+        m.waitsAt = MoveOut.Step.backup.rawValue
+        let row = MoveShow.row(record(moveTo: work), move: m, name: "Work", copied: nil, reach: .open, held: nil, now: t0)
+        XCTAssertEqual(row, MoveShow.Row(text: "Moved to Work. Mossad still removes it here, and waits to delete its backup copy.",
+                                         cancels: false, held: false, retries: true))
+    }
+
+    /// In the target, a meeting marked with its own id is arriving: the row says so and names nothing of the first profile.
+    func testAMeetingThatArrives() {
+        let row = MoveShow.row(record(moveTo: work), move: nil, name: nil, copied: nil, reach: .open, held: nil, now: t0, me: work)
+        XCTAssertEqual(row, MoveShow.Row(text: "Arriving from another profile…", cancels: false, held: false))
+        XCTAssertTrue(MoveShow.arriving(record(moveTo: work), me: work))
+        XCTAssertFalse(MoveShow.arriving(record(moveTo: work), me: Profile.defaultID))
+        XCTAssertFalse(MoveShow.arriving(record(), me: work))
+        XCTAssertEqual(MoveShow.refusesCommand(record(moveTo: work), name: nil, me: work), MoveWords.arriving)
+    }
 }

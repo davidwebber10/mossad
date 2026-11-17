@@ -17,16 +17,21 @@ public enum MoveShow {
         public let cancels: Bool
         /// The call waits for the owner: "Process here" and "Move to".
         public let held: Bool
-        public init(text: String, cancels: Bool, held: Bool) {
+        /// A removal step that waits: "Try again".
+        public let retries: Bool
+        public init(text: String, cancels: Bool, held: Bool, retries: Bool = false) {
             self.text = text
             self.cancels = cancels
             self.held = held
+            self.retries = retries
         }
     }
 
     /// The row's line of a meeting. `move`: this profile's ledger of it; `name`: the target's name, nil when it is not a
     /// live profile; `held`: why a move of a call marked during its recording ended, in this run of the app.
-    public static func row(_ r: CallRecord, move: MoveOut?, name: String?, copied: Double?, reach: Reach, held: String?, now: Date) -> Row? {
+    public static func row(_ r: CallRecord, move: MoveOut?, name: String?, copied: Double?, reach: Reach, held: String?, now: Date,
+                           me: String? = nil) -> Row? {
+        if arriving(r, me: me) { return Row(text: MoveWords.arriving, cancels: false, held: false) }
         if let move, move.state != .done {
             let target = name ?? MoveWords.otherProfile
             switch move.state {
@@ -38,6 +43,8 @@ public enum MoveShow {
                 return Row(text: MoveWords.row(to: target, waited: waited, copied: copied), cancels: true, held: false)
             case .cancelling:
                 return Row(text: MoveWords.cancelling, cancels: false, held: false)
+            case .removing where move.because != nil:
+                return Row(text: MoveWords.removalWaits(to: target, because: move.because!), cancels: false, held: false, retries: true)
             case .removing, .done:
                 return Row(text: MoveWords.row(to: target, waited: 0, copied: nil), cancels: false, held: false)
             }
@@ -49,10 +56,15 @@ public enum MoveShow {
     }
 
     /// The sentence for a command that would change a meeting while its move waits; nil for a meeting with no mark.
-    public static func refusesCommand(_ r: CallRecord, name: String?) -> String? {
+    public static func refusesCommand(_ r: CallRecord, name: String?, me: String? = nil) -> String? {
         guard r.moveTo != nil else { return nil }
+        if arriving(r, me: me) { return MoveWords.arriving }
         return name.map(MoveWords.moving(to:)) ?? MoveWords.heldForGone
     }
+
+    /// In the target, until it is taken in, the meeting is marked with this profile's own id: it shows as arriving,
+    /// takes no command, and does not open.
+    public static func arriving(_ r: CallRecord, me: String?) -> Bool { me != nil && r.moveTo == me }
 
     /// The chat field of a meeting whose move waits is off, with this sentence, before any request is sent.
     public static func chatOff(_ r: CallRecord?, name: String?) -> String? {
@@ -87,6 +99,12 @@ public enum MoveShow {
         public let since: Date
         public let lasts: TimeInterval
 
+        public init(text: String, since: Date, lasts: TimeInterval) {
+            self.text = text
+            self.since = since
+            self.lasts = lasts
+        }
+
         public func shows(at now: Date) -> Bool { now.timeIntervalSince(since) < lasts }
 
         public static func moved(to target: String, at now: Date) -> Line {
@@ -110,6 +128,7 @@ public enum MoveShow {
 
 extension MoveWords {
     public static let cancelling = "Cancelling the move…"
+    public static let arriving = "Arriving from another profile…"
     public static let cancelled = "The move is cancelled. The meeting stays here."
     /// This profile's own record of the move does not read: the meeting stays marked and is not processed.
     public static let ledgerUnreadable = "Mossad cannot read how far this move got. The meeting stays here, and nothing was cancelled."

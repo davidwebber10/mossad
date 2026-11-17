@@ -140,4 +140,17 @@ final class MoveReviewThreeTests: XCTestCase {
         r.moveTo = work
         XCTAssertEqual(MoveShow.chatOff(r, name: "Work"), "This meeting is moving to Work. Wait, or cancel the move.")
     }
+
+    /// M7: the `backup` step's answer is the real one: a delete that could not be remembered is not done.
+    func testARememberedDeleteThatCannotBeSavedIsNotDone() throws {
+        let a = temp()
+        try FileManager.default.createDirectory(at: a.root, withIntermediateDirectories: true)
+        // `Sync` is a file: nothing can be written under it.
+        try Data().write(to: a.sync)
+        var r = CallRecord(id: id, platform: .zoom, bundleID: "us.zoom.xos", start: t0, end: t0 + 60, status: .written)
+        r.cloudKey = "recordings/x.m4a"
+        XCTAssertFalse(CloudArchive.rememberDeletes(of: r, paths: a))
+        XCTAssertTrue(CloudArchive.rememberDeletes(of: CallRecord(id: id, platform: .zoom, bundleID: "us.zoom.xos", start: t0, end: t0 + 60,
+                                                                  status: .written), paths: a), "nothing to remember")
+    }
 }

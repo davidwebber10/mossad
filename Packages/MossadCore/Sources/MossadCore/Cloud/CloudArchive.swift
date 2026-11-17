@@ -260,24 +260,44 @@ public final class CloudArchive: @unchecked Sendable {
         (try? JSONDecoder().decode([ArchivedObject].self, from: Data(contentsOf: file))) ?? []
     }
 
-    private static func changeDeletes(in file: URL, _ change: (inout [ArchivedObject]) -> Void) {
+    /// True when the list on disk is as asked (also when nothing changed).
+    @discardableResult
+    private static func changeDeletes(in file: URL, _ change: (inout [ArchivedObject]) -> Void) -> Bool {
         deletesLock.withLock {
             var list = pendingDeletes(in: file)
             let before = list
             change(&list)
-            guard list != before else { return }
+            guard list != before else { return true }
             try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if list.isEmpty { try? FileManager.default.removeItem(at: file) } else { try? JSONEncoder().encode(list).write(to: file, options: .atomic) }
+            if list.isEmpty { return (try? FileManager.default.removeItem(at: file)) != nil }
+            return (try? JSONEncoder().encode(list).write(to: file, options: .atomic)) != nil
         }
     }
 
-    /// Remembers the backup copies of a deleted meeting when no place is set up to remove them from now.
-    public static func rememberDeletes(of r: CallRecord, paths: Paths) {
-        let file = paths.sync.appendingPathComponent("backup-deletes.json")
-        for object in Set([r.archived].compactMap { $0 } + (r.cloudLeftovers ?? [])) { rememberDelete(object, in: file) }
+    /// The `backup` step of a move: each copy removed now, or remembered for the next pass. False when a copy could be
+    /// neither: the step is not done.
+    public func deleteForMove(_ r: CallRecord) async -> Bool {
+        var ok = true
+        for object in Set([r.archived].compactMap { $0 } + (r.cloudLeftovers ?? [])) {
+            if let place = place(of: object), await place.remove(object.key) { continue }
+            Log.error("The backup copy of \(r.id) could not be removed yet. Mossad tries again")
+            ok = Self.rememberDelete(object, in: deletesFile) && ok
+        }
+        return ok
     }
 
-    static func rememberDelete(_ object: ArchivedObject, in file: URL) {
+    /// Remembers the backup copies of a deleted meeting when no place is set up to remove them from now.
+    /// False when one could not be saved.
+    @discardableResult
+    public static func rememberDeletes(of r: CallRecord, paths: Paths) -> Bool {
+        let file = paths.sync.appendingPathComponent("backup-deletes.json")
+        var ok = true
+        for object in Set([r.archived].compactMap { $0 } + (r.cloudLeftovers ?? [])) { ok = rememberDelete(object, in: file) && ok }
+        return ok
+    }
+
+    @discardableResult
+    static func rememberDelete(_ object: ArchivedObject, in file: URL) -> Bool {
         changeDeletes(in: file) { if !$0.contains(object) { $0.append(object) } }
     }
 
