@@ -190,7 +190,8 @@ public actor ProfileWorker {
                 guard backs, let archive else { return nil }
                 return await archive.fetch(r, into: folder)
             },
-            usage: { usage.events(forCall: $0).events }, actions: actions, now: setup.now, stop: stop))
+            usage: { usage.events(forCall: $0).events }, actions: actions, now: setup.now, stop: stop),
+            calling: setup.callRecords)
         var rename: @Sendable (String, String) -> Int32 = MoveFiles.exclusive
         #if DEBUG
         // The proof of a refusal after the first half: the rename into `Audio` meets "another volume".
@@ -316,7 +317,12 @@ public actor ProfileWorker {
             default: false
             }
         }
-        let taken = moveIntake.run()
+        // The take-in hashes every file: it waits while a call records, and runs at the lowest priority.
+        let callRecords = setup.callRecords, intake = moveIntake
+        let takeIn = MoveWorkPlan.plan(.takeIn, callRecording: callRecords(), worker: true)
+        let taken = takeIn == .hold ? [] : ((try? await HeavyWork.run(priority: takeIn.priority) {
+            intake.run(held: { MoveWorkPlan.plan(.takeIn, callRecording: callRecords(), worker: true) == .hold })
+        }) ?? [])
         for (callID, event) in events.sorted(by: { $0.key < $1.key }) {
             switch event {
             case .moved: Log.info("Worker: a meeting moved to another profile")

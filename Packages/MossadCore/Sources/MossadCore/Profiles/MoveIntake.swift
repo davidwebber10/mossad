@@ -130,12 +130,14 @@ public struct MoveIntake: Sendable {
         return step
     }
 
-    /// Each waiting folder to its end. Returns the ids the meetings have here.
+    /// Each waiting folder to its end. Returns the ids the meetings have here. `held` is asked before each step: while
+    /// a call records, nothing more is taken in (`MoveWorkPlan`), and the next look goes on.
     @discardableResult
-    public func run() -> [String] {
+    public func run(held: () -> Bool = { false }) -> [String] {
         var done: [String] = []
         for callID in waiting() {
             for _ in 0..<12 {
+                if held() { return done }
                 // A stop ends the run, as the end of the process would.
                 guard let s = try? stepOrStop(callID) else { return done }
                 if s == .wait || s == .nothing { break }

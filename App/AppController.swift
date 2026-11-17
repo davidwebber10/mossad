@@ -76,11 +76,15 @@ final class AppController: ObservableObject {
         }
     }
 
+    /// Whether a call records, for the move's look off the main actor.
+    let callFlag = RecordingFlag()
+
     @Published private(set) var status: Status = .idle {
         // An in-person recording owns the mic until Stop; the call scan every 2 s would be thrown away.
         didSet {
             let was = if case .recording = oldValue { true } else { false }
             if was != isRecording { workers?.setRecording(isRecording) }
+            callFlag.set(isRecording)
             let room = if case .recording(.inPerson, _) = status { true } else { false }
             detection.isSuspended = room
             // With detection suspended, the room's mic gets its own stall check.

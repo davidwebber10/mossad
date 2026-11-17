@@ -21,6 +21,10 @@ public struct MoveSource: Sendable {
         public var now: @Sendable () -> Date = Date.init
         /// For a test: the end of the process at a sub-step.
         public var stop: @Sendable (String) throws -> Void = { _ in }
+        /// Whether a call records now; nil when it cannot be told (`MoveWorkPlan`).
+        public var calling: @Sendable () -> Bool? = { false }
+        /// A worker runs the copy at the lowest priority.
+        public var worker = false
 
         public init(paths: Paths, profileID: String, pipeline: Pipeline, library: VoiceLibrary, ownerName: @escaping @Sendable () -> String,
                     target: @escaping @Sendable (String) -> MoveRules.TargetPlace, fetch: @escaping @Sendable (CallRecord, URL) async -> URL?,
@@ -243,6 +247,10 @@ public struct MoveSource: Sendable {
                 // A new mark of a held call that a stop cut short at its start.
                 _ = await s.pipeline.setMoveTarget(callID: callID, out.to, replacing: old)
             }
+            // A call records (or it cannot be told): the copy and its hashes wait for its end.
+            let calling = s.calling, worker = s.worker
+            let work = MoveWorkPlan.plan(.startCopy, callRecording: calling(), worker: worker)
+            if work == .hold { return .waiting }
             do {
                 var fetched: URL?
                 let dir = s.paths.callDirectory(callID)
@@ -258,15 +266,19 @@ public struct MoveSource: Sendable {
                 if s.room(plan.bytes, b.incoming) == false { try save(.cancelling, cancel: .noRoom); return .working }
                 let progress = s.progress
                 let token = out.token, from = s.profileID, now = s.now(), stop = s.stop
-                _ = try await Task.detached(priority: .utility) {
-                    try MoveCopy.write(plan, from: from, token: token, incoming: b.incoming, now: now, progress: { progress(callID, $0) }, stop: stop)
-                }.value
+                _ = try await HeavyWork.run(priority: work.priority) {
+                    try MoveCopy.write(plan, from: from, token: token, incoming: b.incoming, now: now, progress: { progress(callID, $0) },
+                                       held: { MoveWorkPlan.plan(.nextFile, callRecording: calling(), worker: worker) == .hold }, stop: stop)
+                }
                 if let fetched { try? FileManager.default.removeItem(at: fetched.deletingLastPathComponent()) }
                 try save(.copied)
             } catch is MoveStop {
                 throw MoveStop()
             } catch is Overtaken {
                 throw Overtaken()
+            } catch is MoveCopy.Held {
+                // The part stays; the next look after the call goes on from it.
+                return .waiting
             } catch {
                 Log.error("Move: the copy failed; the meeting stays here: \(error)")
                 try save(.cancelling, cancel: MoveCopy.isOutOfSpace(error) ? .noRoom : .copyFailed)
@@ -370,5 +382,15 @@ public struct MoveSource: Sendable {
         case .nothing:
             return out.state == .done ? .moved(to: out.to) : .nothing
         }
+    }
+}
+
+extension MoveSource {
+    /// A worker's half: the copy waits while a call records (or the worker cannot tell) and runs at the lowest priority.
+    init(_ setup: Setup, calling: @escaping @Sendable () -> Bool) {
+        var s = setup
+        s.calling = { calling() }
+        s.worker = true
+        self.init(s)
     }
 }

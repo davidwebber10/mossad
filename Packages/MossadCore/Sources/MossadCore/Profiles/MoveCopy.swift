@@ -64,6 +64,8 @@ public enum MoveCopy {
 
     public enum Refused: Error, Equatable { case inWork, unknownFile }
     public struct NotTheSame: Error {}
+    /// A call started: the copy stopped before its next file, and its part stays for the next run.
+    public struct Held: Error {}
     public typealias OtherVolume = MoveFiles.OtherVolume
 
     public static func plan(_ callID: String, in paths: Paths, to target: String, owner: OwnerIdentity, fetched: URL?) throws -> Plan {
@@ -147,23 +149,36 @@ public enum MoveCopy {
     }
 
     /// Makes `Incoming/<id>.<token>.part` whole and checked, with `move.json` last, each synced to the disk. Any
-    /// failure removes the part and throws; a stop leaves it as it is. `stop` is called before each sub-step.
+    /// failure removes the part and throws; a stop leaves it as it is. `stop` is called before each sub-step. `held`
+    /// is asked before each file: a call that started stops the copy there (`Held`), and the part stays. A part that
+    /// is there goes on: a file in it that has the source's size and hash is not copied again, and every other file
+    /// of it goes.
     public static func write(_ plan: Plan, from: String, token: String, incoming: URL, now: Date, copy: FileCopy = file,
-                             progress: @escaping (Double) -> Void = { _ in }, stop: (String) throws -> Void = { _ in }) throws -> MoveMarker {
+                             progress: @escaping (Double) -> Void = { _ in }, held: () -> Bool = { false },
+                             stop: (String) throws -> Void = { _ in }) throws -> MoveMarker {
         let fm = FileManager.default
         guard MovePaths.isID(plan.record.id), MovePaths.isToken(token) else { throw MovePaths.Invalid() }
         let folder = part(plan.record.id, token: token, incoming: incoming)
         do {
             try stop("clear the part")
-            if fm.fileExists(atPath: folder.path) { try fm.removeItem(at: folder) }
+            if fm.fileExists(atPath: folder.path) { try keepOnly(Set(plan.files.map(\.path)), in: folder) }
             try stop("make the part")
             try fm.createDirectory(at: folder.appendingPathComponent(MoveMarker.callFolder), withIntermediateDirectories: true)
             var files: [MoveMarker.File] = []
             var done: Int64 = 0
             for source in plan.files {
+                if held() { throw Held() }
                 try stop("copy \(source.path)")
                 let to = folder.appendingPathComponent(source.path)
                 try fm.createDirectory(at: to.deletingLastPathComponent(), withIntermediateDirectories: true)
+                if let kept = size(to), kept == size(source.from), let hash = try? FileHash.sha256(of: to), hash == (try? FileHash.sha256(of: source.from)) {
+                    // Whole in the part from the run before.
+                    try MoveFiles.fullSync(to)
+                    done += kept
+                    progress(plan.bytes > 0 ? Double(done) / Double(plan.bytes) : 0)
+                    files.append(MoveMarker.File(path: source.path, size: kept, sha256: hash))
+                    continue
+                }
                 let base = done
                 let read = try copy(source.from, to) { progress(plan.bytes > 0 ? Double(base + $0) / Double(plan.bytes) : 0) }
                 done += read.size
@@ -193,10 +208,28 @@ public enum MoveCopy {
             return marker
         } catch is MoveStop {
             throw MoveStop()
+        } catch is Held {
+            throw Held()
         } catch {
             try? fm.removeItem(at: folder)
             throw error
         }
+    }
+
+    /// Keeps in a part only the regular files of the plan; the record, the chats, and the marker are written again.
+    private static func keepOnly(_ paths: Set<String>, in folder: URL) throws {
+        let fm = FileManager.default
+        let base = folder.resolvingSymlinksInPath().path + "/"
+        guard let e = fm.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]) else { return }
+        var gone: [URL] = []
+        for case let url as URL in e {
+            let v = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            if v?.isSymbolicLink == true { gone.append(url); continue }
+            guard v?.isRegularFile == true else { continue }
+            let rel = String(url.resolvingSymlinksInPath().path.dropFirst(base.count))
+            if !paths.contains(rel) { gone.append(url) }
+        }
+        for url in gone { try fm.removeItem(at: url) }
     }
 
     /// Writes a value as JSON, synced, and checks that the file decodes to it.

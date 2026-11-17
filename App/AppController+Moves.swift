@@ -188,7 +188,8 @@ extension AppController {
         let targets = profiles.registry.live.filter { $0.id != activeProfile.id }
         let workerReach = Dictionary(uniqueKeysWithValues: targets.map { ($0.id, workers?.reach($0.id) ?? .open) })
         let place = halves.setup.target
-        Task.detached(priority: .utility) { [weak self] in
+        let flag = callFlag
+        Task.detached(priority: MoveWorkPlan.plan(.smallStep, callRecording: flag.recording, worker: false).priority) { [weak self] in
             var moved: [(String, String)] = []
             var taken: [String] = []
             var ended = false
@@ -202,7 +203,8 @@ extension AppController {
                         default: break
                         }
                     }
-                    let here = halves.intake.run()
+                    let here = MoveWorkPlan.plan(.takeIn, callRecording: flag.recording, worker: false) == .hold ? []
+                        : halves.intake.run(held: { MoveWorkPlan.plan(.takeIn, callRecording: flag.recording, worker: false) == .hold })
                     for callID in here { Log.info("Moves: a meeting moved here from another profile (\(callID))") }
                     taken += here
                 }
@@ -311,7 +313,7 @@ extension AppController {
                 return CloudArchive.rememberDeletes(of: r, paths: paths)
             },
             removeFolder: { await pipeline.removeMoved(callID: $0, target: $1) })
-        let setup = MoveSource.Setup(
+        var setup = MoveSource.Setup(
             paths: paths, profileID: identity.profile.id, pipeline: pipeline, library: library, ownerName: { owner },
             target: { id in file.map { MoveRules.target(id, registryFile: $0, home: home, madeUpRegistry: madeUp) } ?? .unknown },
             fetch: { r, folder in
@@ -319,6 +321,8 @@ extension AppController {
                 return await archive.fetch(r, into: folder)
             },
             usage: { usage.events(forCall: $0).events }, actions: actions)
+        let flag = callFlag
+        setup.calling = { flag.recording }
         let intake = MoveIntake(paths: paths, me: identity.profile.id, library: library, ownerName: { owner }, voiceFingerprints: { prints })
         return (MoveSource(setup), intake, setup)
     }
