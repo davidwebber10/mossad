@@ -265,6 +265,9 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
             changed = true
         }
         if checked.remove(callID) != nil { changed = true }
+        let before = answers.count
+        answers.removeAll { Self.names($0.key, [callID]) }
+        if answers.count != before { changed = true }
         if movedCalls?.contains(callID) != true {
             movedCalls = ((movedCalls ?? []) + [callID]).sorted()
             changed = true
@@ -272,9 +275,43 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         return changed
     }
 
-    /// Takes the calls out of a point. True when it changed.
+    /// Whether a suggestion's key ("openItem:<call id>:<words>") names one of these calls.
+    static func names(_ key: String, _ calls: Set<String>) -> Bool {
+        let parts = key.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+        return parts.count >= 2 && calls.contains(String(parts[1]))
+    }
+
+    /// A point that `forget` emptied: deleted, with no word left. A delete by hand keeps its words.
+    static func forgotten(_ p: NextTimePoint) -> Bool { p.deleted && p.text.isEmpty && p.suggestion == nil }
+
+    /// The book with nothing of these calls: the merge's last step, and what a copy should be.
+    func cleaned(of calls: Set<String>) -> NextTimeBook {
+        guard !calls.isEmpty else { return self }
+        var b = self
+        for i in b.points.indices { _ = Self.clean(&b.points[i], of: calls) }
+        b.checked.subtract(calls)
+        b.answers.removeAll { Self.names($0.key, calls) }
+        return b
+    }
+
+    /// The copy that came in still names a moved call, or lacks the list this book has: send this book again, so the
+    /// store holds the clean copy. A clean copy with the same list sends nothing, so two Macs do not loop.
+    public func pushesAgain(after incoming: NextTimeBook) -> Bool {
+        guard let moved = movedCalls, !moved.isEmpty else { return false }
+        if Set(incoming.movedCalls ?? []) != Set(moved) { return true }
+        return incoming.cleaned(of: Set(moved)) != incoming
+    }
+
+    /// Takes the calls out of a point: a point kept from a suggestion of one of them is an empty deleted marker. True
+    /// when it changed.
     static func clean(_ p: inout NextTimePoint, of calls: Set<String>) -> Bool {
         let before = p
+        if let key = p.suggestion, names(key, calls) {
+            p.deleted = true
+            p.text = ""
+            p.suggestion = nil
+            p.done = nil
+        }
         if let call = p.done?.callID, calls.contains(call) { p.done = nil }
         p.carried = p.carried.map { $0.filter { !calls.contains($0) } }.flatMap { $0.isEmpty ? nil : $0 }
         p.reopened = p.reopened.map { $0.filter { !calls.contains($0) } }.flatMap { $0.isEmpty ? nil : $0 }
@@ -319,6 +356,10 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         var order: [UUID] = []
         for p in points + other.points {
             if let old = byID[p.id] {
+                // An emptied point wins over any copy, also a newer one from a device that changed it before it
+                // heard of the move.
+                if Self.forgotten(old) { continue }
+                if Self.forgotten(p) { byID[p.id] = p; continue }
                 var newer = p.updated > old.updated ? p : old
                 newer.mentions = Self.union(old.mentions, p.mentions)
                 byID[p.id] = newer
@@ -339,8 +380,7 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         let moved = Set((movedCalls ?? []) + (other.movedCalls ?? []))
         if !moved.isEmpty {
             out.movedCalls = moved.sorted()
-            for i in out.points.indices { _ = Self.clean(&out.points[i], of: moved) }
-            out.checked.subtract(moved)
+            out = out.cleaned(of: moved)
         }
         return out
     }

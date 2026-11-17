@@ -156,6 +156,14 @@ public struct CommitmentBook: Codable, Equatable, Sendable {
         return out
     }
 
+    /// The copy that came in still holds a task that this book emptied: send this book again, so the store holds the
+    /// marker. A copy that has the markers sends nothing.
+    public func pushesAgain(after incoming: CommitmentBook) -> Bool {
+        let markers = Dictionary(items.filter(Self.forgotten).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        guard !markers.isEmpty else { return false }
+        return incoming.items.contains { c in markers[c.id].map { $0 != c } ?? false }
+    }
+
     /// A marker that `forget(callID:)` made: deleted, with no word left. A delete by hand keeps its words.
     static func forgotten(_ c: Commitment) -> Bool { c.deleted && c.text.isEmpty && c.callTitle == nil && c.quote == nil }
 

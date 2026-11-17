@@ -546,6 +546,8 @@ public actor CloudSync {
             // The Mac's coach writes the coaching fields; the phone takes them, the Mac keeps its own.
             // After a recovery the profile here is empty, so the Mac takes its own coaching fields back too.
             let merged = local.merged(with: remote, takeCoaching: includeMeetings || StoredFile.awaitsMerge(Self.syncedFiles(paths)[0]))
+            // A copy that still holds a moved call or person (a device of an older release): send the clean one again.
+            if merged.pushesAgain(after: remote) { try update { $0.uploaded["profile"] = nil } }
             guard merged != local else { return false }
             try merged.save(to: paths.coach)
             // The answers to the cards that came from the other device are kept with their calls too.
@@ -567,12 +569,14 @@ public actor CloudSync {
             let remote = try await decoded(CommitmentBook.self)
             let local = try CommitmentBook.load(from: paths.commitments)
             let merged = local.merged(with: remote)
+            if merged.pushesAgain(after: remote) { try update { $0.uploaded["commitments"] = nil } }
             guard merged != local else { return false }
             try merged.save(to: paths.commitments)
         case Self.nextTimeType:
             let remote = try await decoded(NextTimeBook.self)
             let local = try NextTimeBook.load(from: paths.nextTime)
             let merged = local.merged(with: remote)
+            if merged.pushesAgain(after: remote) { try update { $0.uploaded["next-time"] = nil } }
             guard merged != local else { return false }
             try merged.save(to: paths.nextTime)
         case Self.peopleType where includeMeetings:

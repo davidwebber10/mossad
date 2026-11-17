@@ -100,7 +100,7 @@ final class MoveBooksTests: XCTestCase {
     func testTheCoachForgetsAMovedCallForGood() throws {
         let before = MoveBooksFixtures.coach()
         var after = before
-        after.forgetMoved(callID: x, at: d)
+        after.forgetMoved(callID: x)
         XCTAssertTrue(nothing(of: x, in: after))
         XCTAssertEqual(after.movedCalls, [x])
         XCTAssertEqual(after.rated.filter { $0.callID == y }, before.rated.filter { $0.callID == y })
@@ -175,7 +175,7 @@ final class MoveBooksTests: XCTestCase {
         let coachKeys = try keys(JSONEncoder.coach.encode(MoveBooksFixtures.coach()))
         XCTAssertFalse(coachKeys.contains("movedCalls"))
         var movedCoach = MoveBooksFixtures.coach()
-        movedCoach.forgetMoved(callID: x, at: d)
+        movedCoach.forgetMoved(callID: x)
         XCTAssertEqual(try keys(JSONEncoder.coach.encode(movedCoach)), coachKeys.union(["movedCalls"]))
     }
 
@@ -192,12 +192,12 @@ final class MoveBooksTests: XCTestCase {
                    CoachFact(kind: .relationship, text: "Mira Stone reports to me", date: t0, person: "p2")]
         p.guidance = [CoachGuidance(text: "Be brief with Sam", date: t0, person: "p1"), CoachGuidance(text: "Show Mira the chart", date: t0, person: "p2")]
         let before = p
-        p.forget(person: "p1", name: "Sam Carter", at: d)
+        p.forget(person: "p1", name: "Sam Carter")
         XCTAssertEqual(Set(p.people.keys), ["Mira Stone"])
         XCTAssertEqual(p.facts.map(\.person), ["p2"])
         XCTAssertEqual(p.guidance.map(\.person), ["p2"])
-        XCTAssertEqual(p.forgotten["sam carter is my manager"], d)
-        XCTAssertEqual(p.forgotten["be brief with sam"], d)
+        XCTAssertTrue(p.forgotten.isEmpty, "no words of the person are kept")
+        XCTAssertEqual(p.movedPeople, ["p1"])
         XCTAssertEqual(p.people["Mira Stone"], before.people["Mira Stone"])
         let merged = p.merged(with: before)
         XCTAssertFalse(merged.facts.contains { $0.person == "p1" })

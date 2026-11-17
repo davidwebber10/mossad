@@ -231,6 +231,9 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     /// Calls that left this profile: nothing of them is kept, and a merge with an older copy does not bring it back.
     /// Nil when there are none, and then the file is written as before.
     public var movedCalls: [String]?
+    /// People whom a moved meeting alone made, by id: nothing about them is kept, and a merge does not bring it back.
+    /// No words of theirs go into `forgotten`. Nil when there are none, and then the file is written as before.
+    public var movedPeople: [String]?
 
     /// The version of `CoachSkill` that the advice log was last read against. 0 for a memory from before the
     /// log: the runner then fills the log one time from the review files.
@@ -254,6 +257,7 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         case summary, focus, patterns, people, history, guidance, rated, facts, forgotten, foci, voice, questions, advice, observations, adviceVersion
         case answers
         case movedCalls
+        case movedPeople
     }
 
     /// Profiles from before feedback existed have no guidance or ratings.
@@ -278,6 +282,7 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         adviceVersion = try c.decodeIfPresent(Int.self, forKey: .adviceVersion) ?? 0
         answers = try c.decodeIfPresent(LossyArray<FindingAnswer>.self, forKey: .answers)?.values ?? []
         movedCalls = try c.decodeIfPresent([String].self, forKey: .movedCalls)
+        movedPeople = try c.decodeIfPresent([String].self, forKey: .movedPeople)
     }
 
     public func facts(_ kind: CoachFact.Kind) -> [CoachFact] { facts.filter { $0.kind == kind } }
@@ -339,6 +344,9 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         let moved = Set((movedCalls ?? []) + (other.movedCalls ?? []))
         out.movedCalls = moved.isEmpty ? nil : moved.sorted()
         out.drop(moved)
+        let gone = Set((movedPeople ?? []) + (other.movedPeople ?? []))
+        out.movedPeople = gone.isEmpty ? nil : gone.sorted()
+        out.drop(people: gone)
         out.settleAnswers()
         out.trimGuidance()
         out.focus = out.activeFocus?.plan ?? (out.foci.isEmpty ? out.focus : "")
@@ -457,15 +465,26 @@ public struct CoachProfile: Codable, Equatable, Sendable {
 
     /// A meeting that left this profile: what `forget(callID:)` removes, and also the rated points, the questions in
     /// any state, and the answers to its cards (a "never again" on one of them too). The id goes into `movedCalls`.
-    public mutating func forgetMoved(callID: String, at date: Date = Date()) {
+    public mutating func forgetMoved(callID: String) {
         forget(callID: callID)
         drop([callID])
         movedCalls = Array(Set((movedCalls ?? []) + [callID])).sorted()
     }
 
-    /// Everything of these calls.
+    /// Everything of these calls, and what their answers and questions made: the reason for a no to one of their cards
+    /// (guidance by the answer's id) and the fact that a confirmed or corrected question of theirs added.
     mutating func drop(_ calls: Set<String>) {
         guard !calls.isEmpty else { return }
+        let cards = Set(answers.filter { calls.contains($0.callID) }.map(\.id))
+        guidance.removeAll { $0.finding.map(cards.contains) ?? false }
+        let made = Set(questions.filter { $0.callID.map(calls.contains) ?? false }.flatMap { q -> [String] in
+            switch q.status {
+            case .confirmed: [q.statement.lowercased()]
+            case .corrected: [q.note?.lowercased()].compactMap { $0 }
+            case .open, .rejected: []
+            }
+        })
+        facts.removeAll { made.contains($0.text.lowercased()) }
         rated.removeAll { calls.contains($0.callID) }
         questions.removeAll { $0.callID.map(calls.contains) ?? false }
         answers.removeAll { calls.contains($0.callID) }
@@ -475,15 +494,34 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         for i in foci.indices { foci[i].results.removeAll { calls.contains($0.callID) } }
     }
 
-    /// A person whom a moved meeting alone made: the notes on them, under any name, and each fact and guidance about
-    /// them. The words of each fact and guidance are kept as forgotten, with the date, so a merge does not bring them back.
-    public mutating func forget(person id: String, name: String, at date: Date = Date()) {
+    /// A person whom a moved meeting alone made: the notes on them, under any name, and each fact, guidance,
+    /// question, and card answer about them. The id goes into `movedPeople`, which each merge applies; no word of
+    /// theirs is kept anywhere.
+    public mutating func forget(person id: String, name: String) {
         people[name] = nil
-        people = people.filter { $0.value.person != id }
-        for f in facts where f.person == id { forgotten[f.text.lowercased()] = date }
-        facts.removeAll { $0.person == id }
-        for g in guidance where g.person == id { forgotten[g.text.lowercased()] = date }
-        guidance.removeAll { $0.person == id }
+        movedPeople = Array(Set((movedPeople ?? []) + [id])).sorted()
+        drop(people: [id])
+    }
+
+    mutating func drop(people ids: Set<String>) {
+        guard !ids.isEmpty else { return }
+        people = people.filter { $0.value.person.map { !ids.contains($0) } ?? true }
+        facts.removeAll { $0.person.map(ids.contains) ?? false }
+        guidance.removeAll { $0.person.map(ids.contains) ?? false }
+        questions.removeAll { $0.person.map(ids.contains) ?? false }
+        answers.removeAll { $0.person.map(ids.contains) ?? false }
+    }
+
+    /// The copy that came in still holds something of a moved call or person, or lacks a list this profile has: send
+    /// this profile again. A clean copy with the same lists sends nothing.
+    public func pushesAgain(after incoming: CoachProfile) -> Bool {
+        let calls = Set(movedCalls ?? []), gone = Set(movedPeople ?? [])
+        guard !calls.isEmpty || !gone.isEmpty else { return false }
+        if Set(incoming.movedCalls ?? []) != calls || Set(incoming.movedPeople ?? []) != gone { return true }
+        var clean = incoming
+        clean.drop(calls)
+        clean.drop(people: gone)
+        return clean != incoming
     }
 
     /// What the log holds of one pattern, the newest first.
