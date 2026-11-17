@@ -45,9 +45,12 @@ public actor ProfileWorker {
         public var main: CloudSync?
         public var mirror: CloudSync?
         public var archive: CloudArchive?
+        /// The text of the shared screens, read on this Mac (Vision), as the window app reads it.
+        public var screenReader: ScreenTextReading?
 
         public init(transcriber: Transcribing, summarizer: Summarizing?, embeddings: EmbeddingProvider, calendar: CalendarSource,
-                    llm: (any LanguageModel)?, main: CloudSync?, mirror: CloudSync?, archive: CloudArchive?) {
+                    llm: (any LanguageModel)?, main: CloudSync?, mirror: CloudSync?, archive: CloudArchive?,
+                    screenReader: ScreenTextReading? = nil) {
             self.transcriber = transcriber
             self.summarizer = summarizer
             self.embeddings = embeddings
@@ -56,6 +59,7 @@ public actor ProfileWorker {
             self.main = main
             self.mirror = mirror
             self.archive = archive
+            self.screenReader = screenReader
         }
     }
 
@@ -113,7 +117,10 @@ public actor ProfileWorker {
                             onStep: { _ in Self.writeStatus(paths: paths, settings: settings, key: key, failures: failures, now: now()) },
                             titles: { OrgChart.titleLines(for: $0, paths: paths, library: library) },
                             onDiscard: { record in Self.forget(record, paths: paths, archive: archive) },
-                            heavy: HeavyWorkGate(isCallRecording: { callRecords() }, worker: true))
+                            heavy: HeavyWorkGate(isCallRecording: { callRecords() }, worker: true),
+                            // The pipeline ties it to this gate (`ScreenStep.gated(by:)`): while any call records, it reads
+                            // one frame at a time at background priority with a rest between frames, as in the window app.
+                            screenStep: services.screenReader.map { ScreenStep(reader: $0) })
     }
 
     /// The services from the profile's own settings and Keychain.
@@ -131,7 +138,7 @@ public actor ProfileWorker {
                         llm: s.languageModel(key: key, usage: usage),
                         main: stores.main.map { CloudSync(paths: paths, store: $0.store) },
                         mirror: stores.mirror.map { CloudSync(paths: paths, store: $0.store) },
-                        archive: s.archive(key: key, paths: paths, server: server))
+                        archive: s.archive(key: key, paths: paths, server: server), screenReader: VisionScreenReader())
     }
 
     private func runs(_ duty: Duty) -> Bool { RunMode.worker.runs(duty, madeUpRegistry: setup.madeUpRegistry) }

@@ -51,7 +51,8 @@ final class ProfileWorkerTests: XCTestCase {
     }
 
     private func worker(madeUp: Bool = false, calling: Bool = false, key: String? = "k", transcriber t: Transcribing? = nil,
-                        store: MemoryStore = MemoryStore(), calendar: CalendarSource = FakeCalendar(), coach: Bool = false) throws -> ProfileWorker {
+                        store: MemoryStore = MemoryStore(), calendar: CalendarSource = FakeCalendar(), coach: Bool = false,
+                        screens: ScreenTextReading? = nil) throws -> ProfileWorker {
         let made = try MadeUpSuite(self)
         if coach { made.defaults.set(true, forKey: "coachEnabled") }
         let settings = ServiceSettings.read(made.defaults, fullUserName: "Avery Lane")
@@ -60,7 +61,8 @@ final class ProfileWorkerTests: XCTestCase {
                                         remember: { _, _ in }, hasICloud: false, madeUpRegistry: madeUp,
                                         macCalendarAuthorized: { false }, callRecords: { flag.get }, now: { [start] in start.addingTimeInterval(7200) })
         let services = ProfileWorker.Services(transcriber: t ?? transcriber, summarizer: summarizer, embeddings: ToneEmbeddingProvider(),
-                                              calendar: calendar, llm: nil, main: CloudSync(paths: paths, store: store), mirror: nil, archive: nil)
+                                              calendar: calendar, llm: nil, main: CloudSync(paths: paths, store: store), mirror: nil, archive: nil,
+                                              screenReader: screens)
         return ProfileWorker(setup, services: services)
     }
 
@@ -139,5 +141,24 @@ final class ProfileWorkerTests: XCTestCase {
         XCTAssertTrue(pass.ran.contains(.sync))
         let left = try await CloudSync(paths: paths, store: store).recordingNotices()
         XCTAssertEqual(left.map(\.name), ["room-1"])
+    }
+
+    func testAWorkerReadsTheSharedScreensOfAMeeting() async throws {
+        let id = try recorded()
+        let dir = paths.callDirectory(id)
+        try FileManager.default.createDirectory(at: FrameIndex.folder(in: dir), withIntermediateDirectories: true)
+        var index = FrameIndex()
+        let frame = FrameIndex.Frame(offset: 12, file: FrameIndex.fileName(offset: 12), window: "w", presenter: nil)
+        index.insert(frame)
+        try Data("Q3 plan\nRevenue grew 12 percent over the second quarter".utf8).write(to: index.url(of: frame, in: dir))
+        try index.save(to: dir)
+        let reader = FakeScreenReader()
+        let w = try worker(screens: reader)
+        _ = await w.start()
+        _ = await w.pass([.queue])
+        let r = try CallRecord.load(from: dir)
+        XCTAssertEqual(r.status, .written)
+        XCTAssertEqual(reader.read, ["12000.heic"])
+        XCTAssertEqual(r.screens?.map(\.offset), [12])
     }
 }
