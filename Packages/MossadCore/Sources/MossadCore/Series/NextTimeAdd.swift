@@ -55,12 +55,14 @@ public enum NextTimeAdd {
     }
 
     /// Adds the point where `PointTarget` put it: a series, one meeting with no series, or a person.
-    public static func add(_ text: String, to target: PointTarget.Outcome, people: PersonReferences, book: inout NextTimeBook, at date: Date = Date()) -> Outcome {
+    /// `invited` counts everyone invited besides the owner (`MeetingPrep.invited`), for this Mac's detail.
+    public static func add(_ text: String, to target: PointTarget.Outcome, people: PersonReferences, invited: (UpcomingMeeting) -> Int? = { _ in nil },
+                           book: inout NextTimeBook, at date: Date = Date()) -> Outcome {
         switch target {
         case .series(let s, _):
             return book.add(text, series: s, at: date).map(Outcome.added) ?? .notFound("The point has no words.")
         case .meeting(let u):
-            let m = NextTimeMeeting(u, people: NextTimeInvite.personIDs(u.attendees, people: people))
+            let m = NextTimeMeeting(u, people: NextTimeInvite.personIDs(u.attendees, people: people), invited: invited(u))
             return book.add(text, meeting: m, at: date).map(Outcome.added) ?? .notFound("The point has no words.")
         case .person(let id, let name, _):
             return book.add(text, personID: id, personName: name, at: date).map(Outcome.added) ?? .notFound("The point has no words.")
@@ -110,7 +112,7 @@ extension ChatTools {
         do {
             try NextTimeBook.change(in: paths.nextTime) { book in
                 if let target {
-                    outcome = NextTimeAdd.add(text, to: target, people: saved, book: &book)
+                    outcome = NextTimeAdd.add(text, to: target, people: saved, invited: invitedCount, book: &book)
                 } else {
                     outcome = NextTimeAdd.add(text, series: input["series"] as? String, person: input["person"] as? String, series: series, people: saved, book: &book)
                 }
@@ -120,10 +122,17 @@ extension ChatTools {
         }
         switch outcome {
         case .added(let p):
-            if let m = p.meeting, p.isForMeeting { return "Saved for your \(m.title) on \(shortDay(m.start)): \(p.text)" }
+            if let d = p.meeting?.detail, p.isForMeeting { return "Saved for your \(d.title) on \(shortDay(d.start)): \(p.text)" }
             return p.seriesTitle.map { "Saved for the next \($0): \(p.text)" } ?? "Saved for the next time you see \(p.personName ?? "them"): \(p.text)"
         case .choose(let titles): return "Several recurring meetings match; ask which one: \(titles.joined(separator: "; "))."
         case .notFound(let why): return why
         }
+    }
+}
+
+extension ChatTools {
+    /// Everyone invited besides the owner, by the prep page's rule.
+    func invitedCount(_ u: UpcomingMeeting) -> Int {
+        MeetingPrep.invited(u.attendees, owner: owner, directory: fullDirectory, ownerEmails: [settings.ownerEmail]).count
     }
 }

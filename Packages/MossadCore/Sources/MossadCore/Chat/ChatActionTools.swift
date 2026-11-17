@@ -351,7 +351,7 @@ public final class ChatActions: @unchecked Sendable {
             return .success((r, words, "mossad://person/\(id)"))
         }
         func meeting(_ u: UpcomingMeeting) -> Result<(ChatActionRequest, String, String?), Refusal> {
-            r.meeting = NextTimeMeeting(u, people: NextTimeInvite.personIDs(u.attendees, people: tools.saved))
+            r.meeting = MeetingDetail(u, people: NextTimeInvite.personIDs(u.attendees, people: tools.saved), invited: tools.invitedCount(u))
             r.upcomingID = u.id
             return .success((r, "Saved for your \(u.title) on \(day(u)): \(text)", nil))
         }

@@ -14,7 +14,7 @@ extension ChatTools {
                     "series": ["type": "string"], "limit": ["type": "integer", "description": "The most meetings to list, default 20."],
                  ] as [String: Any], "required": ["series"]]),
         ToolSpec(name: "next_time_points",
-                 description: "The owner's points to raise later: for the next meeting of a recurring meeting or the next time they see a person. Each with point_id, its series or person, when it was saved, and what happened to it: discussed (in which call_id, at what second, with the quote), carried over meetings that did not discuss it, or seen in a meeting Mossad has only the notes of. status is open (default), done, or all. Narrow by series (series_id or title words) or person (person_id or whole name). To add one, use add_next_time_point (in Mossad's own chat: add_point).",
+                 description: "The owner's points to raise later: for the next meeting of a recurring meeting, for one upcoming meeting that is not recurring, or the next time they see a person. Each with point_id, its series, meeting, or person, when it was saved, and what happened to it: discussed (in which call_id, at what second, with the quote), carried over meetings that did not discuss it, or seen in a meeting Mossad has only the notes of. status is open (default), done, or all. Narrow by series (series_id or title words) or person (person_id or whole name). To add one, use add_next_time_point (in Mossad's own chat: add_point).",
                  schema: ["type": "object", "properties": [
                     "status": ["type": "string", "enum": ["open", "done", "all"]], "series": ["type": "string"], "person": ["type": "string"], "limit": ["type": "integer"],
                  ] as [String: Any]]),
@@ -303,8 +303,8 @@ extension ChatTools {
 
     func pointLine(_ p: NextTimePoint) -> String {
         var line = "- \(p.text) (point_id: \(p.id.uuidString)"
-        if p.isForMeeting, let m = p.meeting {
-            line += ", for your \(m.title) on \(shortDay(m.start))"
+        if p.isForMeeting {
+            line += p.meeting?.detail.map { ", for your \($0.title) on \(shortDay($0.start))" } ?? ", for one meeting"
         } else {
             line += p.seriesTitle.map { ", for the next \($0)" } ?? p.personName.map { ", for the next time you see \($0)" } ?? ""
         }
@@ -315,7 +315,9 @@ extension ChatTools {
             if let q = d.quote { line += ": \u{201C}\(q)\u{201D}" }
         }
         if p.isOpen, p.isForPerson, let m = p.meeting, let call = m.calls?.last {
-            line += " | not raised in your \(m.title) (call_id: \(call)), so it waits for the next time you see them"
+            line += " | not raised in \(m.detail.map { "your \($0.title)" } ?? "a meeting") (call_id: \(call)), so it waits for the next time you see them"
+        } else if p.isOpen, p.isForPerson, let d = p.meeting?.detail, p.meeting?.calls?.isEmpty != false {
+            line += " | from your \(d.title) on \(shortDay(d.start)), which was not recorded"
         } else if let carried = p.carried, !carried.isEmpty, p.isOpen {
             line += " | carried over \(carried.count) \(carried.count == 1 ? "meeting" : "meetings")"
         }
@@ -349,7 +351,7 @@ extension ChatTools {
         default: list = list.filter(\.isOpen)
         }
         guard !list.isEmpty else { return "No points match." }
-        func label(_ p: NextTimePoint) -> String { p.isForMeeting ? p.meeting?.title ?? "" : p.seriesTitle ?? p.personName ?? "" }
+        func label(_ p: NextTimePoint) -> String { p.isForMeeting ? p.meeting?.detail?.title ?? "" : p.seriesTitle ?? p.personName ?? "" }
         list.sort { ($0.isOpen ? 0 : 1, label($0), $0.rank) < ($1.isOpen ? 0 : 1, label($1), $1.rank) }
         return list.prefix(limit).map(pointLine).joined(separator: "\n") + (list.count > limit ? "\n(\(list.count - limit) more.)" : "")
     }

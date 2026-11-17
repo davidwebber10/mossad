@@ -99,45 +99,43 @@ struct UpcomingDetailView: View {
         if let prep {
             // Every meeting has the owner's points; the rest only when Mossad knows something.
             let nothing = prep.lastTime == nil && prep.promises.isEmpty && prep.series == nil && prep.coach.isEmpty && prep.tasksKnown
-            Group {
-                VStack(alignment: .leading, spacing: Rhythm.sectionGap) {
-                    // The owner's own points first: what they wanted to raise.
-                    PrepYourPoints(meeting: meeting)
-                    if nothing {
-                        MeetingAnalyticsGroup("Before this meeting") {
-                            Text(prep.people.isEmpty ? "Mossad has no earlier meeting with this title, and it does not know the invited people yet."
-                                     : "Mossad has no earlier meeting of this series or with these people.")
-                                .foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    if let line = prep.inOneLine {
-                        MeetingAnalyticsGroup("Before this meeting") {
-                            Text(line).font(.system(size: Rhythm.leadSize, weight: .medium)).lineSpacing(Rhythm.secondaryLineGap).foregroundStyle(Palette.ink)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .textSelection(.enabled)
-                        }
-                    }
-                    if let last = prep.lastTime { PrepLastTime(last: last, toggle: toggle) }
-                    if !prep.tasksKnown {
-                        MeetingAnalyticsGroup("You promised") {
-                            Text("Mossad could not read your tasks, so this page shows none of them and no state of your action items.")
-                                .foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
-                        }
-                    } else if !prep.promises.isEmpty {
-                        MeetingAnalyticsGroup("You promised") { PrepPromises(promises: prep.promises, more: prep.morePromises, toggle: toggle) }
-                    }
-                    if let series = prep.series {
-                        MeetingAnalyticsGroup("The series") { PrepSeries(series: series, planned: meeting.end.timeIntervalSince(meeting.start)) }
-                    }
-                    if !prep.coach.isEmpty {
-                        MeetingAnalyticsGroup("Coach") {
-                            PrepCoachSection(input: prep.coach, covered: { controller.personaCovered($0) }, uncover: { controller.uncover($0) })
-                        }
+            VStack(alignment: .leading, spacing: Rhythm.sectionGap) {
+                // The owner's own points first: what they wanted to raise.
+                PrepYourPoints(meeting: meeting)
+                if nothing {
+                    MeetingAnalyticsGroup("Before this meeting") {
+                        Text(prep.people.isEmpty ? "Mossad has no earlier meeting with this title, and it does not know the invited people yet."
+                                 : "Mossad has no earlier meeting of this series or with these people.")
+                            .foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                .font(.system(size: Rhythm.bodySize))
-                .foregroundStyle(Palette.ink)
+                if let line = prep.inOneLine {
+                    MeetingAnalyticsGroup("Before this meeting") {
+                        Text(line).font(.system(size: Rhythm.leadSize, weight: .medium)).lineSpacing(Rhythm.secondaryLineGap).foregroundStyle(Palette.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    }
+                }
+                if let last = prep.lastTime { PrepLastTime(last: last, toggle: toggle) }
+                if !prep.tasksKnown {
+                    MeetingAnalyticsGroup("You promised") {
+                        Text("Mossad could not read your tasks, so this page shows none of them and no state of your action items.")
+                            .foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                } else if !prep.promises.isEmpty {
+                    MeetingAnalyticsGroup("You promised") { PrepPromises(promises: prep.promises, more: prep.morePromises, toggle: toggle) }
+                }
+                if let series = prep.series {
+                    MeetingAnalyticsGroup("The series") { PrepSeries(series: series, planned: meeting.end.timeIntervalSince(meeting.start)) }
+                }
+                if !prep.coach.isEmpty {
+                    MeetingAnalyticsGroup("Coach") {
+                        PrepCoachSection(input: prep.coach, covered: { controller.personaCovered($0) }, uncover: { controller.uncover($0) })
+                    }
+                }
             }
+            .font(.system(size: Rhythm.bodySize))
+            .foregroundStyle(Palette.ink)
         } else {
             HStack(spacing: Space.s) {
                 ProgressView().controlSize(.small)

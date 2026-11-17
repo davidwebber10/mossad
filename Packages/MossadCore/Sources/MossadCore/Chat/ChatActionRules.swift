@@ -254,14 +254,14 @@ public enum ChatActionApply {
             } else if r.personID != nil {
                 same = book.visible.filter { $0.isOpen && $0.seriesID == nil && $0.personID == r.personID }
             } else {
-                same = r.meeting.map { book.points(forMeeting: $0) } ?? []
+                same = r.meeting.map { book.points(forMeeting: NextTimeMeeting($0)) } ?? []
             }
             var p = NextTimePoint(text: text, personID: r.seriesID == nil ? r.personID : nil, personName: r.seriesID == nil ? r.personName : nil,
                                   rank: (same.map(\.rank).max() ?? 0) + 1, created: now)
             p.seriesID = r.seriesID
             p.seriesKeys = r.seriesKeys
             p.seriesTitle = r.seriesTitle
-            if r.seriesID == nil, r.personID == nil { p.meeting = r.meeting }
+            if r.seriesID == nil, r.personID == nil { p.meeting = r.meeting.map { NextTimeMeeting($0) } }
             book.points.append(p)
             var undo = ChatActionRequest(.removePoint)
             undo.pointID = p.id

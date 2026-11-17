@@ -98,6 +98,8 @@ public enum NextTimeRules {
         return book.visible.filter { p in
             guard p.isOpen, p.created < r.end, !(p.reopened ?? []).contains(r.id) else { return false }
             if let s = series, p.seriesID != nil, p.belongs(to: s) { return true }
+            // A point that one recording of this meeting moved to the person: another recording of it reads it too.
+            if p.isForPerson, p.meeting?.matches(r) == true { return true }
             if p.seriesID == nil, let id = p.personID { return spoke.contains(people.canonical(id)) }
             if p.isForMeeting, let m = p.meeting { return m.matches(r) }
             return false
@@ -132,6 +134,8 @@ public enum NextTimeRules {
                 }
             } else if !missed, p.isForMeeting {
                 book.update(p.id, at: date) { q in
+                    // The point as it is now: the owner may have moved or ticked it while the request ran.
+                    guard q.isOpen, q.isForMeeting else { return }
                     let calls = Array(Set((q.meeting?.calls ?? []) + [r.id])).sorted()
                     q.meeting?.calls = calls
                     guard let other = onlyOther else { return }

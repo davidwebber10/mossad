@@ -49,7 +49,7 @@ public struct ChatActionRequest: Codable, Equatable, Sendable {
     public var personID: String?
     public var personName: String?
     /// A point's one meeting, when that meeting has no series. An older build drops it and does not run the request.
-    public var meeting: NextTimeMeeting?
+    public var meeting: MeetingDetail?
     public var date: Date?
     /// A task's due date taken away.
     public var noDate: Bool?

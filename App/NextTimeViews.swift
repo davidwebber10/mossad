@@ -145,14 +145,21 @@ struct NextTimeList: View {
     private func note(_ p: NextTimePoint) -> some View {
         let carried = (p.carried ?? []).count
         // A point that one meeting did not raise and moved here says which meeting.
-        let movedFrom = p.isForPerson ? p.meeting.flatMap { m in m.calls?.isEmpty == false ? m : nil } : nil
-        let parts = [movedFrom.map { "Not raised in \($0.title) on \(shortDay($0.start))" }
+        let parts = [(p.isForPerson ? Self.origin(p) : nil)
                         ?? (carried > 0 ? "Not discussed in the last \(carried == 1 ? "meeting" : "\(carried) meetings")" : nil),
                      p.suggestion != nil ? "Kept from the coach" : nil, p.isForPerson ? p.personName.map { "For \($0)" } : nil].compactMap { $0 }
         if !parts.isEmpty {
             Text(parts.joined(separator: " · ")).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
         }
         if p.isOpen, let m = p.lastMention { MentionNote(mention: m) }
+    }
+
+    /// Where a person's point came from: one meeting that did not raise it, or one that was not recorded.
+    static func origin(_ p: NextTimePoint) -> String? {
+        guard let m = p.meeting else { return nil }
+        let recorded = m.calls?.isEmpty == false
+        guard let d = m.detail else { return recorded ? "Not raised in a meeting with them" : nil }
+        return recorded ? "Not raised in \(d.title) on \(shortDay(d.start))" : "From \(d.title) on \(shortDay(d.start)), which was not recorded"
     }
 
     private func startEdit(_ p: NextTimePoint) {
@@ -379,7 +386,10 @@ struct PrepYourPoints: View {
 
     var body: some View {
         let series = SeriesCatalog.series(of: meeting, in: controller.series.all)
-        let own = series.map { controller.series.book.points(of: $0).open } ?? controller.series.book.points(forMeeting: meeting)
+        let book = controller.series.book
+        let own = series.map { book.points(of: $0).open } ?? book.points(forMeeting: meeting)
+        // The points of an earlier meeting with this title that was not recorded, for the next one with it.
+        let waiting = series == nil ? book.waiting(for: meeting, upcoming: controller.calendarUpcoming, waiting: controller.waitingPoints) : []
         let refs = controller.series.people
         let invited = controller.series.invitedIDs[meeting.id] ?? []
         // Each invited person with points of their own, as a list of its own: a drag never mixes two lists.
@@ -392,9 +402,11 @@ struct PrepYourPoints: View {
                 if let series {
                     NextTimeList(points: own, add: { text in controller.changeNextTime { $0.add(text, series: series) } })
                 } else {
+                    // Before the first catalog a meeting of a series looks like a single one: no field until it is known.
                     NextTimeList(points: own, add: { text in
-                        controller.changeNextTime { $0.add(text, meeting: NextTimeMeeting(meeting, people: invited)) }
-                    }, placeholder: "Add a point for this meeting")
+                        controller.changeNextTime { $0.add(text, meeting: NextTimeMeeting(meeting, people: invited, invited: controller.invitedCount(meeting))) }
+                    }, placeholder: "Add a point for this meeting", canAdd: controller.series.loaded)
+                    ForEach(waiting) { p in WaitingOffer(point: p, meeting: meeting, people: invited) }
                 }
                 ForEach(people, id: \.id) { p in PersonNextTimeSection(personID: p.id, name: p.name) }
                 if let series {
@@ -419,7 +431,8 @@ enum SeriesNames {
 /// Under a meeting: the owner's points it discussed (with the moment), and the ones it left for next time.
 struct MeetingPointsGroup: View {
     @EnvironmentObject var controller: AppController
-    let callID: String
+    let record: CallRecord
+    private var callID: String { record.id }
 
     /// Whether the group shows anything for this meeting. The page leaves the group out when it does not, so an
     /// empty group takes no section gap; the page reads the book itself (`loadsPoints`).
@@ -433,7 +446,7 @@ struct MeetingPointsGroup: View {
         let discussed = book.discussed(in: callID)
         let carried = book.visible.filter { $0.isOpen && ($0.carried ?? []).contains(callID) }
         // The points of this one meeting that it did not raise: they stay here until the owner moves them.
-        let leftOpen = book.leftOpen(in: callID, record: controller.meetings.first { $0.id == callID })
+        let leftOpen = book.leftOpen(in: callID, record: record)
         // A meeting the owner missed (notes only, with no line of theirs) closes and carries nothing: its open points that came up are listed.
         let mentioned = book.mentioned(in: callID)
         VStack(spacing: 0) {
@@ -465,7 +478,13 @@ struct MeetingPointsGroup: View {
                 LabelColumn(label: "Your points") {
                     VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                         ForEach(discussed) { DiscussedRow(point: $0) }
-                        ForEach(leftOpen) { p in OpenPointRow(point: p, note: book.checked.contains(callID) ? "Not raised in this meeting. Still open" : "Still open") }
+                        ForEach(leftOpen) { p in
+                            OpenPointRow(point: p, note: book.checked.contains(callID) ? "Not raised in this meeting. Still open" : "Still open") {
+                                QuietButton(title: "It was discussed") {
+                                    controller.changeNextTime { $0.update(p.id) { $0.done = .init(callID: callID, at: nil, quote: nil, date: Date(), byOwner: true) } }
+                                }
+                            }
+                        }
                         ForEach(carried) { p in
                             HStack(alignment: .firstTextBaseline, spacing: Space.m) {
                                 Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 14, height: 14)
@@ -506,35 +525,44 @@ private struct LoadsPoints: ViewModifier {
 }
 
 /// One open point of one meeting, with where it can go: a person of that meeting, a recurring meeting, or away.
-struct OpenPointRow: View {
-    @EnvironmentObject var controller: AppController
+struct OpenPointRow<Extra: View>: View {
     let point: NextTimePoint
     let note: String
+    @ViewBuilder var extra: Extra
+
+    init(point: NextTimePoint, note: String, @ViewBuilder extra: () -> Extra = { EmptyView() }) {
+        self.point = point
+        self.note = note
+        self.extra = extra()
+    }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Space.m) {
             Circle().strokeBorder(Palette.ring, lineWidth: 1.5).frame(width: 14, height: 14)
             VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 Text(point.text).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
-                Text(note).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
+                if !note.isEmpty {
+                    Text(note).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
+                }
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: Rhythm.itemGap)
+            extra
             PointMoveMenu(point: point)
         }
         .font(.system(size: Rhythm.bodySize))
-        .padding(.vertical, 6).padding(.horizontal, 8)
+        .padding(.vertical, Rhythm.readingLineGap).padding(.horizontal, Rhythm.itemGap)
     }
 }
 
-/// "Move to…": the next time the owner sees a person of the point's meeting, or the next meeting of a recurring
-/// meeting (the ones those people come to first), or Delete.
+/// "Move to": the next time the owner sees a person of the point's meeting, or the next meeting of a recurring
+/// meeting (the ones those people come to first), or Delete. In the capsule of the row's other buttons.
 struct PointMoveMenu: View {
     @EnvironmentObject var controller: AppController
     let point: NextTimePoint
 
     var body: some View {
         let refs = controller.series.people
-        let people = (point.meeting?.people ?? []).map { refs.canonical($0) }.compactMap { id in refs.name(of: id).map { (id: id, name: $0) } }
+        let people = (point.meeting?.detail?.people ?? []).map { refs.canonical($0) }.compactMap { id in refs.name(of: id).map { (id: id, name: $0) } }
         let ids = Set(people.map(\.id))
         let live = controller.series.all.filter { $0.next != nil }
         let theirs = live.filter { s in (controller.series.usualIDs[s.id] ?? []).contains { ids.contains($0.id) } }
@@ -553,29 +581,74 @@ struct PointMoveMenu: View {
             Divider()
             Button("Delete", role: .destructive) { controller.changeNextTime { $0.delete(point.id) } }
         } label: {
-            Text("Move to").font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.ink)
+            Text("Move to")
+                .font(.system(size: Rhythm.secondarySize, weight: .semibold))
+                .foregroundStyle(Palette.ink)
+                .padding(.horizontal, Rhythm.listRowInset).frame(height: 24)
+                .background(Palette.fill, in: Capsule())
+                .contentShape(Capsule())
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
         .fixedSize()
         .help("Move the point to a person or a recurring meeting, or delete it")
         .accessibilityLabel("Move \(point.text)")
     }
 }
 
-/// The open points of meetings that are over with no recording the owner was in: cancelled, skipped, or not
-/// recorded. They wait here until the owner moves or deletes them; nothing closes them by itself.
-struct UnrecordedPoints: View {
+/// On the prep page of the next meeting with the same title: a point of an earlier one that was not recorded, with
+/// one click to make it this meeting's.
+private struct WaitingOffer: View {
     @EnvironmentObject var controller: AppController
+    let point: NextTimePoint
+    let meeting: UpcomingMeeting
+    let people: [String]
 
     var body: some View {
-        let points = controller.series.book.unrecorded(records: controller.meetings)
+        let note = point.meeting?.detail.map { "From \($0.title) on \(shortDay($0.start)), which was not recorded" } ?? ""
+        OpenPointRow(point: point, note: note) {
+            QuietButton(title: "Add to this meeting") {
+                controller.changeNextTime { $0.give(point.id, to: MeetingDetail(meeting, people: people, invited: controller.invitedCount(meeting))) }
+            }
+        }
+        .opacity(0.85)
+    }
+}
+
+/// One quiet row at the top of the Recurring list: "2 points from meetings that were not recorded", closed by
+/// default, which opens to the points with Move to and Delete. Nothing closes them by itself.
+struct WaitingPointsRow: View {
+    @EnvironmentObject var controller: AppController
+    @State private var open = false
+
+    var body: some View {
+        let points = controller.waitingPoints
         if !points.isEmpty {
             VStack(alignment: .leading, spacing: Rhythm.pairGap) {
-                GroupHeader(title: "From meetings that were not recorded", first: true)
-                ForEach(points) { p in
-                    OpenPointRow(point: p, note: p.meeting.map { "\($0.title), \(shortDay($0.start))" } ?? "")
+                Button { open.toggle() } label: {
+                    // The text starts where the list's titles start; the chevron is at the end.
+                    HStack(alignment: .firstTextBaseline, spacing: Space.s) {
+                        Text("\(points.count) \(points.count == 1 ? "point" : "points") from meetings that were not recorded")
+                            .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        IconImage(open ? .chevronDown : .chevronRight, size: 9).foregroundStyle(Palette.tertiary)
+                    }
+                    .padding(.horizontal, Rhythm.listRowInset).padding(.vertical, Rhythm.readingLineGap)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(points.count) points from meetings that were not recorded")
+                .accessibilityValue(open ? "Open" : "Closed")
+                if open {
+                    ForEach(points) { p in
+                        OpenPointRow(point: p, note: p.meeting?.detail.map { "\($0.title), \(shortDay($0.start))" } ?? "A meeting this Mac does not know")
+                    }
                 }
             }
+            // Development hook for screenshots: MOSSAD_WAITING_OPEN=1 shows the row open.
+            .onAppear { if DevHooks.preview, ProcessInfo.processInfo.environment["MOSSAD_WAITING_OPEN"] == "1" { open = true } }
         }
     }
 }

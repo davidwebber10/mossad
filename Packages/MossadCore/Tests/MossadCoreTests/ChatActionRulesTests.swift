@@ -70,7 +70,7 @@ final class ChatActionRulesTests: XCTestCase {
         let u = invite("Coffee", days: 3, ["jeff@example.com"])
         var r = ChatActionRequest(.addPoint)
         r.text = "Ask about the offsite"
-        r.meeting = NextTimeMeeting(u, people: ["id-jeff"])
+        r.meeting = MeetingDetail(u, people: ["id-jeff"])
         var book = NextTimeBook()
         let change = ChatActionApply.run(r, on: &book, now: now)
         XCTAssertNotNil(change)

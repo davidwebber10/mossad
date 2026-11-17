@@ -26,7 +26,7 @@ final class MeetingPointsTests: XCTestCase {
                         attendees: attendees, platform: .meet, link: nil, isRecurring: recurring, uid: uid)
     }
 
-    private func record(_ id: String, of u: UpcomingMeeting, status: CallStatus = .written, lines: [(Int, Double, String)] = [(0, 5, "Hello Sam, good to see you")]) -> CallRecord {
+    private func record(_ id: String, of u: UpcomingMeeting, status: CallStatus = .written, lines: [(Int, Double, String)] = [(0, 5, "Hello Sam, good to see you"), (1, 20, "Hi Dana, thanks")]) -> CallRecord {
         var r = CallRecord(id: id, platform: .meet, bundleID: "", start: u.start.addingTimeInterval(90), end: u.end, status: status)
         r.calendarTitle = u.title
         r.plannedStart = u.start
@@ -50,7 +50,7 @@ final class MeetingPointsTests: XCTestCase {
         let (book, p) = bookWithPoint(for: u)
         XCTAssertTrue(p.isForMeeting)
         XCTAssertFalse(p.isForPerson)
-        XCTAssertEqual(p.meeting?.people, ["p-sam"])
+        XCTAssertEqual(p.meeting?.detail?.people, ["p-sam"])
         XCTAssertEqual(book.points(forMeeting: u).map(\.id), [p.id])
         XCTAssertTrue(book.points(forPerson: "p-sam").isEmpty)
         // The prep page: the meeting's own, then each person's, never twice.
@@ -69,7 +69,7 @@ final class MeetingPointsTests: XCTestCase {
         XCTAssertFalse(p.meeting!.matches(invite("Budget chat (moved)", inHours: 30, recurring: true)))
         // The point follows the invite's new times, which a recording of it then has.
         XCTAssertTrue(book.followMeetings(upcoming: [moved], series: [], records: [], at: now))
-        XCTAssertEqual(book.points[0].meeting?.start, moved.start)
+        XCTAssertEqual(book.points[0].meeting?.detail?.start, moved.start)
         XCTAssertEqual(book.points[0].updated, p.updated)
         XCTAssertTrue(book.points[0].meeting!.matches(record("c", of: moved)))
         XCTAssertFalse(book.followMeetings(upcoming: [moved], series: [], records: [], at: now))
@@ -141,7 +141,6 @@ final class MeetingPointsTests: XCTestCase {
         XCTAssertEqual(p.meeting?.calls, ["c"])
         XCTAssertEqual(book.points(forPerson: "p-sam").map(\.id), [p.id])
         XCTAssertTrue(book.leftOpen(in: "c", record: r).isEmpty)
-        XCTAssertEqual(book.movedToPerson(from: "c").map(\.id), [p.id])
         XCTAssertTrue(book.checked.contains("c"))
     }
 
@@ -225,7 +224,7 @@ final class MeetingPointsTests: XCTestCase {
             return XCTFail()
         }
         XCTAssertTrue(p.isForMeeting)
-        XCTAssertEqual(p.meeting?.people, ["p-sam"])
+        XCTAssertEqual(p.meeting?.detail?.people, ["p-sam"])
         XCTAssertEqual(book.points(forMeeting: u).map(\.id), [p.id])
     }
 
@@ -248,7 +247,7 @@ final class MeetingPointsTests: XCTestCase {
         XCTAssertTrue(saved.points[0].isOpen)
         for merged in [mac.merged(with: saved), saved.merged(with: mac)] {
             XCTAssertEqual(merged.points[0].text, "Ask about the Q3 budget, and hiring")
-            XCTAssertEqual(merged.points[0].meeting?.title, "Budget chat")
+            XCTAssertEqual(merged.points[0].meeting?.detail?.title, "Budget chat")
             XCTAssertEqual(merged.points[0].meeting?.calls, ["c"])
             XCTAssertTrue(merged.points[0].isForMeeting)
         }
