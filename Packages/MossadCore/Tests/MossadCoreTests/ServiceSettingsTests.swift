@@ -209,4 +209,61 @@ final class ServiceSettingsTests: XCTestCase {
         XCTAssertNotNil(s.archive(key: keychain("secret", asked), paths: paths, server: nil))
         XCTAssertEqual(asked.all, [.cloudSecret])
     }
+
+    /// A stored property of a made value, by its name, for the values the factories pass on.
+    private func field(_ value: Any, _ name: String) -> Any? {
+        Mirror(reflecting: value).children.first { $0.label == name }?.value
+    }
+
+    func testEachSettingGoesToItsOwnPlace() {
+        // Two keys that hold the same words must not be read in each other's place.
+        defaults.set("server", forKey: "storage")
+        defaults.set("s3", forKey: "cloudBucketKind")
+        defaults.set(false, forKey: "personaEnabled")
+        defaults.set(true, forKey: "personaInMCP")
+        let s = ServiceSettings.read(defaults, fullUserName: "Avery Webb")
+        XCTAssertEqual(s.backup.choice, .server); XCTAssertEqual(s.backup.bucketKind, .s3)
+        XCTAssertFalse(s.personaEnabled); XCTAssertTrue(s.personaInMCP)
+    }
+
+    func testTheModelsGetTheChosenModelAndAddress() throws {
+        defaults.set("deepgram", forKey: "transcriptionProvider")
+        defaults.set("nova-3", forKey: "transcriptionModel")
+        defaults.set("anthropic", forKey: "aiProvider")
+        defaults.set("claude-made-up", forKey: "aiModel")
+        defaults.set("Sam Carter", forKey: "ownerName")
+        defaults.set(" Example Inc. ", forKey: "organization")
+        var s = ServiceSettings.read(defaults, fullUserName: "Avery Webb")
+        XCTAssertEqual(field(s.transcriber(key: { _ in "k" }, usage: nil), "model") as? String, "nova-3")
+        let llm = try XCTUnwrap(s.languageModel(key: { _ in "k" }, usage: nil))
+        XCTAssertEqual(field(llm, "model") as? String, "claude-made-up")
+        let summarizer = try XCTUnwrap(s.summarizer(key: { _ in "k" }, usage: nil))
+        XCTAssertEqual(field(summarizer, "ownerName") as? String, "Sam Carter")
+        XCTAssertEqual(field(summarizer, "organization") as? String, "Example Inc.")
+        defaults.set("localServer", forKey: "aiProvider")
+        defaults.set("llama-made-up", forKey: "aiModel")
+        defaults.set("http://127.0.0.1:1234", forKey: "localServerURL")
+        s = ServiceSettings.read(defaults, fullUserName: "Avery Webb")
+        let local = try XCTUnwrap(s.languageModel(key: { _ in nil }, usage: nil))
+        XCTAssertEqual((field(local, "baseURL") as? URL)?.absoluteString, "http://127.0.0.1:1234/v1")
+        XCTAssertEqual(field(local, "model") as? String, "llama-made-up")
+    }
+
+    func testTheBackupTargetFollowsTheChoiceAndTheServer() throws {
+        let paths = Paths(root: FileManager.default.temporaryDirectory.appendingPathComponent("svc-\(UUID().uuidString)"))
+        let server = ServerConnection(address: URL(string: "https://notes.example.com")!, secret: "s")
+        defaults.set("server", forKey: "storage")
+        var s = ServiceSettings.read(defaults, fullUserName: "Avery Webb")
+        XCTAssertEqual(s.archive(key: { _ in nil }, paths: paths, server: server)?.hasTarget, false, "a server that keeps no recordings")
+        defaults.set(5_000_000.0, forKey: "serverRecordingLimit")
+        defaults.set("srv-1", forKey: "serverID")
+        s = ServiceSettings.read(defaults, fullUserName: "Avery Webb")
+        let archive = try XCTUnwrap(s.archive(key: { _ in nil }, paths: paths, server: server))
+        XCTAssertTrue(archive.hasTarget)
+        let place = try XCTUnwrap(archive.places[.server] as? ServerArchive)
+        XCTAssertEqual(place.id, "srv-1"); XCTAssertEqual(place.maxBytes, 5_000_000)
+        defaults.set("local", forKey: "storage")
+        XCTAssertEqual(ServiceSettings.read(defaults, fullUserName: "Avery Webb").archive(key: { _ in nil }, paths: paths, server: server)?.hasTarget,
+                       false, "a local choice uploads nothing")
+    }
 }

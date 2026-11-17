@@ -24,8 +24,13 @@ final class SyncPassTests: XCTestCase {
         private(set) var log: [String] = []
         var failChanges = false
         func setFailChanges(_ on: Bool) { failChanges = on }
-        nonisolated var stateFileName: String { "state.json" }
-        nonisolated var wantsMeetingView: Bool { false }
+        /// A server's store has its own state file and takes the views and the digest.
+        nonisolated let stateFileName: String
+        nonisolated let wantsMeetingView: Bool
+        init(stateFileName: String = "state.json", server: Bool = false) {
+            self.stateFileName = stateFileName
+            wantsMeetingView = server
+        }
         func prepare() async throws { log.append("prepare") }
         func save(_ records: [StoredRecord]) async throws -> Set<String> {
             log.append("save " + records.map(\.type).sorted().joined(separator: ","))
@@ -138,5 +143,73 @@ final class SyncPassTests: XCTestCase {
         let result = await SyncPass.run(i)
         XCTAssertEqual(digests.value, 0)
         XCTAssertEqual(result.digest?.count, 0)
+    }
+
+    private let server = ServerConnection(address: URL(string: "https://notes.example.com")!, secret: "s")
+
+    private func configs() -> [StubURLProtocol.Recorded] {
+        StubURLProtocol.requests.filter { $0.url.path.hasSuffix("/config") }
+    }
+
+    func testAServerAsMainIsToldTheConfigAfterThePass() async throws {
+        let paths = temp()
+        var i = inputs(main: CloudSync(paths: paths, store: LoggingStore()), mirror: nil, serverIsMain: true)
+        i.connection = server
+        i.session = StubURLProtocol.session()
+        StubURLProtocol.handler = { _ in (200, Data("{}".utf8)) }
+        _ = await SyncPass.run(i)
+        let sent = configs()
+        XCTAssertEqual(sent.count, 1, "\(StubURLProtocol.requests.map(\.url))")
+        let body = try JSONSerialization.jsonObject(with: try XCTUnwrap(sent.first).body) as? [String: Any]
+        XCTAssertEqual(body?["owner"] as? String, "Sam Carter")
+        XCTAssertNotNil(body?["syncedAt"])
+    }
+
+    func testTheMirrorTellsTheConfigOnlyWhenNoCallStarted() async throws {
+        for started in [true, false] {
+            let paths = temp()
+            var i = inputs(main: nil, mirror: CloudSync(paths: paths, store: LoggingStore()))
+            i.connection = server
+            i.callStarted = { started }
+            i.session = StubURLProtocol.session()
+            StubURLProtocol.handler = { _ in (200, Data("{}".utf8)) }
+            _ = await SyncPass.run(i)
+            XCTAssertEqual(configs().count, started ? 0 : 1, "call started: \(started)")
+        }
+    }
+
+    func testThePhonesRecordingNoticesComeWithThePass() async throws {
+        let paths = temp()
+        let store = LoggingStore()
+        let json = #"{"name":"room-1","firstFailure":0,"attempts":3,"next":0,"reason":"","gaveUp":true}"#
+        var state = SyncState()
+        state.recordings = [try JSONDecoder().decode(PendingRecording.self, from: Data(json.utf8))]
+        try state.save(to: paths.sync, fileName: store.stateFileName)
+        let result = await SyncPass.run(inputs(main: CloudSync(paths: paths, store: store), mirror: nil))
+        XCTAssertEqual(result.waiting.map(\.name), ["room-1"])
+    }
+
+    func testThePassNeverTakesInMeetingsFromAnotherDevice() async throws {
+        let other = temp()
+        try meeting("m1", in: other)
+        let store = LoggingStore()
+        _ = try await CloudSync(paths: other, store: store).push()
+        let paths = temp()
+        let result = await SyncPass.run(inputs(main: CloudSync(paths: paths, store: store), mirror: nil))
+        XCTAssertNil(result.failure)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.callDirectory("m1").path))
+        XCTAssertEqual(result.received, 0)
+    }
+
+    func testTheDigestIsCheckedOnTheStoreItWentTo() async throws {
+        let paths = temp()
+        try meeting("m1", in: paths)
+        let payload = SharedPayload(kind: .digest, key: "digest-series", data: Data("{}".utf8))
+        // iCloud main and the server as a mirror: the digest goes to the mirror, so the mirror is asked.
+        let result = await SyncPass.run(inputs(main: CloudSync(paths: paths, store: LoggingStore()),
+                                               mirror: CloudSync(paths: paths, store: LoggingStore(stateFileName: "server.json", server: true)),
+                                               makeDigest: { [payload] }))
+        XCTAssertEqual(result.digest?.count, 1)
+        XCTAssertTrue(result.digestArrived)
     }
 }

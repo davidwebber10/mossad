@@ -20,6 +20,8 @@ public enum SyncPass {
         public var keptDigest: [SharedPayload]?
         /// Makes the digest; nil: no digest in this pass. Asked at most once.
         public var makeDigest: (@Sendable () -> [SharedPayload]?)?
+        /// The session of the server's config call: the shared one, or a test's.
+        public var session: URLSession = .shared
 
         public init(main: CloudSync?, mirror: CloudSync?, serverIsMain: Bool, place: String, connection: ServerConnection?, owner: String,
                     personasInMCP: Bool, personas: SyncedPersonas?, calling: Bool, callStarted: @escaping @Sendable () -> Bool,
@@ -69,7 +71,7 @@ public enum SyncPass {
                 if changed + shared > 0 { Log.info("Sync: \(changed + shared) changes sent to \(place)") }
                 // The server's tools read what time the Mac last sent everything: never the age of one record.
                 if inputs.serverIsMain, let connection {
-                    try? await ServerClient(connection).putConfig(owner: owner, personasInMCP: personasHere, syncedAt: Date())
+                    try? await ServerClient(connection, session: inputs.session).putConfig(owner: owner, personasInMCP: personasHere, syncedAt: Date())
                 }
                 if result.received > 0 { Log.info("Sync: \(result.received) changes from your other devices") }
             } catch {
@@ -88,7 +90,7 @@ public enum SyncPass {
                     let shared = try await mirror.pushShared(people: true, personas: inputs.personas, mirror: true, stop: callStarted, digest: makeDigest())
                     if shared > 0 { Log.info("Server: \(shared) people, tasks, points, coach, and chat records copied") }
                     if !callStarted(), let connection {
-                        try? await ServerClient(connection).putConfig(owner: owner, personasInMCP: personasHere, syncedAt: Date())
+                        try? await ServerClient(connection, session: inputs.session).putConfig(owner: owner, personasInMCP: personasHere, syncedAt: Date())
                     }
                 }
             } catch {
