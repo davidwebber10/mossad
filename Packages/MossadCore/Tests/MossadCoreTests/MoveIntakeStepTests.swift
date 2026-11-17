@@ -190,4 +190,31 @@ final class MoveIntakeStepTests: XCTestCase {
         let out = MoveIntake.relink(text, from: id, to: id + "-moved")
         XCTAssertEqual(out, "See mossad://call/\(id)-moved and [a](mossad://call/\(id)-moved?t=4), mossad://call/\(id)-moved. Not mossad://call/\(id)9.")
     }
+
+    /// A stop at each point of a refusal (the meeting goes back out of `Audio`, then `refused`): the next run ends the
+    /// refusal, and B is as before.
+    func testAStopInTheRefusalIsFinishedByTheNextRun() throws {
+        func toTheCheck(_ b: Paths) {
+            let i = intake(b)
+            while !FileManager.default.fileExists(atPath: b.callDirectory(id).path) { _ = i.step(id) }
+            try? Data(repeating: 1, count: 4096).write(to: b.callDirectory(id).appendingPathComponent("me.caf"))
+        }
+        let counter = StopAt()
+        do {
+            let (_, b) = try arrive()
+            toTheCheck(b)
+            _ = intake(b, stop: counter.step).run()
+            XCTAssertEqual(claimed(b)?.intake, .refused)
+        }
+        XCTAssertEqual(counter.seen, ["out of Audio", "write refused"])
+        for n in 0..<counter.seen.count {
+            let (_, b) = try arrive()
+            let before = state(b)
+            toTheCheck(b)
+            _ = intake(b, stop: StopAt(n).step).run()
+            _ = intake(b).run()
+            XCTAssertEqual(claimed(b)?.intake, .refused, "stop \(n)")
+            XCTAssertEqual(state(b), before, "stop \(n)")
+        }
+    }
 }

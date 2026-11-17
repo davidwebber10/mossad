@@ -123,12 +123,17 @@ public enum MovedFiles {
         let fm = FileManager.default
         var failure: Error?
         _ = try fm.contentsOfDirectory(atPath: dir.path)
-        guard let e = fm.enumerator(at: dir, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles],
+        guard let e = fm.enumerator(at: dir, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey], options: [.skipsHiddenFiles],
                                     errorHandler: { _, error in failure = error; return false }) else { throw CocoaError(.fileReadUnknown) }
         var out: [String] = []
         let base = dir.resolvingSymlinksInPath().path + "/"
+        var top = ""
         for case let url as URL in e {
-            guard try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { continue }
+            if e.level == 1 { top = url.lastPathComponent }
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            // A link under a name that goes: its file would be left out with no word, so the move is refused.
+            if values.isSymbolicLink == true, rule(top) == .asIs { throw CocoaError(.fileReadUnsupportedScheme) }
+            guard values.isRegularFile == true else { continue }
             let full = url.resolvingSymlinksInPath().path
             guard full.hasPrefix(base) else { continue }
             let path = String(full.dropFirst(base.count))
