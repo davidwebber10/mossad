@@ -283,14 +283,22 @@ public actor CloudSync {
 
     // MARK: Phone
 
-    /// Sends a room recording to the Mac. Returns once the store has it, so the phone can keep its copy until then.
+    /// Sends a phone recording to the Mac. Returns once the store has it, so the phone can keep its copy until then.
+    /// A store that does not know a phone call's fields yet gets the recording without them; any other failure
+    /// throws, so the next try still has them.
     public func upload(_ p: PhoneRecording, audio: URL) async throws {
         try await prepare()
-        var fields: [String: StoredValue] = ["start": .date(p.start), "end": .date(p.end)]
-        if let t = p.title { fields["title"] = .string(t) }
         let name = PhoneRecording.recordName(p.id)
-        let saved = try await store.save([StoredRecord(name: name, type: Self.recordingType, fields: fields, files: ["audio": audio])])
-        guard saved.contains(name) else { throw ServerError.http(0, "The recording did not upload.") }
+        let fields = p.fields
+        func record(_ fields: [String: StoredValue]) -> StoredRecord {
+            StoredRecord(name: name, type: Self.recordingType, fields: fields, files: ["audio": audio])
+        }
+        do {
+            try await store.saveOne(record(fields))
+        } catch StoreRefusal.unknownField where PhoneRecording.newFields.contains(where: { fields[$0] != nil }) {
+            Log.info("The store does not know the phone call fields yet; the recording goes without them")
+            try await store.saveOne(record(fields.filter { !PhoneRecording.newFields.contains($0.key) }))
+        }
     }
 
     /// Fetches what changed since the last pull into the local folders, and returns how many records changed.
@@ -422,7 +430,9 @@ public actor CloudSync {
             var list = state.recordings ?? []
             var p = list.first { $0.name == record.name }
                 ?? PendingRecording(name: record.name, start: record.fields["start"]?.date, end: record.fields["end"]?.date,
-                                    title: record.fields["title"]?.string, firstFailure: time, attempts: 0, next: time, reason: "")
+                                    title: record.fields["title"]?.string, firstFailure: time, attempts: 0, next: time, reason: "",
+                                    kind: record.fields["kind"]?.string, person: record.fields["person"]?.string,
+                                    personID: record.fields["personID"]?.string)
             p.attempts += 1
             p.reason = String(String(describing: error).prefix(300))
             p.next = time.addingTimeInterval(Self.recordingBackoff[min(p.attempts, Self.recordingBackoff.count) - 1])
@@ -488,7 +498,7 @@ public actor CloudSync {
     /// throws when it could not be made, so the store keeps its copy and a later pull tries again.
     private func importRecording(_ record: ChangedRecord) async throws {
         var id = String(record.name.dropFirst("rec-".count))
-        guard !id.isEmpty, !id.hasPrefix("."), let start = record.fields["start"]?.date, let end = record.fields["end"]?.date else {
+        guard !id.isEmpty, !id.hasPrefix("."), var recording = PhoneRecording(id: id, fields: record.fields) else {
             throw MissingAsset(name: record.name)
         }
         func exists(_ id: String) -> Bool {
@@ -505,7 +515,8 @@ public actor CloudSync {
         let dir = try scratch()
         defer { try? FileManager.default.removeItem(at: dir) }
         let audio = try file(data, "\(id).m4a", in: dir)
-        try PhoneRecording.importAudio(audio, recording: PhoneRecording(id: id, start: start, end: end, title: record.fields["title"]?.string), into: paths)
+        recording.id = id
+        try PhoneRecording.importAudio(audio, recording: recording, into: paths)
         Log.info("Imported the iPhone recording \(id)")
     }
 

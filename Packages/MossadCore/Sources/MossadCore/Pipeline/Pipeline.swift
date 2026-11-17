@@ -163,6 +163,11 @@ public actor Pipeline {
             try? FileManager.default.removeItem(at: dir.appendingPathComponent(Self.quietFileName))
         }
         guard var r = try? CallRecord.load(from: dir) else { return }
+        // A meeting of a newer build waits for it: this build does not know how its tracks hold the voices.
+        if r.platform == .unknown, r.status != .written {
+            Log.info("\(id) has a platform this build does not know; it waits for an update")
+            return
+        }
         // A quiet run that a quit interrupted is still quiet: its record from before was saved beside it.
         if quietRuns[id] == nil, let original = try? CallRecord.load(from: dir, fileName: Self.quietFileName) { quietRuns[id] = original }
         jobs[id] = r.transcriptionJobs ?? [:]
@@ -657,7 +662,7 @@ public actor Pipeline {
     /// on a call the owner is on the mic and the rest are in the call audio.
     static func speakerHints(_ r: CallRecord) -> [Track: Int] {
         guard let n = r.speakersExpected, n > 0 else { return [:] }
-        return r.platform == .inPerson ? [.me: n] : [.them: max(1, n - 1)]
+        return r.platform.isOneTrack ? [.me: n] : [.them: max(1, n - 1)]
     }
 
     private func transcribeIfNeeded(_ done: [Utterance]?, track: Track, speakers: Int?, dir: URL, callID: String) async -> Result<[Utterance], Error> {
@@ -706,8 +711,8 @@ public actor Pipeline {
         p.detail = nil
         if step == .transcribing {
             p.tracks = [.me: r.meUtterances == nil ? .uploading(nil) : .done, .them: r.themUtterances == nil ? .uploading(nil) : .done]
-            // A room has no call audio to wait for.
-            if r.platform == .inPerson { p.tracks[.them] = .skipped }
+            // A room or a phone call has no call audio to wait for.
+            if r.platform.isOneTrack { p.tracks[.them] = .skipped }
         }
         progress[r.id] = p
         onProgress(r.id, p)
@@ -775,18 +780,21 @@ public actor Pipeline {
         }
         // Who was invited decides whose voice may be named on a call. The invite found when the call started was
         // matched to a guessed end, and can have changed since: it is matched again with the call's real times. A
-        // room recording keeps the rules of before.
-        let onCall = r.platform != .inPerson && !r.isNotesOnly
+        // room recording keeps the rules of before; a phone call has the person the owner named as its invite.
+        let onCall = !r.platform.isOneTrack && !r.isNotesOnly
         let sure = onCall ? await matchInvite(&r) : false
-        let invite = onCall ? CallInvite(record: r, sure: sure) : nil
+        let invite = onCall ? CallInvite(record: r, sure: sure)
+            : r.platform == .phoneCall ? r.personHint.map(CallInvite.init(hint:)) : nil
         detail(r.id, "Identifying speakers")
         // Short pieces of each voice, at most a minute per speaker, through the one copy of the voice models that the
         // live transcript's namer also uses; so it runs behind a call.
         let plan = await clearance(r.id, .voiceIdentification)
         let identifier = identifier, utterances = r.utterances, call = (id: r.id, start: r.start)
+        // On a phone call the other person may talk more than the owner: their voice must never become the owner's.
+        let enrolOwner = r.platform != .phoneCall
         let me = dir.appendingPathComponent(Track.me.fileName), them = dir.appendingPathComponent(Track.them.fileName)
         let result = try await runHeavy(r.id, .voiceIdentification, plan) {
-            try await identifier.identify(utterances: utterances, meURL: me, themURL: them, call: call, invite: invite)
+            try await identifier.identify(utterances: utterances, meURL: me, themURL: them, call: call, invite: invite, enrolOwner: enrolOwner)
         }
         r.speakerNames = result.names
         r.unknownSpeakers = result.unknown
@@ -822,6 +830,13 @@ public actor Pipeline {
     private func matchInvite(_ r: inout CallRecord) async -> Bool {
         detail(r.id, "Finding the calendar invite")
         let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
+        if r.platform == .phoneCall {
+            // Only the event of its one person; the owner's typed title stays, as `customTitle` wins over the invite's.
+            guard let event = CalendarMatcher.phoneCallEvent(start: r.start, end: r.end, in: events, hint: r.personHint,
+                                                             people: library.identity?.people.people ?? []) else { return false }
+            r.setInvite(event)
+            return true
+        }
         guard let match = CalendarMatcher.match(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) else { return false }
         r.setInvite(match.event)
         return match.sure

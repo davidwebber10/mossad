@@ -6,7 +6,7 @@ import UserNotifications
 /// coach, and a recorder for meetings in a room.
 @main
 struct MossadPhoneApp: App {
-    @State private var store = PhoneStore()
+    @State private var store = PhoneStore.shared
     /// The Search tab's text, apart from the store: a keystroke redraws only what reads it.
     @State private var query = PhoneStore.searchHook
     @Environment(\.scenePhase) private var phase
@@ -33,10 +33,19 @@ struct MossadPhoneApp: App {
             .tabViewSearchActivation(.searchTabSelection)
             .onSubmit(of: .search) { store.remember(search: query) }
             .tint(Palette.accent)
+            // Over the recorder's screen instead while it is open, so a shared file is never hidden behind it.
+            .callImportSheet(when: !store.recorderScreenOpen)
             .environment(store)
             .preferredColorScheme(PhoneStore.previewScheme)
             .task { await store.sync() }
-            .onOpenURL { url in if let link = ChatLink.parse(url) { store.open(link) } }
+            // A shared audio file comes as a file URL, the app's own links as `mossad://`.
+            .onOpenURL { url in
+                if url.isFileURL {
+                    store.incomingAudio = IncomingAudio(url: url)
+                } else if let link = ChatLink.parse(url) {
+                    store.open(link)
+                }
+            }
             .onChange(of: phase) { _, now in if now == .active { Task { await store.sync() } } }
             // While a room recording waits for its meeting and the app stays open, look now and then.
             .task(id: phase == .active && store.waitsForTheMac) {

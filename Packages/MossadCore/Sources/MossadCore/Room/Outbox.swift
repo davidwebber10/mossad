@@ -74,6 +74,13 @@ public struct Outbox: Equatable, Sendable {
         }
     }
 
+    /// A recording whose audio is already whole on disk, such as an imported call: it waits to upload at once. An
+    /// entry with the same id stays as it is, so the recording in progress is never touched.
+    public mutating func addFinished(_ recording: PhoneRecording) {
+        guard self[recording.id] == nil else { return }
+        entries.append(Entry(recording: recording, state: .waiting))
+    }
+
     /// The name the owner types during the recording, kept so a recording the app never finished still has it.
     public mutating func retitle(_ id: String, _ title: String?) {
         update(id) { $0.recording.title = title }
@@ -127,6 +134,13 @@ public struct Outbox: Equatable, Sendable {
         let done = entries.filter { $0.state != .recording && (arrived.contains($0.id) || arrived.contains($0.id + "-iphone")) }.map(\.id)
         entries.removeAll { done.contains($0.id) }
         return done
+    }
+
+    /// The ids of the meetings that can be a recording from this iPhone: an in-person meeting or a phone call made from
+    /// one. Ids are start times, and the Mac's own recording can start in the same second. A Mac from before phone
+    /// calls makes a phone call an in-person meeting, so that counts too.
+    public static func arrived(_ meetings: [CallRecord]) -> Set<String> {
+        Set(meetings.lazy.filter { $0.platform.isOneTrack && $0.bundleID == PhoneRecording.bundleID }.map(\.id))
     }
 
     /// The recordings to recover at launch: entries still `recording` that are not the one recording now, and audio

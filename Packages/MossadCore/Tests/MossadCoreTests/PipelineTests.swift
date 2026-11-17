@@ -524,6 +524,93 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(transcriber.speakers[.me], 12)
     }
 
+    func testTranscribeAgainOnAPhoneCallSendsTheCountWithTheOneTrack() async throws {
+        let id = try makeRecord()
+        var r = try load(id)
+        r.platform = .phoneCall
+        r.bundleID = PhoneRecording.bundleID
+        try r.save(to: paths.callDirectory(id))
+        let p = pipeline()
+        await p.process(id)
+        _ = await p.transcribeAgain(id, speakers: 12)
+        XCTAssertEqual(transcriber.speakers[.me], 12)
+        XCTAssertNil(transcriber.speakers[.them])
+    }
+
+    /// A phone call as the iPhone sends it: one track with the owner (200 Hz) and one other voice (400 Hz).
+    private func makePhoneCall(hint: PersonHint?) throws -> String {
+        try library.add([1, 0, 0, 0], to: "Avery Lane", isOwner: true)
+        transcriber.result = [.me: [Utterance(track: .me, speakerLabel: "A", start: 0, end: 10, text: "Hello."),
+                                    Utterance(track: .me, speakerLabel: "B", start: 11, end: 35, text: "Hello, it is me.")], .them: []]
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        try writeSegments(dir.appendingPathComponent("me.caf"), total: 40, [(0, 10, 200), (11, 35, 400)])
+        try writeSegments(dir.appendingPathComponent("them.caf"), total: 40, [])
+        var r = try load(id)
+        r.platform = .phoneCall
+        r.bundleID = PhoneRecording.bundleID
+        r.personHint = hint
+        if let hint { r.attendees = [hint.name] }
+        try r.save(to: dir)
+        return id
+    }
+
+    func testAPhoneCallWithAPersonNamesTheOneOtherVoice() async throws {
+        let id = try makePhoneCall(hint: PersonHint(name: "Sam Carter"))
+        await pipeline().process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.speakerNames, ["me:A": "Avery Lane", "me:B": "Sam Carter"])
+        XCTAssertEqual(r.fromInvite, ["me:B"])
+        XCTAssertEqual(library.provisional["Sam Carter"], id)
+    }
+
+    func testAPhoneCallWithNoPersonKeepsTheRulesOfBefore() async throws {
+        let id = try makePhoneCall(hint: nil)
+        await pipeline().process(id)
+        let r = try load(id)
+        XCTAssertNil(r.speakerNames["me:B"])
+        XCTAssertEqual(r.unknownSpeakers, ["me:B"])
+        XCTAssertNil(r.fromInvite)
+    }
+
+    /// A phone call as `importAudio` makes it, with the person and the title the owner gave.
+    private func makeImportedPhoneCall() throws -> String {
+        let id = try makeRecord()
+        var r = try load(id)
+        r.platform = .phoneCall
+        r.bundleID = PhoneRecording.bundleID
+        r.customTitle = "Renewal terms"
+        r.personHint = PersonHint(name: "Sam Carter")
+        r.attendees = ["Sam Carter"]
+        r.invitees = [Invitee(name: "Sam Carter", email: nil)]
+        try r.save(to: paths.callDirectory(id))
+        return id
+    }
+
+    func testAPhoneCallTakesTheEventOfItsOnePersonAndKeepsTheTypedTitle() async throws {
+        let id = try makeImportedPhoneCall()
+        let event = CalendarEventInfo(title: "Sam and Avery", start: start, end: start.addingTimeInterval(1800),
+                                      attendees: ["Avery Lane", "Sam Carter"], text: "", isAllDay: false,
+                                      participants: [Invitee(name: "Avery Lane", email: "avery@example.com", isSelf: true),
+                                                     Invitee(name: "Sam Carter", email: "sam@example.com")])
+        await pipeline(calendar: FakeCalendar(events: [event])).process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.calendarTitle, "Sam and Avery")
+        XCTAssertEqual(r.title, "Renewal terms")
+        XCTAssertEqual(r.invitees?.count, 2)
+        XCTAssertEqual(r.personHint, PersonHint(name: "Sam Carter"))
+    }
+
+    func testAPhoneCallDuringTheOwnersOwnBlockGetsNoEvent() async throws {
+        let id = try makeImportedPhoneCall()
+        let lunch = CalendarEventInfo(title: "Lunch", start: start, end: start.addingTimeInterval(3600), attendees: [], text: "", isAllDay: false)
+        await pipeline(calendar: FakeCalendar(events: [lunch])).process(id)
+        let r = try load(id)
+        XCTAssertNil(r.calendarTitle)
+        XCTAssertEqual(r.attendees, ["Sam Carter"])
+        XCTAssertEqual(r.title, "Renewal terms")
+    }
+
     func testRestorePreviousTranscriptBringsBackTheOldOne() async throws {
         let id = try makeRecord()
         let p = pipeline()
@@ -1676,5 +1763,50 @@ final class PipelineTests: XCTestCase {
         await p.retry(id)
         r = try load(id)
         XCTAssertEqual(r.status, .written)
+    }
+
+    func testAPhoneCallNeverEnrolsTheOwnersVoice() async throws {
+        transcriber.result = [.me: [Utterance(track: .me, speakerLabel: "A", start: 0, end: 10, text: "Hello."),
+                                    Utterance(track: .me, speakerLabel: "B", start: 11, end: 35, text: "Hello, it is me.")], .them: []]
+        let id = try makeRecord()
+        let dir = paths.callDirectory(id)
+        try writeSegments(dir.appendingPathComponent("me.caf"), total: 40, [(0, 10, 200), (11, 35, 400)])
+        try writeSegments(dir.appendingPathComponent("them.caf"), total: 40, [])
+        var r = try load(id)
+        r.platform = .phoneCall
+        r.bundleID = PhoneRecording.bundleID
+        try r.save(to: dir)
+        await pipeline().process(id)
+        XCTAssertNil(library.owner, "the other person may talk more: no owner from a phone call")
+        XCTAssertEqual(try load(id).status, .written)
+    }
+
+    func testAPhoneCallSkipsTheCallTrackInTheProgress() async throws {
+        let id = try makeRecord()
+        var r = try load(id)
+        r.platform = .phoneCall
+        try r.save(to: paths.callDirectory(id))
+        let seen = Locked<[ProcessingProgress?]>([])
+        let notifications = notifications
+        let p = Pipeline(paths: paths, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(),
+                         calendar: FakeCalendar(), summarizer: summarizer, notify: { notifications.records.append($0) },
+                         ownerName: "Avery Lane", onProgress: { _, progress in seen.withLock { $0.append(progress) } })
+        await p.process(id)
+        XCTAssertTrue(seen.withLock { $0 }.contains { $0?.tracks[.them] == .skipped })
+    }
+
+    func testARecordWithAPlatformThisBuildDoesNotKnowWaitsUnprocessed() async throws {
+        let id = try makeRecord()
+        let file = paths.callDirectory(id).appendingPathComponent(CallRecord.fileName)
+        let text = try String(contentsOf: file, encoding: .utf8)
+        try text.replacingOccurrences(of: #""platform":"meet""#, with: #""platform":"fax""#).write(to: file, atomically: true, encoding: .utf8)
+        await pipeline().process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.platform, .unknown)
+        XCTAssertEqual(r.status, .recorded)
+        XCTAssertEqual(r.attempts, 0)
+        XCTAssertNil(r.failureReason)
+        XCTAssertEqual(transcriber.calls.count, 0)
+        XCTAssertTrue(try String(contentsOf: file, encoding: .utf8).contains(#""platform":"fax""#))
     }
 }

@@ -187,7 +187,8 @@ public struct Decision: Codable, Equatable, Sendable, Hashable {
 
 public struct CallRecord: Codable, Equatable, Sendable {
     public var id: String
-    public var platform: Platform
+    /// A platform this build does not know reads as `unknown` and is written back as it was read.
+    @KeptPlatform public var platform: Platform
     public var bundleID: String
     public var start: Date
     public var end: Date
@@ -301,6 +302,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// The meeting's "Notes by Gemini" document: the source of a notes-only meeting, or a second source of a recorded
     /// one. Nil when there is none.
     public var gemini: GeminiNotesRef?
+    /// The other person of a phone call, as the owner said on the iPhone. Nil for every other meeting.
+    public var personHint: PersonHint?
     /// The file names of screens the owner deleted. The text step drops them from `frames.json` if they are still
     /// there (a failed save, a run that was reading at that moment), so a deleted screen never comes back.
     public var deletedScreens: [String]?
@@ -318,7 +321,7 @@ public struct CallRecord: Codable, Equatable, Sendable {
         if customTitle != nil { .custom } else if calendarTitle != nil { .calendar } else if generatedTitle != nil { .generated } else { .platform }
     }
 
-    public var title: String { customTitle ?? calendarTitle ?? generatedTitle ?? "\(platform.displayName) call" }
+    public var title: String { customTitle ?? calendarTitle ?? generatedTitle ?? platform.untitled }
 
     /// Takes the invite's title, people, and planned times. An all-day event plans no time of day.
     public mutating func setInvite(_ event: CalendarEventInfo) {
@@ -434,7 +437,50 @@ extension CallRecord {
         screenGaps = try c.decodeIfPresent([ScreenGap].self, forKey: .screenGaps)
         deletedScreens = try c.decodeIfPresent([String].self, forKey: .deletedScreens)
         source = try c.decodeIfPresent(String.self, forKey: .source)
+        _platform = try c.decode(KeptPlatform.self, forKey: .platform)
         gemini = try c.decodeIfPresent(GeminiNotesRef.self, forKey: .gemini)
+        personHint = try c.decodeIfPresent(PersonHint.self, forKey: .personHint)
+    }
+}
+
+/// A record's platform with the text it was read from, so a platform of a newer build is not lost when this build
+/// saves the record. Any change of the platform here drops the text.
+@propertyWrapper
+public struct KeptPlatform: Codable, Equatable, Sendable {
+    private var value: Platform
+    private var raw: String?
+
+    public init(wrappedValue: Platform) { value = wrappedValue }
+
+    public var wrappedValue: Platform {
+        get { value }
+        set {
+            value = newValue
+            raw = nil
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let text = try decoder.singleValueContainer().decode(String.self)
+        value = Platform(rawValue: text) ?? .unknown
+        raw = value == .unknown ? text : nil
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(raw ?? value.rawValue)
+    }
+}
+
+/// The one other person of a phone call, as the owner said on the iPhone.
+public struct PersonHint: Codable, Equatable, Sendable {
+    public var name: String
+    /// The saved person the owner picked; nil for a name the owner typed.
+    public var personID: String?
+
+    public init(name: String, personID: String? = nil) {
+        self.name = name
+        self.personID = personID
     }
 }
 

@@ -119,6 +119,12 @@ targets:
         UILaunchScreen: {}
         CFBundleURLTypes: [{CFBundleURLName: com.dwebber.mossad.phone, CFBundleURLSchemes: [mossad]}]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Audio
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.audio]
+        LSSupportsOpeningDocumentsInPlace: false
     entitlements:
       path: PhoneApp/MossadPhone.entitlements
       properties:

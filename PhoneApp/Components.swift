@@ -8,6 +8,8 @@ extension Platform {
         case .meet: "person.3.fill"
         case .teams: "person.2.wave.2.fill"
         case .inPerson: "mic.fill"
+        case .phoneCall: "phone.fill"
+        case .unknown: "questionmark"
         }
     }
 

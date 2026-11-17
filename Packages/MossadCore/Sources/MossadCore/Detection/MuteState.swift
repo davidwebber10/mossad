@@ -49,7 +49,7 @@ public enum MuteState {
         case .zoom:
             muted = has("unmute audio", "unmute my audio")
             unmuted = has("mute audio", "mute my audio")
-        case .inPerson:
+        case .inPerson, .phoneCall, .unknown:
             return (false, false)
         case .teams:
             // "Unmute mic" / "Mute mic" in the new Teams app, "Unmute (⌘+Shift+M)" / "Mute (…)" in the old one.

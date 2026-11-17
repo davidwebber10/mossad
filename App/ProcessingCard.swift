@@ -11,7 +11,6 @@ struct ProcessingCard: View {
 
     private var progress: ProcessingProgress? { controller.progress[record.id] }
     private var current: ProcessingStep { progress?.step ?? step }
-    private var room: Bool { record.platform == .inPerson }
     /// The next step waits for the call that records now. Nothing shows the button otherwise.
     private var waits: Bool { controller.waitingCalls.contains(record.id) }
 
@@ -117,7 +116,7 @@ struct ProcessingCard: View {
         let service = controller.transcriptionProvider.displayName
         if p.step == .transcribing, p.detail == nil {
             return [Track.me, .them].compactMap { t in
-                guard let state = p.tracks[t], let text = p.trackLine(t, service: service, room: room) else { return nil }
+                guard let state = p.tracks[t], let text = p.trackLine(t, service: service, platform: record.platform) else { return nil }
                 switch state {
                 case .uploading(let f): return SubLine(symbol: "arrow.up", text: text, trailing: f.map { .fraction($0) } ?? .waiting, done: false)
                 case .queued: return SubLine(symbol: "clock", text: text, trailing: .hint("usually under a minute"), done: false)
