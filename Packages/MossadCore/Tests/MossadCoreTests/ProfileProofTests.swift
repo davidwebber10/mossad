@@ -203,6 +203,17 @@ final class ProfileProofTests: XCTestCase {
         XCTAssertTrue(MacDefaults.store === UserDefaults.standard)
     }
 
+    func testAMadeUpRunNeverReadsAnotherProfilesFolder() {
+        let made = AppIdentity(bundleID: main, arguments: ["Mossad"], registry: registry(), madeUpRegistry: true)
+        XCTAssertEqual(made.profile.id, "1a2b3c4d")
+        XCTAssertEqual(made.otherProfileRoots(home: home), [])
+        let real = id()
+        XCTAssertEqual(real.otherProfileRoots(home: home).map(\.path), ["/Users/someone/Mossad"])
+        XCTAssertEqual(id(registry: nil).otherProfileRoots(home: home), [])
+        XCTAssertEqual(id(["--profile", "1a2b3c4d"], ["MOSSAD_ROOT": "/tmp/demo"]).otherProfileRoots(home: home), [])
+        XCTAssertEqual(id(["--profile", "default"]).otherProfileRoots(home: home).map(\.path), ["/Users/someone/Mossad Work"])
+    }
+
     func testAMadeUpRegistryRunsInert() {
         XCTAssertEqual(RunMode.decide(preview: false, rehearsal: false, secondCopy: false, madeUpRegistry: false), .full)
         XCTAssertEqual(RunMode.decide(preview: false, rehearsal: false, secondCopy: false, madeUpRegistry: true), .inert)

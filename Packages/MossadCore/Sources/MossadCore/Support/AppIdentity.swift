@@ -149,6 +149,13 @@ extension AppIdentity {
         return defaults
     }
 
+    /// The folders of the registry's other live profiles, for the Mac-wide reads (the do-not-record lists). None for a
+    /// copy that takes no profiles, and none on a made-up registry, whose `default` would be the owner's real folder.
+    public func otherProfileRoots(home: URL) -> [URL] {
+        guard takesProfiles, !madeUpRegistry else { return [] }
+        return registry.registry.live.filter { $0.id != profile.id }.map { $0.rootURL(home: home) }
+    }
+
     /// A profile's own settings, untouched: never emptied, no registered defaults. Nil for `default` and a preview.
     public func profileSettings() -> UserDefaults? {
         guard !isPreview, let suite = defaultsSuite else { return nil }

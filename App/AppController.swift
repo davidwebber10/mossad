@@ -242,12 +242,9 @@ final class AppController: ObservableObject {
     private let noRecordGate = NoRecordGate()
     /// The other profiles' do-not-record lists, read once at launch for the gate only: never shown, never logged.
     var otherNoRecord: [NoRecordBook] = []
-    /// Every live profile's NoRecord folder except this process's; none for a copy that takes no profiles.
+    /// Every other live profile's NoRecord folder; none for a copy that takes no profiles or runs on a made-up registry.
     var otherNoRecordFolders: [URL] {
-        let identity = AppIdentity.current
-        guard identity.takesProfiles else { return [] }
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        return identity.registry.registry.live.filter { $0.id != identity.profile.id }.map { Paths(root: $0.rootURL(home: home)).noRecord }
+        AppIdentity.current.otherProfileRoots(home: FileManager.default.homeDirectoryForCurrentUser).map { Paths(root: $0).noRecord }
     }
     /// Calls still to come, without the ones being recorded or already recorded.
     /// Views ask for this each time they draw. The list changes with the events, the meetings, and the clock, so it
