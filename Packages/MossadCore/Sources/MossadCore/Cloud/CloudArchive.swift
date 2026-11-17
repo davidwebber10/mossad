@@ -132,6 +132,35 @@ public final class CloudArchive: @unchecked Sendable {
         ((try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? NSNumber)?.int64Value
     }
 
+    /// The archived recording of a record as a file in `folder`, checked: the size the record names, and its SHA-256
+    /// when the record has one. Nil when the place is not set up here, does not answer, or gave another file. The
+    /// caller removes the file. `download` is the place's own download; a test gives its own.
+    public func fetch(_ r: CallRecord, into folder: URL,
+                      download: ((any ArchiveBackend, String) async throws -> URL)? = nil) async -> URL? {
+        guard let object = r.archived, let place = place(of: object) else { return nil }
+        let session = session
+        guard let file = try? await (download ?? { place, key in try await place.download(key, session: session) })(place, object.key) else { return nil }
+        let ok = await Task.detached(priority: .utility) { () -> Bool in
+            guard let size = r.cloudSize, Self.size(file) == size else { return false }
+            if let hash = r.cloudHash { return (try? FileHash.sha256(of: file)) == hash }
+            return true
+        }.value
+        guard ok else {
+            try? FileManager.default.removeItem(at: file)
+            return nil
+        }
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let to = folder.appendingPathComponent(Recording.fileName)
+            try? FileManager.default.removeItem(at: to)
+            try FileManager.default.moveItem(at: file, to: to)
+            return to
+        } catch {
+            try? FileManager.default.removeItem(at: file)
+            return nil
+        }
+    }
+
     /// The place that holds an object, when it is set up here. A file on a server is held only by the server with
     /// the id that the record names: after a change of server, the files on the old one are not in reach.
     func place(of object: ArchivedObject) -> (any ArchiveBackend)? {

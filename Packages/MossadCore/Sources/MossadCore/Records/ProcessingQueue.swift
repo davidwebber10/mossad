@@ -35,7 +35,8 @@ public struct ProcessingQueue: Sendable {
 
     public func pending(now: Date) -> [CallRecord] {
         allRecords().filter { r in
-            r.status != .written && r.status != .recording && r.status != .failed && (r.nextAttempt ?? .distantPast) <= now
+            // A meeting that leaves for another profile is never processed here.
+            r.status != .written && r.status != .recording && r.status != .failed && r.moveTo == nil && (r.nextAttempt ?? .distantPast) <= now
         }
     }
 

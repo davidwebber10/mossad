@@ -163,6 +163,11 @@ public actor Pipeline {
             try? FileManager.default.removeItem(at: dir.appendingPathComponent(Self.quietFileName))
         }
         guard var r = try? CallRecord.load(from: dir) else { return }
+        // A meeting that leaves for another profile sends nothing to this profile's providers.
+        if r.moveTo != nil {
+            Log.info("\(id) is moving to another profile; it is not processed here")
+            return
+        }
         // A meeting of a newer build waits for it: this build does not know how its tracks hold the voices.
         if r.platform == .unknown, r.status != .written {
             Log.info("\(id) has a platform this build does not know; it waits for an update")
@@ -235,7 +240,7 @@ public actor Pipeline {
     /// meetings keep their calendar title and attendees and the owner is not pinged once per meeting.
     public func regenerateSummary(_ id: String, quiet: Bool = false) async {
         let dir = paths.callDirectory(id)
-        guard !inFlight.contains(id), var r = try? CallRecord.load(from: dir), r.status == .written, !r.utterances.isEmpty else { return }
+        guard !inFlight.contains(id), var r = try? CallRecord.load(from: dir), r.status == .written, !r.utterances.isEmpty, r.moveTo == nil else { return }
         let original = r
         if quiet {
             // On disk too, so a quit during the run neither matches the calendar again nor notifies on the next launch.
@@ -294,7 +299,7 @@ public actor Pipeline {
     @discardableResult
     public func transcribeAgain(_ id: String, speakers: Int?) async -> Bool {
         let dir = paths.callDirectory(id)
-        guard var r = try? CallRecord.load(from: dir), r.status == .written || r.status == .failed,
+        guard var r = try? CallRecord.load(from: dir), r.status == .written || r.status == .failed, r.moveTo == nil,
               Self.canTranscribeAgain(dir), !inFlight.contains(id) else { return false }
         do {
             let previous = dir.appendingPathComponent(Self.previousFileName)
@@ -335,7 +340,7 @@ public actor Pipeline {
     @discardableResult
     public func restorePreviousTranscript(_ id: String) async -> Bool {
         let dir = paths.callDirectory(id)
-        guard let current = try? CallRecord.load(from: dir), current.status == .written || current.status == .failed,
+        guard let current = try? CallRecord.load(from: dir), current.status == .written || current.status == .failed, current.moveTo == nil,
               var r = try? CallRecord.load(from: dir, fileName: Self.previousFileName), !inFlight.contains(id) else { return false }
         // The note is written again from the old record; any path change follows the current one.
         r.markdownPath = current.markdownPath
@@ -566,7 +571,7 @@ public actor Pipeline {
     @discardableResult
     public func attachNotes(callID: String, _ notes: GeminiNotesRef) -> Bool {
         guard var r = edit(callID, { r in
-            guard r.gemini == nil else { return false }
+            guard r.gemini == nil, r.moveTo == nil else { return false }
             r.gemini = notes
             return true
         }) else { return false }
@@ -593,6 +598,28 @@ public actor Pipeline {
     /// processing is refused, so the pipeline never writes into a folder that is gone.
     public func delete(callID: String) -> Bool { remove(callID: callID) != nil }
 
+    /// A run of this call is in flight.
+    public func isBusy(_ id: String) -> Bool { inFlight.contains(id) }
+
+    /// Marks a meeting as leaving for a profile, or takes the mark off (nil). False for a call in flight, a call that
+    /// records, a record that cannot be read, or one already marked for another profile.
+    @discardableResult
+    public func setMoveTarget(callID: String, _ profile: String?) -> Bool {
+        guard !inFlight.contains(callID) else { return false }
+        guard var r = edit(callID, { r in
+            guard r.status != .recording, r.moveTo == nil || profile == nil || r.moveTo == profile, r.moveTo != profile else { return false }
+            r.moveTo = profile
+            return true
+        }) else {
+            // Already so: nothing to change, and that is not a refusal.
+            return (try? CallRecord.load(from: paths.callDirectory(callID)))
+                .map { $0.status != .recording && $0.moveTo == profile } ?? false
+        }
+        do { try store(r, dir: paths.callDirectory(callID)) } catch { return false }
+        r.moveTo = profile
+        return true
+    }
+
     /// Deletes like `delete` and returns the record as it was on disk, so the caller can remove what the meeting
     /// has outside this Mac (its archived recording) from the record's own values, not from a list in memory.
     public func remove(callID: String) -> CallRecord? { remove(callID: callID, keepNotes: false) }
@@ -601,7 +628,7 @@ public actor Pipeline {
     /// or billed again.
     func remove(callID: String, keepNotes: Bool) -> CallRecord? {
         let dir = paths.callDirectory(callID)
-        guard let r = try? CallRecord.load(from: dir), r.status == .written || r.status == .failed else { return nil }
+        guard let r = try? CallRecord.load(from: dir), r.status == .written || r.status == .failed, r.moveTo == nil else { return nil }
         if !keepNotes { RemovedNotes.add(r, paths: paths) }
         if let note = r.markdownPath { try? FileManager.default.removeItem(atPath: note) }
         // The copy of the record from before the ids goes with the meeting.
@@ -1031,7 +1058,7 @@ public actor Pipeline {
     /// `emails` uses the same speaker keys as `names`; each email is stored on that person's voice profile.
     public func applyNames(callID: String, names: [String: String], emails: [String: String] = [:]) async {
         let dir = paths.callDirectory(callID)
-        guard let current = try? CallRecord.load(from: dir) else { return }
+        guard let current = try? CallRecord.load(from: dir), current.moveTo == nil else { return }
         // The labels the summary used before the names, such as "Speaker A".
         let before = MarkdownWriter.displayNames(current)
         var chosen: [String: String] = [:]
@@ -1130,7 +1157,7 @@ public actor Pipeline {
     public func merge(callIDs: [String]) async -> String? {
         let records = callIDs.compactMap { try? CallRecord.load(from: paths.callDirectory($0)) }.sorted { $0.start < $1.start }
         guard records.count >= 2, records.count == Set(callIDs).count,
-              records.allSatisfy({ $0.status == .written || $0.status == .failed }) else { return nil }
+              records.allSatisfy({ ($0.status == .written || $0.status == .failed) && $0.moveTo == nil }) else { return nil }
         if let notes = records.first(where: \.isNotesOnly) {
             Log.info("Not joining \(notes.id): it was made from Gemini's notes and has no audio")
             return nil
