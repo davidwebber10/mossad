@@ -19,6 +19,18 @@ public enum WorkerLaunch {
         return identity.profileRefusal
     }
 
+    /// A worker runs only while it holds its profile's folder lock: the window app of that profile, or another
+    /// worker, has it, or it could not be tried. The window app goes on when a lock fails; a worker never does.
+    public static func afterLock(_ attempt: InstanceLock.Attempt) -> Exit? {
+        if case .held = attempt { return nil }
+        return .lockNotHeld
+    }
+
+    /// A profile whose window app would open setup at launch gets no worker.
+    public static func setupDone(finished: Bool, hasMeetings: Bool) -> Bool {
+        !Onboarding.opensAtLaunch(finished: finished, hasMeetings: hasMeetings, preview: false, forced: false, rehearsal: false)
+    }
+
     /// A worker's whole arguments: nothing else, never a secret.
     public static func arguments(for profile: Profile) -> [String] { ["--profile", profile.id, argument] }
 

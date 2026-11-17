@@ -50,4 +50,24 @@ final class WorkerLaunchTests: XCTestCase {
     func testTheStatusReadHasAName() {
         XCTAssertTrue(["fullAccess", "writeOnly", "denied", "restricted", "notDetermined"].contains(EventKitCalendarSource.permissionName))
     }
+
+    func testAWorkerNeverRunsWithoutItsFolderLock() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("lock-\(UUID().uuidString)")
+        let other = FileManager.default.temporaryDirectory.appendingPathComponent("lock-\(UUID().uuidString)")
+        for d in [dir, other] {
+            try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+            addTeardownBlock { try? FileManager.default.removeItem(at: d) }
+        }
+        guard case .held(let first) = InstanceLock.acquire(root: dir) else { return XCTFail("no lock") }
+        XCTAssertEqual(WorkerLaunch.afterLock(InstanceLock.acquire(root: dir)), .lockNotHeld)
+        XCTAssertEqual(WorkerLaunch.afterLock(.failed(EACCES)), .lockNotHeld)
+        withExtendedLifetime(first) {}
+        XCTAssertNil(WorkerLaunch.afterLock(InstanceLock.acquire(root: other)))
+    }
+
+    func testAProfileThatWouldOpenSetupGetsNoWorker() {
+        XCTAssertFalse(WorkerLaunch.setupDone(finished: false, hasMeetings: false))
+        XCTAssertTrue(WorkerLaunch.setupDone(finished: true, hasMeetings: false))
+        XCTAssertTrue(WorkerLaunch.setupDone(finished: false, hasMeetings: true))
+    }
 }
