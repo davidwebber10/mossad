@@ -44,7 +44,7 @@ final class WorkerManager {
         started = true
         self.recording = recording
         Log.info("Workers: starting \(profiles.count) for the other profiles")
-        write(takeOver: true) { [weak self] in self?.profiles.forEach { self?.launch($0, failures: 0) } }
+        write(.start) { [weak self] in self?.profiles.forEach { self?.launch($0, failures: 0) } }
         let t = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.readLines() }
         }
@@ -88,7 +88,8 @@ final class WorkerManager {
         stopping = false
         stopped = []
         self.recording = recording
-        write { [weak self] in
+        // This app is the app in front again: a file that a new instance of a taken-back switch left is replaced.
+        write(.resume) { [weak self] in
             guard let self else { return }
             for profile in profiles where children[profile.id] == nil && restarts[profile.id] == nil { launch(profile, failures: 0) }
         }
@@ -102,7 +103,7 @@ final class WorkerManager {
         timer?.invalidate()
         restarts.values.forEach { $0.cancel() }
         let state = foreground()
-        fileQueue.sync { [file] in Self.save(state, to: file) }
+        fileQueue.sync { [file] in Self.save(state, to: file, takeOver: ForegroundState.Write.quit.takesOver) }
         for (id, _) in children { terminate(id) }
         Log.info("Workers: told to stop at quit")
     }
@@ -149,7 +150,8 @@ final class WorkerManager {
             restarts[id] = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(wait))
                 guard !Task.isCancelled, let self, let profile = profiles.first(where: { $0.id == id }) else { return }
-                launch(profile, failures: failures + 1)
+                // The file first: one that a gone app left, or that was deleted, would stop this try at once.
+                write(.restart) { [weak self] in self?.launch(profile, failures: failures + 1) }
             }
         }
     }
@@ -174,10 +176,10 @@ final class WorkerManager {
     }
 
     /// Writes the state as it is now, in order; `then` runs on the main actor once it is on disk.
-    private func write(takeOver: Bool = false, then: (@MainActor () -> Void)? = nil) {
+    private func write(_ kind: ForegroundState.Write = .change, then: (@MainActor () -> Void)? = nil) {
         let state = foreground()
         fileQueue.async { [file] in
-            Self.save(state, to: file, takeOver: takeOver)
+            Self.save(state, to: file, takeOver: kind.takesOver)
             if let then { Task { @MainActor in then() } }
         }
     }

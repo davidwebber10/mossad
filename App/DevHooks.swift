@@ -60,6 +60,9 @@ enum DevHooks {
         // `MOSSAD_PROFILE_SWITCH=<id>` on a made-up registry: one real switch, a few seconds after launch.
         if let id = env["MOSSAD_PROFILE_SWITCH"], let file = env["MOSSAD_PROFILES"], AppIdentity.current.madeUpRegistry, !preview {
             let failing = env["MOSSAD_PROFILE_SWITCH_FAIL"] == "1"
+            // `late`: the new instance starts and finishes its launch, then this copy refuses to quit, as when a call
+            // starts in the last moment: the switch is taken back.
+            AppController.proofLateRefusal = env["MOSSAD_PROFILE_SWITCH_FAIL"] == "late"
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { c.proofSwitch(to: id, file: URL(fileURLWithPath: file), failing: failing) }
         }
         #endif
