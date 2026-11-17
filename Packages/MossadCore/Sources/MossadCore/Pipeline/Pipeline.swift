@@ -1168,11 +1168,9 @@ public actor Pipeline {
     /// of this one is the same meeting, split by a restart or a crash: join them.
     func continueSplitMeeting(_ id: String) async {
         // A meeting made from Gemini's notes has no audio to join: it is never a part of a recording.
-        guard let r = try? CallRecord.load(from: paths.callDirectory(id)), r.status == .written, !r.isNotesOnly, let meetingID = r.meetingID else { return }
+        guard let r = try? CallRecord.load(from: paths.callDirectory(id)), r.status == .written, !r.isNotesOnly, r.meetingID != nil else { return }
         let sibling = queue.allRecords().first { other in
-            other.id != r.id && other.status == .written && !other.isNotesOnly && other.meetingID == meetingID
-                && (abs(r.start.timeIntervalSince(other.end)) <= MeetingMerge.continuationGap
-                    || abs(other.start.timeIntervalSince(r.end)) <= MeetingMerge.continuationGap)
+            other.id != r.id && other.status == .written && !other.isNotesOnly && MeetingMerge.continues(.init(r), .init(other))
         }
         guard let sibling else { return }
         Log.info("Continuing \(sibling.id) and \(r.id): the same meeting, split by a restart")

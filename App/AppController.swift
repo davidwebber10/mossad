@@ -169,6 +169,10 @@ final class AppController: ObservableObject {
     @Published var liveOff: LiveOffReason?
     /// "This call is for": the choice of the call that records now (`MoveAfterCall`); nil is `.here`.
     @Published var callChoice: (callID: String, choice: MoveAfterCall.Choice)?
+    /// The call that records now, for the choice it keeps when it ends.
+    var liveCall: MoveAfterCall.Call?
+    /// The choice of the call that ended, for a new recording of the same call (`MoveAfterCall.carried`).
+    var keptChoice: MoveAfterCall.Kept?
     var liveOffReason: String? { liveOff?.text }
     /// The live chat of each call, so an answer that runs survives a change of tab or of view (the Chat tab and
     /// the quick panel show the same one).
@@ -805,7 +809,7 @@ final class AppController: ObservableObject {
                 // Recorder commands go straight from the detection queue to the capture queue, so they keep
                 // the detector's order relative to the process updates below. The UI follows on the main actor.
                 CaptureQueue.queue.async { self.capture(event, processIDs: ids, meetingID: meetingID, recorder: recorder) }
-                Task { @MainActor in self.show(event) }
+                Task { @MainActor in self.show(event, meetingID: meetingID) }
             }
             detection.onUnconfirmed = { @Sendable [weak self] call in
                 Task { @MainActor in
@@ -936,6 +940,8 @@ final class AppController: ObservableObject {
             // A move of this profile goes on, and a meeting moved here is taken in: with two profiles or more only.
             checkMoves()
             startMoveLook()
+            // A call marked for another profile that a quit or a crash ended: a new recording of it keeps the choice.
+            keptChoice = MoveAfterCall.kept(from: records, now: Date())
             // A recovered call whose muted parts are still in its track is held back; the pipeline tries again.
             if !held.isEmpty { notifier.postCaptureProblem(.mutedNotSilenced) }
             if isOn || (offUntilDate.map { $0 <= Date() } ?? false) {
@@ -1252,7 +1258,7 @@ final class AppController: ObservableObject {
         stopLive()
         updater.callEnded()
         summarizeLiveChats()
-        forgetLiveCall()
+        forgetLiveCall(end: Date())
     }
 
     /// Quit during a call: closes the tracks and saves the call as recorded, so the next launch processes it.
@@ -1514,7 +1520,13 @@ final class AppController: ObservableObject {
 
     /// After the call: the namer, the events around the call, and the chat runs are not needed any more. A chat
     /// answer still on its way keeps its own session and saves its chat.
-    private func forgetLiveCall() {
+    private func forgetLiveCall(end: Date) {
+        // The choice stays for a new recording of the same call. A second end of the same call (the detector's, after
+        // Stop) has no call and keeps what the first one kept.
+        if let call = liveCall {
+            keptChoice = MoveAfterCall.keep(call, choice: callChoice.flatMap { $0.callID == call.callID ? $0.choice : nil }, end: end)
+        }
+        liveCall = nil
         callChoice = nil
         liveNamer = nil
         liveCalendar = nil
@@ -2097,7 +2109,7 @@ final class AppController: ObservableObject {
     /// Call starts whose recording failed, by start time, until the UI has seen them.
     private var failedStarts: Set<Date> = []
 
-    private func show(_ event: DetectorEvent) {
+    private func show(_ event: DetectorEvent, meetingID: String?) {
         if case .recording(.inPerson, _) = status { return }
         switch event {
         case .started(let platform, _, let at):
@@ -2107,12 +2119,14 @@ final class AppController: ObservableObject {
             status = .recording(platform, since: at)
             isPaused = false
             isMuted = false
+            // Before the live transcript and any other send: the same call going on keeps the owner's choice.
+            carryChoice(to: MoveAfterCall.Call(callID: CallRecorder.callID(for: at), platform: platform, meetingID: meetingID, start: at))
             startLive(reset: true)
-        case .ended:
+        case .ended(let at, _):
             failedStarts.removeAll()
             updater.callEnded()
             summarizeLiveChats()
-            forgetLiveCall()
+            forgetLiveCall(end: at)
             status = .idle
             isPaused = false
             isMuted = false

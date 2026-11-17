@@ -94,6 +94,56 @@ public enum MoveAfterCall {
         return Menu(rows: rows, note: note)
     }
 
+    // MARK: A call that goes on as a new recording
+
+    /// The recording that a choice belongs to.
+    public struct Call: Equatable, Sendable {
+        public let callID: String
+        public let platform: Platform
+        public let meetingID: String?
+        public let start: Date
+
+        public init(callID: String, platform: Platform, meetingID: String?, start: Date) {
+            self.callID = callID
+            self.platform = platform
+            self.meetingID = meetingID
+            self.start = start
+        }
+    }
+
+    /// The owner's choice of a call that ended, kept for the new recording of the same call (the microphone stopped for
+    /// a moment, a quit, a crash). Only a choice is kept: `.here` keeps nothing.
+    public struct Kept: Equatable, Sendable {
+        public let call: Call
+        public let choice: Choice
+        public let end: Date
+    }
+
+    public static func keep(_ call: Call?, choice: Choice?, end: Date) -> Kept? {
+        guard let call, let choice, choice != .here else { return nil }
+        return Kept(call: call, choice: choice, end: end)
+    }
+
+    /// The choice that a new recording takes over: the kept one when the new recording is the same meeting by the rule
+    /// that joins two recordings (`MeetingMerge.continues`: the same link, within the gap) on the same platform.
+    public static func carried(_ kept: Kept?, to call: Call) -> Choice? {
+        guard let kept, kept.call.platform == call.platform,
+              MeetingMerge.continues(.init(meetingID: kept.call.meetingID, start: kept.call.start, end: kept.end),
+                                     .init(meetingID: call.meetingID, start: call.start, end: call.start)) else { return nil }
+        return kept.choice
+    }
+
+    /// After a launch: the choice of the call marked during its recording that ended last, while its gap lasts. A
+    /// take-back is not on the record, so only another profile is read back.
+    public static func kept(from records: [CallRecord], now: Date) -> Kept? {
+        let marked = records.filter { r in
+            r.moveTo != nil && (r.status == .recorded || (r.status == .failed && r.failedStep == .recorded))
+                && now.timeIntervalSince(r.end) < MeetingMerge.continuationGap
+        }
+        guard let r = marked.max(by: { $0.end < $1.end }), let to = r.moveTo else { return nil }
+        return Kept(call: Call(callID: r.id, platform: r.platform, meetingID: r.meetingID, start: r.start), choice: .other(to), end: r.end)
+    }
+
     public enum AtEnd: Equatable, Sendable { case process, move(to: String), hold, nothing }
 
     /// At the end of a call. Nil (skipped, discarded, or too short to keep): nothing, and the mark went with the call.

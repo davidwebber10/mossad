@@ -134,6 +134,27 @@ extension AppController {
         liveOff = MoveAfterCall.liveOff(next)
     }
 
+    /// At the start of a recording, before any send: a new recording of the call the owner marked (the same link on the
+    /// same platform, within `MeetingMerge.continuationGap` of its end) takes over the choice, and the recorder saves it
+    /// on the new record as for the first part. Any other call forgets it.
+    func carryChoice(to call: MoveAfterCall.Call) {
+        let carried = MoveAfterCall.carried(keptChoice, to: call)
+        keptChoice = nil
+        liveCall = call
+        guard let carried else { return }
+        callChoice = (call.callID, carried)
+        liveOff = MoveAfterCall.liveOff(carried)
+        if let mark = carried.moveTo {
+            // Queued after the recorder's `begin`, which the detector queued first.
+            let recorder = recorder
+            CaptureQueue.queue.async {
+                recorder.setMoveTarget(mark, forCall: call.callID)
+                Task { @MainActor in self.refresh() }
+            }
+        }
+        Log.info("Live: the call \(call.callID) goes on from a call the owner marked; it keeps that choice")
+    }
+
     /// The end of a call marked for another profile: it moves as "recorded"; a move that fails or is refused keeps
     /// the mark (`MoveSource.keepsMark`), and the row offers "Process here" and "Move to".
     func moveAfterCall(_ callID: String, to profileID: String) {
