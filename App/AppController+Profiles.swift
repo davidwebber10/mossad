@@ -185,6 +185,7 @@ extension AppController {
         }
         // The first file of the Mac: this profile's server is named in it from the start.
         if let address = serverConnection?.address { next.registry.setServer(ProfileRules.serverHash(address), for: activeProfile.id) }
+        next.registry.setSync(syncWith.rawValue, for: activeProfile.id)
         do { try next.save(to: Self.registryFile) } catch {
             Log.error("Profiles: the list could not be saved: \(error)")
             profileProblem = Self.unreadableProfiles
@@ -194,6 +195,7 @@ extension AppController {
         }
         profiles = readProfiles()
         refreshOtherNoRecord()
+        updateSharedProfiles()
         Log.info("Profiles: added one")
         // The first file of the Mac: this copy started with no Mac-wide lock. It takes it now, so the new instance
         // waits for it to quit, as after every later switch.
@@ -218,6 +220,7 @@ extension AppController {
         }
         profiles = readProfiles()
         refreshOtherNoRecord()
+        updateSharedProfiles()
     }
 
     /// Another profile of this Mac that already uses this server, or nil.
@@ -238,6 +241,22 @@ extension AppController {
         next.registry.setServer(hash, for: activeProfile.id)
         do { try next.save(to: Self.registryFile) } catch { Log.error("Profiles: the server could not be noted: \(error)") }
         profiles = readProfiles()
+        updateSharedProfiles()
+    }
+
+    /// This profile's sync in the registry, for the iPhone's list. As `noteServer`: only with a registry file that
+    /// can be saved, and only when the word changed. Then the item follows.
+    func noteSync() {
+        guard changesProfiles else { return }
+        let read = readProfiles()
+        guard read.state != .none, read.canSave else { return }
+        if read.registry.profile(activeProfile.id)?.sync != syncWith.rawValue {
+            var next = read
+            next.registry.setSync(syncWith.rawValue, for: activeProfile.id)
+            do { try next.save(to: Self.registryFile) } catch { Log.error("Profiles: the sync could not be noted: \(error)") }
+            profiles = readProfiles()
+        }
+        updateSharedProfiles()
     }
 
     // MARK: Delete
@@ -261,6 +280,7 @@ extension AppController {
             }
             profiles = readProfiles()
             refreshOtherNoRecord()
+            updateSharedProfiles()
             Log.info("Profiles: deleting one")
             finishRemovals(holding: [id: lock])
         }
@@ -331,6 +351,7 @@ extension AppController {
         do { try read.save(to: file) } catch { Log.error("Profiles: the end of a delete could not be saved: \(error)") }
         profiles = readProfiles()
         refreshOtherNoRecord()
+        updateSharedProfiles()
         Log.info("Profiles: a profile was deleted")
     }
 }

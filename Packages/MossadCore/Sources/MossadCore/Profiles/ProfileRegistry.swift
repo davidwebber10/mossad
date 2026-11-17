@@ -150,6 +150,11 @@ extension ProfileRegistry {
         profiles[i].server = hash
     }
 
+    public mutating func setSync(_ sync: String?, for id: String) {
+        guard let i = profiles.firstIndex(where: { $0.id == id }) else { return }
+        profiles[i].sync = sync
+    }
+
     /// The first step of a delete: the profile cannot start and does not show. `default` is never removed.
     public mutating func markRemoving(_ id: String) {
         guard id != Profile.defaultID, let i = profiles.firstIndex(where: { $0.id == id }) else { return }

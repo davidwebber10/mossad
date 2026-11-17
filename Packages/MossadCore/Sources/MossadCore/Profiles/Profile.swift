@@ -23,6 +23,9 @@ public struct Profile: Codable, Equatable, Sendable, Identifiable {
     public var root: String
     /// The SHA-256 of the profile's server address, never the address.
     public var server: String?
+    /// How the profile syncs: "icloud", "server", or "off". Written by that profile's own foreground app, for the
+    /// iPhone's list. Nil until that profile ran once with this build. A build of before reads past it.
+    public var sync: String?
     /// Set while a delete runs: the profile cannot start and does not show.
     public var removing: Bool?
     /// The steps of that delete that ended (`ProfileRemoval.Step`), so a later run does nothing twice.
