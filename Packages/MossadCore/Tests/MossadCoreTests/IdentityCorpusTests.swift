@@ -165,6 +165,15 @@ final class IdentityCorpusTests: XCTestCase {
         }
     }
 
+    /// A speaker in the notes with a part in brackets is not the directory's person of the plain name.
+    func testAGeminiSpeakerWithBracketsIsNotTheDirectoryPerson() {
+        var r = CallRecord(id: "20261102-090000-notes", platform: .meet, bundleID: "b", start: Date(), end: Date(), status: .written)
+        r.source = CallRecord.geminiNotesSource
+        r.speakerNames = ["them:A": "Sam Carter (Acme)"]
+        r.invitees = [Invitee(name: nil, email: "sam.carter@example.com")]
+        XCTAssertEqual(GeminiPeople.matches(r, directory: [GoogleProfile(emails: ["sam.carter@example.com"], name: "Sam Carter", source: .directory)]), [])
+    }
+
     /// A saved name with a part in brackets on the invite rules and the phone call's person: only the same whole
     /// name is that person; the plain name is a guess (a fit), never the person.
     func testASavedNameWithBracketsOnTheInviteAndThePhoneCall() {

@@ -295,15 +295,18 @@ final class GeminiPeopleTests: XCTestCase {
         try s.library.add([0, 1, 0, 0], to: "Sam A. Carter")
         link(s, [sam()])
         XCTAssertEqual(s.library.profiles.map(\.name), ["Sam A. Carter"])
+        XCTAssertEqual(s.library.profiles.first?.emails, [], "the saved person gets no address")
     }
 
     // Finding 4: the address on another company domain is the saved person's.
     func testAnAddressOnAnotherCompanyDomainMakesNobody() throws {
         let s = stores()
-        try s.library.add([0, 1, 0, 0], to: "Samuel Carter")
-        _ = try s.library.addEmail("sam.carter@example.org", for: "Samuel Carter")
+        // A name that does not fit: only the address rule can hold the match back.
+        try s.library.add([0, 1, 0, 0], to: "Riley Chen")
+        _ = try s.library.addEmail("sam.carter@example.org", for: "Riley Chen")
         link(s, [sam()], domains: CompanyDomains(["example.com", "example.org"]))
-        XCTAssertEqual(s.library.profiles.map(\.name), ["Samuel Carter"])
+        XCTAssertEqual(s.library.profiles.map(\.name), ["Riley Chen"])
+        XCTAssertEqual(s.library.profiles.first?.emails, ["sam.carter@example.org"])
     }
 
     // Finding 7: a meeting left alone for a reason the owner can remove is read again.
@@ -340,5 +343,143 @@ final class GeminiPeopleTests: XCTestCase {
         link(s, [sam()])
         XCTAssertEqual(s.library.profiles.map(\.emails), [[]])
         XCTAssertEqual(s.people.people.filter(\.isLive).count, 1)
+    }
+
+    // MARK: The second review
+
+    private func saveDirectory(_ s: Stores, _ profiles: [GoogleProfile]) throws {
+        try GoogleDirectoryCache(profiles: profiles, read: t0).save(s.paths)
+    }
+
+    // A: a person whom the step did not make stays gone after the owner deletes them.
+    func testADeletedPersonThatTheStepDidNotMakeStaysGone() throws {
+        let s = stores()
+        try saveDirectory(s, directory)
+        try s.library.add([0, 1, 0, 0], to: "Sam Carter")
+        _ = try s.library.addEmail("sam.carter@example.com", for: "Sam Carter")
+        // What the delete on the People page does.
+        try GeminiPeopleBook.refuse(personNamed: "Sam Carter", library: s.library, paths: s.paths)
+        try s.library.delete("Sam Carter")
+        let out = link(s, [sam()])
+        XCTAssertEqual(out.made, 0)
+        XCTAssertTrue(s.library.profiles.isEmpty)
+        XCTAssertNil(person(s, "Sam Carter"))
+    }
+
+    // A: the directory's other addresses of that name are refused too.
+    func testADeleteRefusesTheDirectorysAddressesOfThatName() throws {
+        let s = stores()
+        try saveDirectory(s, directory)
+        _ = try s.library.addEmail("sam@home.example.com", for: "Sam Carter")
+        try GeminiPeopleBook.refuse(personNamed: "Sam Carter", library: s.library, paths: s.paths)
+        try s.library.delete("Sam Carter")
+        link(s, [sam()])
+        XCTAssertTrue(s.library.profiles.isEmpty)
+    }
+
+    // A: the step records each address of the directory person, so a second address does not make them again.
+    func testEveryAddressOfTheDirectoryPersonIsGivenOnce() throws {
+        let s = stores()
+        let two = [GoogleProfile(emails: ["sam.carter@example.com", "scarter@example.com"], name: "Sam Carter", source: .directory)]
+        link(s, [sam()], directory: two)
+        try s.library.delete("Sam Carter")
+        let second = notes(["them:A": "Sam Carter"], [invited("scarter@example.com")], id: "20261109-090000-notes")
+        XCTAssertEqual(link(s, [second], directory: two).made, 0)
+        XCTAssertTrue(s.library.profiles.isEmpty)
+    }
+
+    // F: a plain "Remove" of an address that the owner typed holds too.
+    func testARemovedAddressThatTheStepDidNotGiveDoesNotComeBack() throws {
+        let s = stores()
+        try s.library.add([0, 1, 0, 0], to: "Sam Carter")
+        _ = try s.library.addEmail("sam.carter@example.com", for: "Sam Carter")
+        // What "Remove" on the person page does.
+        try GeminiPeopleBook.refuse(["sam.carter@example.com"], paths: s.paths)
+        try s.library.removeEmail("sam.carter@example.com", for: "Sam Carter")
+        link(s, [sam()])
+        XCTAssertEqual(s.library.profiles.first?.emails, [])
+    }
+
+    // B: a call that starts while the meetings are read ends the run before any write.
+    func testACallInTheMatchPhaseEndsTheRun() {
+        let s = stores()
+        var calls = 0
+        let records = [sam(id: "20261102-090000-notes"), notes(["them:A": "Jordan Lee"], [invited("jordan.lee@example.com")], id: "20261103-090000-notes")]
+        let out = GeminiPeople.link(records, library: s.library, people: s.people, directory: directory, paths: s.paths, domains: .none,
+                                    stop: { calls += 1; return calls > 1 })
+        XCTAssertTrue(out.stopped)
+        XCTAssertEqual(out.made, 0)
+        XCTAssertTrue(s.library.profiles.isEmpty)
+    }
+
+    // E: an address that a quit left pending, and that nobody holds, is given again.
+    func testAPendingAddressThatNobodyHoldsIsGivenAgain() throws {
+        let s = stores()
+        let url = GeminiPeopleBook.url(s.paths)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"{"version":1,"given":["sam.carter@example.com"],"pending":["sam.carter@example.com"]}"#.utf8).write(to: url)
+        XCTAssertEqual(link(s, [sam()]).made, 1)
+        XCTAssertEqual(GeminiPeopleBook.load(s.paths)?.pending, nil)
+        XCTAssertEqual(GeminiPeopleBook.load(s.paths)?.given, ["sam.carter@example.com"])
+    }
+
+    func testAPendingAddressThatSomeoneHoldsStaysGiven() throws {
+        let s = stores()
+        _ = try s.library.addEmail("sam.carter@example.com", for: "Samuel Carter")
+        try GeminiPeopleBook(given: ["sam.carter@example.com"], pending: ["sam.carter@example.com"]).save(s.paths)
+        link(s, [sam()])
+        XCTAssertEqual(GeminiPeopleBook.load(s.paths)?.given, ["sam.carter@example.com"])
+    }
+
+    // An older book with no pending field still reads.
+    func testAnOlderBookStillReads() throws {
+        let s = stores()
+        let url = GeminiPeopleBook.url(s.paths)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"{"version":1,"given":["x@example.com"]}"#.utf8).write(to: url)
+        XCTAssertEqual(GeminiPeopleBook.load(s.paths)?.given, ["x@example.com"])
+    }
+
+    // G: a speaker name with a part in brackets is another person than the directory's.
+    func testASpeakerNameWithBracketsIsNotTheDirectoryPerson() {
+        let r = notes(["them:A": "Sam Carter (Acme)"], [invited("sam.carter@example.com")])
+        XCTAssertEqual(GeminiPeople.matches(r, directory: directory), [])
+    }
+
+    // H: a people store that cannot be written stops the step, so voices.json and people.json never disagree.
+    func testAStoreThatCannotBeWrittenStopsTheStep() throws {
+        let paths = Paths(root: tempDirectory())
+        try PeopleStore(directory: paths.people).ensure(voiceName: "Sam Carter", isOwner: false, origin: .voiceNaming)
+        let file = paths.people.appendingPathComponent(PeopleStore.fileName)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        json["version"] = 999
+        try JSONSerialization.data(withJSONObject: json).write(to: file)
+        let store = PeopleStore(directory: paths.people)
+        XCTAssertTrue(store.isReadOnly)
+        let library = VoiceLibrary(directory: paths.voices)
+        library.identity = VoiceIdentity(people: store, samples: VoiceSampleStore(directory: paths.voices))
+        try library.add([0, 1, 0, 0], to: "Sam Carter")
+        let out = GeminiPeople.link([sam()], library: library, people: store, directory: directory, paths: paths, domains: .none)
+        XCTAssertEqual(out.joined + out.made, 0)
+        XCTAssertEqual(library.profiles.first?.emails, [])
+    }
+
+    // K: an address of the owner is never a match, also when the invite does not mark it as the owner's.
+    func testAnAddressOfTheOwnerIsNoMatch() {
+        let owner = [GoogleProfile(emails: ["avery.webb@example.com"], name: "Avery Webb", source: .directory)]
+        let r = notes(["them:A": "Avery Webb"], [invited("avery.webb@example.com")])
+        XCTAssertEqual(GeminiPeople.matches(r, directory: owner, isOwner: { $0 == "avery.webb@example.com" }), [])
+        XCTAssertEqual(GeminiPeople.matches(r, directory: owner).map(\.email), ["avery.webb@example.com"])
+    }
+
+    // K: in a run, the owner's addresses come from the owner's person, the owner's voice, and the owner's names.
+    func testTheOwnersAddressesForARun() throws {
+        let s = stores()
+        try s.library.add([0, 1, 0, 0], to: "Avery Webb", isOwner: true)
+        _ = try s.library.addEmail("avery@home.example.net", for: "Avery Webb")
+        let isOwner = GeminiPeople.ownerAddresses(people: s.people.people, profiles: s.library.profiles)
+        XCTAssertTrue(isOwner("avery@home.example.net"), "the owner's own address")
+        XCTAssertTrue(isOwner("awebb@example.com"), "an address of the owner's name")
+        XCTAssertFalse(isOwner("sam.carter@example.com"))
     }
 }

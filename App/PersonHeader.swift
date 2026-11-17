@@ -150,6 +150,8 @@ struct PersonHeader: View {
     }
 
     private func remove(_ email: String) {
+        // The Gemini people step never gives a removed address back.
+        do { try GeminiPeopleBook.refuse([email], paths: controller.paths) } catch { Log.error("Gemini people: the removed address was not recorded: \(error)") }
         do { try controller.library.removeEmail(email, for: profile.name) } catch { Log.error("Removing an address failed: \(error)") }
         changed()
     }

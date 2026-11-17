@@ -9,6 +9,48 @@ public enum GeminiPeople {
         /// The directory's spelling.
         public var name: String
         public var email: String
+        /// Every address of the directory person: each is given once with the match.
+        public var addresses: [String] = []
+
+        public init(name: String, email: String, addresses: [String] = []) {
+            self.name = name
+            self.email = email
+            self.addresses = addresses
+        }
+
+        public static func == (a: Match, b: Match) -> Bool { a.name == b.name && a.email == b.email }
+    }
+
+    /// The directory's people by the key of their name, made once for a run. A name with a part in brackets is
+    /// looked up by its whole key, so "Sam Carter (Acme)" is never the plain Sam Carter.
+    public struct Index: Sendable {
+        let byName: [String: [GoogleProfile]]
+        let byWhole: [String: [GoogleProfile]]
+
+        public init(_ directory: [GoogleProfile]) {
+            var byName: [String: [GoogleProfile]] = [:], byWhole: [String: [GoogleProfile]] = [:]
+            for p in directory {
+                guard let name = p.name else { continue }
+                byName[PersonNames.nameKey(name), default: []].append(p)
+                byWhole[PersonNames.key(name), default: []].append(p)
+            }
+            self.byName = byName
+            self.byWhole = byWhole
+        }
+
+        static func hasBrackets(_ name: String) -> Bool { name.contains { "(<[".contains($0) } }
+        static func key(_ name: String) -> String { hasBrackets(name) ? PersonNames.key(name) : PersonNames.nameKey(name) }
+        func named(_ name: String) -> [GoogleProfile] { (Self.hasBrackets(name) ? byWhole : byName)[Self.key(name)] ?? [] }
+        var isEmpty: Bool { byName.isEmpty }
+    }
+
+    /// Whether an address is the owner's: an address of the owner's person or voice, or one made of an owner's name.
+    public static func ownerAddresses(people: [Person], profiles: [VoiceProfile]) -> (String) -> Bool {
+        let owner = people.first { $0.isOwner && $0.isLive }
+        let mine = profiles.filter(\.isOwner)
+        let emails = Set((owner.map(InviteRoster.addresses(of:)) ?? []).union(mine.flatMap { $0.emails.map(EmailIdentity.normalized) }))
+        let names = Set((owner?.forms.map(\.text) ?? []) + mine.map(\.name))
+        return { email in emails.contains(email) || names.contains { CalendarInfo.isOwnersAddress(email, ownerName: $0) } }
     }
 
     /// What one run did, in counts only.
@@ -21,16 +63,21 @@ public enum GeminiPeople {
         public var stopped = false
     }
 
-    public static func matches(_ r: CallRecord, directory: [GoogleProfile]) -> [Match] {
+    public static func matches(_ r: CallRecord, directory: [GoogleProfile], isOwner: (String) -> Bool = { _ in false }) -> [Match] {
+        matches(r, index: Index(directory), isOwner: isOwner)
+    }
+
+    public static func matches(_ r: CallRecord, index: Index, isOwner: (String) -> Bool = { _ in false }) -> [Match] {
         guard r.isNotesOnly else { return [] }
         let entries = (r.invitees ?? []).filter { $0.isSelf != true && $0.kind == nil }
-        let invited = Set(entries.compactMap(\.email).map(EmailIdentity.normalized))
+        // The owner's address, also on an entry that the invite does not mark as the owner's.
+        let invited = Set(entries.compactMap(\.email).map(EmailIdentity.normalized)).filter { !isOwner($0) }
         var found: [String: Match] = [:]
         for (speaker, name) in r.speakerNames.sorted(by: { $0.key < $1.key }) where !speaker.hasPrefix("me:") {
-            let wanted = PersonNames.nameKey(name)
+            let wanted = Index.key(name)
             // A full name: one word could be anyone.
             guard wanted.contains(" ") else { continue }
-            let named = directory.filter { $0.name.map(PersonNames.nameKey) == wanted }
+            let named = index.named(name)
             let people = named.filter { $0.source == .directory }
             guard people.count == 1, let person = people.first, let spelled = person.name else { continue }
             // A contact of that name at none of these addresses is another person who can be the speaker.
@@ -41,9 +88,9 @@ public enum GeminiPeople {
             // Another invited entry that can be someone of this name: a guest, or a forwarded invite.
             let others = entries.filter { $0.email.map(EmailIdentity.normalized) != email }
             guard !others.contains(where: { o in
-                [o.name, o.email.flatMap(InviteRoster.name(fromAddress:))].compactMap { $0 }.contains { PersonNames.nameKey($0) == wanted }
+                [o.name, o.email.flatMap(InviteRoster.name(fromAddress:))].compactMap { $0 }.contains { Index.key($0) == wanted }
             }) else { continue }
-            found[email] = Match(name: spelled, email: email)
+            found[email] = Match(name: spelled, email: email, addresses: person.emails)
         }
         return found.values.sorted { $0.email < $1.email }
     }
@@ -92,16 +139,23 @@ public enum GeminiPeople {
 
     /// Saves each sure match of the meetings as a person with the address, the way the People page adds a person by
     /// address: one with no voice samples is made when nobody saved can be the name. Every meeting is read at each
-    /// run, so one held back now is read again later. `stop` (a call that started) ends the run between matches.
-    /// Nothing is done without the people store's file in a state to write, or with a record of given addresses that
-    /// cannot be read.
+    /// run, so one held back now is read again later. `stop` (a call that started) ends the run after any meeting or
+    /// match. Nothing is done with a people store that cannot be written, or a record of given addresses that cannot
+    /// be read.
     @discardableResult
     public static func link(_ records: [CallRecord], library: VoiceLibrary, people store: PeopleStore, directory: [GoogleProfile], paths: Paths,
                             domains: CompanyDomains = .current, stop: () -> Bool = { false }) -> Outcome {
         var out = Outcome()
-        guard !directory.isEmpty, var book = GeminiPeopleBook.load(paths) else { return out }
+        guard !directory.isEmpty, !store.isReadOnly, store.loadError == nil, var book = GeminiPeopleBook.load(paths) else { return out }
+        book.settle(held: { held($0, people: store.people, profiles: library.profiles) }, paths: paths)
+        let index = Index(directory)
+        let isOwner = ownerAddresses(people: store.people, profiles: library.profiles)
         var seen: Set<String> = []
-        let all = records.flatMap { matches($0, directory: directory) }.filter { seen.insert($0.email).inserted }
+        var all: [Match] = []
+        for r in records {
+            if stop() { out.stopped = true; return out }
+            all += matches(r, index: index, isOwner: isOwner).filter { seen.insert($0.email).inserted }
+        }
         for m in all {
             if stop() { out.stopped = true; break }
             let decision = verdict(m, people: store.people, profiles: library.profiles, given: book.given, domains: domains)
@@ -113,8 +167,11 @@ public enum GeminiPeople {
             case .join(let saved): name = saved
             case .make: name = m.name
             }
-            // The record comes first: an address that a failed save gave is never given again by this step.
-            book.given.insert(m.email)
+            // The record comes first, with the new addresses pending until the write is done: a quit between the
+            // two saves leaves them pending, and the next run gives them back if nobody holds one.
+            let new = Set([m.email] + m.addresses.map(EmailIdentity.normalized)).subtracting(book.given)
+            book.given.formUnion(new)
+            book.pending = new
             do { try book.save(paths) } catch {
                 Log.error("Gemini people: the record of given addresses was not saved: \(error)")
                 out.failed += 1
@@ -133,24 +190,63 @@ public enum GeminiPeople {
                 Log.error("Gemini people: an address was not saved: \(error)")
                 out.failed += 1
             }
-            // Nothing was given: the address may be given at a later run.
-            if !added {
-                book.given.remove(m.email)
-                try? book.save(paths)
-            }
+            // Nothing was given: the addresses may be given at a later run.
+            if !added { book.given.subtract(new) }
+            book.pending = nil
+            do { try book.save(paths) } catch { Log.error("Gemini people: the record of given addresses was not saved: \(error)") }
         }
         return out
     }
+
+    /// Whether a live person or a voice has the address, in any state.
+    static func held(_ address: String, people: [Person], profiles: [VoiceProfile]) -> Bool {
+        people.contains { $0.isLive && $0.emails.contains { $0.address == address } }
+            || profiles.contains { $0.emails.contains { EmailIdentity.normalized($0) == address } }
+    }
 }
 
-/// The addresses that the Gemini people step gave, in the profile's data folder (`Google/gemini-people.json`). An
-/// address is given once: a person the owner deleted, or an address the owner took off, does not come back.
+/// The addresses that the Gemini people step gave or that the owner took away, in the profile's data folder
+/// (`Google/gemini-people.json`). The step never gives one of them: a person the owner deleted, or an address the
+/// owner removed, does not come back. `pending` holds the addresses of a write in progress.
 public struct GeminiPeopleBook: Codable, Equatable, Sendable {
     public static let currentVersion = 1
     public var version = Self.currentVersion
     public var given: Set<String> = []
+    public var pending: Set<String>?
 
-    public init(given: Set<String> = []) { self.given = given }
+    public init(given: Set<String> = [], pending: Set<String>? = nil) { self.given = given; self.pending = pending }
+
+    public struct Unreadable: Error {}
+
+    /// The owner removed these addresses or deleted their person: the step never gives them.
+    public static func refuse(_ addresses: [String], paths: Paths) throws {
+        let list = addresses.map(EmailIdentity.normalized).filter { $0.contains("@") }
+        guard !list.isEmpty else { return }
+        guard var book = load(paths) else { throw Unreadable() }
+        let before = book.given
+        book.given.formUnion(list)
+        if book.given != before { try book.save(paths) }
+    }
+
+    /// Before the owner deletes a person: each address of the voice and of the person, in any state, and each
+    /// address of the directory's people with that name, so the step never makes them again.
+    public static func refuse(personNamed name: String, library: VoiceLibrary, paths: Paths) throws {
+        let profile = library.profiles.first { $0.name == name }
+        var all = profile?.emails ?? []
+        if let store = library.identity?.people, let id = store.id(forVoiceName: name, isOwner: profile?.isOwner ?? false), let p = store.person(id) {
+            all += p.emails.map(\.address)
+        }
+        if let cache = GoogleDirectoryCache.load(paths) { all += GeminiPeople.Index(cache.profiles).named(name).flatMap(\.emails) }
+        try refuse(all, paths: paths)
+    }
+
+    /// A write that a quit cut off: its addresses leave the record when nobody holds one of them.
+    mutating func settle(held: (String) -> Bool, paths: Paths) {
+        guard let pending else { return }
+        if !pending.contains(where: held) { given.subtract(pending) }
+        self.pending = nil
+        do { try save(paths) } catch { Log.error("Gemini people: the record of given addresses was not saved: \(error)") }
+    }
 
     public static func url(_ paths: Paths) -> URL { paths.root.appendingPathComponent("Google").appendingPathComponent("gemini-people.json") }
 
