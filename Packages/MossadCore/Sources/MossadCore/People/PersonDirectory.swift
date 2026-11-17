@@ -221,7 +221,9 @@ public struct PersonDirectory: Sendable, Equatable {
         let typed = PersonNames.parse(name)
         guard typed.isName, typed.words.count >= 2 else { return nil }
         let words = typed.words.sorted()
+        // A saved name with a part in brackets is another person on that side too: the parser reads the part away.
         let hits = people.filter { p in
+            guard !p.name.contains(where: { "(<[".contains($0) }) else { return false }
             let saved = PersonNames.parse(p.name)
             return saved.isName && saved.words.sorted() == words
         }

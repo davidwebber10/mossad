@@ -42,11 +42,12 @@ public actor PersonaRunner {
         self.now = now
     }
 
-    /// The written calls whose stamp is not the one the step read, oldest first. `since`: only calls from then on,
+    /// The written calls whose stamp is not the one the step read, oldest first. A notes-only meeting never: Mossad
+    /// did not hear its people. `since`: only calls from then on,
     /// and each call that was read before and changed since (a name, a correction, "Transcribe again"), however old.
     public static func due(_ records: [CallRecord], ledger: PersonaLedger, since: Date?, saved: CoachPeople, owner: String, newestFirst: Bool = false) -> [CallRecord] {
         records.filter { r in
-            r.status == .written && r.moveTo == nil && !r.utterances.isEmpty && !ledger.isRead(r, saved: saved, owner: owner) && (since.map { r.start >= $0 } ?? true || ledger.wasRead(r.id))
+            r.status == .written && r.moveTo == nil && !r.isNotesOnly && !r.utterances.isEmpty && !ledger.isRead(r, saved: saved, owner: owner) && (since.map { r.start >= $0 } ?? true || ledger.wasRead(r.id))
         }
         .sorted { newestFirst ? $0.start > $1.start : $0.start < $1.start }
     }

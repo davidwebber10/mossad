@@ -127,6 +127,67 @@ final class IdentityCorpusTests: XCTestCase {
             }
             XCTAssertNil(library.existingName(name: "Sam Carter-Reed", email: "nobody@example.com"))
         }
+        // The part in brackets on the saved side names another person too.
+        try library(["Sam Carter (Acme)"]) { library in
+            XCTAssertNil(library.existingName(name: "Sam Carter", email: nil))
+            XCTAssertEqual(library.existingName(name: "Sam Carter (Acme)", email: nil), "Sam Carter (Acme)")
+        }
+    }
+
+    /// The speaker of a Gemini meeting and the saved voices: who gets the directory's address (`GeminiPeople`). A
+    /// new person only when nobody saved can be the name; a saved one only on its whole name; any guess is nobody.
+    func testTheGeminiSpeakerRows() throws {
+        let rows: [(saved: [String], speaker: String, gets: String?, why: String)] = [
+            ([], "Sam Carter", "Sam Carter", "nobody of that name: a new person"),
+            (["Sam Carter"], "Sam Carter", "Sam Carter", "the whole name"),
+            (["Carter, Sam"], "Sam Carter", "Carter, Sam", "the whole name in the other order"),
+            (["Sam Carter (Acme)"], "Sam Carter", nil, "a part in brackets is another person"),
+            (["Sam A. Carter"], "Sam Carter", nil, "a middle name on one side is a guess"),
+            (["Mike Stone"], "Michael Stone", nil, "a short first name is a guess"),
+            (["Sam Carter", "SAM CARTER"], "Sam Carter", nil, "two who fit are nobody"),
+            (["Sam Carver"], "Sam Carter", nil, "a name a letter off is a guess"),
+        ]
+        for row in rows {
+            let paths = Paths(root: tempDirectory())
+            defer { try? FileManager.default.removeItem(at: paths.root) }
+            let library = VoiceLibrary(directory: paths.voices), people = PeopleStore(directory: paths.people)
+            library.identity = VoiceIdentity(people: people, samples: VoiceSampleStore(directory: paths.voices))
+            for (i, name) in row.saved.enumerated() { try library.add([Float(i + 1), 1, 0, 0], to: name) }
+            var r = CallRecord(id: "20261102-090000-notes", platform: .meet, bundleID: "b", start: Date(), end: Date(), status: .written)
+            r.source = CallRecord.geminiNotesSource
+            r.speakerNames = ["them:A": row.speaker]
+            r.invitees = [Invitee(name: nil, email: "speaker@example.com")]
+            GeminiPeople.link([r], library: library, people: people,
+                              directory: [GoogleProfile(emails: ["speaker@example.com"], name: row.speaker, source: .directory)],
+                              paths: paths, domains: .none)
+            XCTAssertEqual(library.name(forEmail: "speaker@example.com"), row.gets, "\(row.saved) and \(row.speaker): \(row.why)")
+            XCTAssertEqual(library.profiles.count, row.saved.count + (row.saved.isEmpty && row.gets != nil ? 1 : 0), "\(row.speaker): \(row.why)")
+        }
+    }
+
+    /// A speaker in the notes with a part in brackets is not the directory's person of the plain name.
+    func testAGeminiSpeakerWithBracketsIsNotTheDirectoryPerson() {
+        var r = CallRecord(id: "20261102-090000-notes", platform: .meet, bundleID: "b", start: Date(), end: Date(), status: .written)
+        r.source = CallRecord.geminiNotesSource
+        r.speakerNames = ["them:A": "Sam Carter (Acme)"]
+        r.invitees = [Invitee(name: nil, email: "sam.carter@example.com")]
+        XCTAssertEqual(GeminiPeople.matches(r, directory: [GoogleProfile(emails: ["sam.carter@example.com"], name: "Sam Carter", source: .directory)]), [])
+    }
+
+    /// A saved name with a part in brackets on the invite rules and the phone call's person: only the same whole
+    /// name is that person; the plain name is a guess (a fit), never the person.
+    func testASavedNameWithBracketsOnTheInviteAndThePhoneCall() {
+        let acme = VoiceProfile(name: "Sam Carter (Acme)", isOwner: false, embeddings: [[1, 0, 0, 0]])
+        let plain = InviteRoster(invite: CallInvite(guests: [CallInvite.Guest(name: "Sam Carter")]), profiles: [acme], people: [])
+        XCTAssertFalse(plain.invited.contains("Sam Carter (Acme)"), "the plain name is not the saved person")
+        XCTAssertEqual(plain.voiceless.first?.fits, ["Sam Carter (Acme)"], "only a fit, which never teaches the voice")
+        let whole = InviteRoster(invite: CallInvite(guests: [CallInvite.Guest(name: "Sam Carter (Acme)")]), profiles: [acme], people: [])
+        XCTAssertTrue(whole.invited.contains("Sam Carter (Acme)"))
+
+        let person = Person(displayName: "Sam Carter (Acme)", isOwner: false, origin: .voiceNaming, at: Date())
+        let hint = PersonHint(name: "Sam Carter (Acme)", personID: person.id.rawValue)
+        XCTAssertFalse(CalendarMatcher.isPerson(Invitee(name: "Sam Carter", email: nil), of: hint, people: [person]))
+        XCTAssertTrue(CalendarMatcher.isPerson(Invitee(name: "Sam Carter (Acme)", email: nil), of: hint, people: [person]))
     }
 
     /// Review scenario A: Samantha Carter is saved, and a new person, Samuel Carter, is named "Sam Carter".

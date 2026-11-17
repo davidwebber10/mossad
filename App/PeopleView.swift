@@ -94,6 +94,10 @@ struct PeopleView: View {
             Button("Delete", role: .destructive) {
                 if let p = deleting {
                     controller.forgetPersona(named: p.name)
+                    // First, so the Gemini people step never makes the person again from an old meeting.
+                    do { try GeminiPeopleBook.refuse(personNamed: p.name, library: controller.library, paths: controller.paths) } catch {
+                        Log.error("Gemini people: the deleted person's addresses were not recorded: \(error)")
+                    }
                     edit { try controller.library.delete(p.name) }
                 }
                 deleting = nil
@@ -240,6 +244,10 @@ struct PeopleView: View {
         if !email.isEmpty, let other = controller.library.holder(of: email, except: p.name) {
             emailHolder = other
             return
+        }
+        // An address the owner replaced or cleared here is taken off: the Gemini people step never gives it back.
+        if let old = p.email, old.caseInsensitiveCompare(email) != .orderedSame {
+            do { try GeminiPeopleBook.refuse([old], paths: controller.paths) } catch { Log.error("Gemini people: the removed address was not recorded: \(error)") }
         }
         edit {
             if !name.isEmpty, name != p.name { try controller.library.rename(p.name, to: name) }
