@@ -71,8 +71,9 @@ public enum MovePlan {
             if case .claimed(let m) = s, m.intake == .taken { return .cleanUp(removeIncoming: true) }
             return .cleanUp(removeIncoming: false)
         case .cancelling:
-            // A target out of reach may still hold this move's `move.json`: nothing ends before it is seen again.
-            if target == .unknown { return .wait }
+            // A target out of reach may still hold this move's `move.json`: nothing ends before it is seen again. A
+            // marker that does not read may be B's claim of that moment: nothing ends on it either.
+            if target == .unknown || marker == .unknown { return .wait }
             switch s {
             case .incoming: return .takeBack
             case .claimed(let m):

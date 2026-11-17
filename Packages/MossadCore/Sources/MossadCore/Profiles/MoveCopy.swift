@@ -151,6 +151,7 @@ public enum MoveCopy {
     public static func write(_ plan: Plan, from: String, token: String, incoming: URL, now: Date, copy: FileCopy = file,
                              progress: @escaping (Double) -> Void = { _ in }, stop: (String) throws -> Void = { _ in }) throws -> MoveMarker {
         let fm = FileManager.default
+        guard MovePaths.isID(plan.record.id), MovePaths.isToken(token) else { throw MovePaths.Invalid() }
         let folder = part(plan.record.id, token: token, incoming: incoming)
         do {
             try stop("clear the part")
@@ -216,6 +217,7 @@ public enum MoveCopy {
     /// The part becomes `Incoming/<id>` in one exclusive rename; another volume refuses.
     public static func publish(_ callID: String, token: String, incoming: URL, rename: MoveFiles.Rename = MoveFiles.exclusive,
                                stop: (String) throws -> Void = { _ in }) throws {
+        guard MovePaths.isID(callID), MovePaths.isToken(token) else { throw MovePaths.Invalid() }
         let from = part(callID, token: token, incoming: incoming)
         guard hasPart(callID, token: token, incoming: incoming) else { throw CocoaError(.fileNoSuchFile) }
         try stop("publish")

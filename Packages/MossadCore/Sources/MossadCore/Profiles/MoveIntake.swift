@@ -82,13 +82,23 @@ public struct MoveIntake: Sendable {
     /// file; then, and only then, the voices are learned and the chats written, the mark goes, and `taken` is
     /// written. So every refusal comes before this profile learned or wrote anything outside `Incoming`, and leaves
     /// it as it was.
+    /// The names in `Audio`; nil when the listing fails. A folder that is not there is empty only when the caller says so.
+    static func audioNames(_ audio: URL, missingIsEmpty: Bool = false) -> [String]? {
+        if let names = try? FileManager.default.contentsOfDirectory(atPath: audio.path) { return names }
+        var isDir: ObjCBool = false
+        if missingIsEmpty, !FileManager.default.fileExists(atPath: audio.path, isDirectory: &isDir) { return [] }
+        return nil
+    }
+
     func stepOrStop(_ callID: String) throws -> MovePlan.TargetStep {
         guard MovePaths.isID(callID) else { return .nothing }
         // The people store follows the voices: without it a learned voice would make no person.
         if voiceFingerprints(), library.identity == nil { return .wait }
         let look = MoveMarker.look(folder(callID))
         let hasCall = FileManager.default.fileExists(atPath: callFolder(callID).path)
-        let audio = Set((try? FileManager.default.contentsOfDirectory(atPath: paths.audio.path)) ?? [])
+        // A listing that fails is not an empty `Audio`: the step waits.
+        guard let names = Self.audioNames(paths.audio, missingIsEmpty: true) else { return .wait }
+        let audio = Set(names)
         var held: Bool?
         if case .claimed(let m) = look, m.intake == .takingIn, let f = m.finalID, MovePaths.isID(f), !hasCall, audio.contains(f) { held = checked(m, f) }
         let step = MovePlan.target(look, folder: callID, me: me, callFolder: hasCall, audio: audio, ownRemoval: ownRemoval(callID), held: held)

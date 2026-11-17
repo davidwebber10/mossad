@@ -83,11 +83,15 @@ public struct MoveMarker: Codable, Equatable, Sendable {
     /// Reads `claimed.json`, else `move.json`, else `cancelled.json`. The target's claim can come between the first two
     /// tests, so `claimed.json` is tested again when `move.json` is not there. No folder, or no file, is `.missing`.
     /// `afterFirstTest` is for a test: it runs between the first two tests.
-    public static func look(_ folder: URL, afterFirstTest: (() -> Void)? = nil) -> Look {
+    public static func look(_ folder: URL, afterFirstTest: (() -> Void)? = nil, beforeRead: (() -> Void)? = nil) -> Look {
         if let seen = read(folder.appendingPathComponent(claimedName), claimed: true) { return seen }
         afterFirstTest?()
-        if let seen = read(folder.appendingPathComponent(fileName), claimed: false) { return seen }
+        // A `move.json` that does not read may be one that B renamed in that moment: `claimed.json` is tested again
+        // before it is called unknown.
+        let incoming = read(folder.appendingPathComponent(fileName), claimed: false, beforeRead: beforeRead)
+        if let incoming, incoming != .unknown { return incoming }
         if let seen = read(folder.appendingPathComponent(claimedName), claimed: true) { return seen }
+        if incoming == .unknown { return .unknown }
         let cancelled = folder.appendingPathComponent(cancelledName)
         if FileManager.default.fileExists(atPath: cancelled.path) {
             return .cancelled((try? Data(contentsOf: cancelled)).flatMap(decode))
@@ -96,8 +100,9 @@ public struct MoveMarker: Codable, Equatable, Sendable {
     }
 
     /// Nil when the file is not there.
-    private static func read(_ url: URL, claimed: Bool) -> Look? {
+    private static func read(_ url: URL, claimed: Bool, beforeRead: (() -> Void)? = nil) -> Look? {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        beforeRead?()
         guard let data = try? Data(contentsOf: url), let marker = decode(data) else { return .unknown }
         return claimed ? .claimed(marker) : .incoming(marker)
     }
@@ -241,5 +246,57 @@ extension JSONDecoder {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .iso8601
         return d
+    }
+}
+
+/// Why a move of this profile ended without moving, kept in `Moves/<id>.ended` until the window app has shown it: a
+/// worker that ends a move while this profile is in the background never deletes it, so the owner reads the reason
+/// when they next open the profile. Not a ledger: its name does not end in `.json`, so the id is not counted as one
+/// that left. The owner's own Cancel keeps none.
+public struct MoveEnded: Codable, Equatable, Sendable {
+    public static let suffix = ".ended"
+    public var version = 1
+    public var callID: String
+    public var to: String
+    public var why: MovePlan.Cancel
+    public var afterCall: Bool
+    public var at: Date
+
+    public init(callID: String, to: String, why: MovePlan.Cancel, afterCall: Bool, at: Date) {
+        self.callID = callID
+        self.to = to
+        self.why = why
+        self.afterCall = afterCall
+        self.at = at
+    }
+
+    static func url(_ callID: String, paths: Paths) -> URL {
+        paths.moves.appendingPathComponent((MovePaths.isID(callID) ? callID : MovePaths.notAnID) + suffix)
+    }
+
+    public func save(_ paths: Paths) throws {
+        guard MovePaths.isID(callID), MovePaths.isID(to) else { throw MovePaths.Invalid() }
+        try FileManager.default.createDirectory(at: paths.moves, withIntermediateDirectories: true)
+        let file = Self.url(callID, paths: paths)
+        try JSONEncoder.move.encode(self).write(to: file, options: .atomic)
+        try MoveFiles.fullSync(file)
+    }
+
+    public static func load(_ callID: String, paths: Paths) -> MoveEnded? {
+        guard MovePaths.isID(callID), let data = try? Data(contentsOf: url(callID, paths: paths)),
+              let e = try? JSONDecoder.move.decode(MoveEnded.self, from: data), e.version <= 1, e.callID == callID, MovePaths.isID(e.to) else { return nil }
+        return e
+    }
+
+    /// Every reason not shown yet. One folder listing; it makes no folder.
+    public static func all(_ paths: Paths) -> [MoveEnded] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: paths.moves.path)) ?? []
+        return names.filter { $0.hasSuffix(suffix) }.map { String($0.dropLast(suffix.count)) }.sorted().compactMap { load($0, paths: paths) }
+    }
+
+    /// The window app showed it, or a new move of the id starts: it goes.
+    public static func shown(_ callID: String, paths: Paths) {
+        guard MovePaths.isID(callID) else { return }
+        try? FileManager.default.removeItem(at: url(callID, paths: paths))
     }
 }

@@ -5,7 +5,7 @@ final class MovePlanTests: XCTestCase {
     private let id = "20261101-100000"
     private let work = "1a2b3c4d"
     private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
-    private let mine = "token-a", theirs = "token-c"
+    private let mine = "aaaa0001", theirs = "cccc0003"
 
     private func temp() -> Paths {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("MovePlanTests-\(UUID().uuidString)")
@@ -268,7 +268,8 @@ final class MovePlanTests: XCTestCase {
         XCTAssertEqual(MovePlan.source(ledger(.cancelling), marker: .claimed(marker(intake: .refused, refusal: .idTaken)), part: false, target: .live),
                        .finishCancel(removeIncoming: true))
         XCTAssertEqual(MovePlan.source(ledger(.cancelling), marker: .cancelled(marker()), part: false, target: .live), .finishCancel(removeIncoming: true))
-        for look in [MoveMarker.Look.missing, .unknown, .cancelled(nil), .incoming(marker(token: theirs)), .claimed(marker(token: theirs))] {
+        // A marker that does not read waits (review N1, `MoveCannotTellTests`).
+        for look in [MoveMarker.Look.missing, .cancelled(nil), .incoming(marker(token: theirs)), .claimed(marker(token: theirs))] {
             XCTAssertEqual(MovePlan.source(ledger(.cancelling), marker: look, part: true, target: .live), .finishCancel(removeIncoming: false))
         }
         // done

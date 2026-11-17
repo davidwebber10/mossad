@@ -20,7 +20,7 @@ final class StopAt: @unchecked Sendable {
 final class MoveCopyTests: XCTestCase {
     private let id = "20261101-100000"
     private let work = "1a2b3c4d"
-    private let token = "token-a"
+    private let token = "aaaa0001"
     private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
     private func temp() -> Paths {

@@ -62,8 +62,30 @@ public enum MoveRemoval {
         guard let r = try? CallRecord.load(from: paths.callDirectory(callID)) else {
             return FileManager.default.fileExists(atPath: paths.callDirectory(callID).path) ? nil : []
         }
-        return peopleToRemove(r, people: identity.people.people, samples: identity.samples.samples,
-                              others: ProcessingQueue(paths: paths).allRecords().filter { $0.id != callID }).map(\.id.rawValue)
+        guard let others = otherRecords(excluding: callID, paths: paths) else { return nil }
+        return peopleToRemove(r, people: identity.people.people, samples: identity.samples.samples, others: others).map(\.id.rawValue)
+    }
+
+    /// Every other meeting's record; nil when one cannot be read or `Audio` does not list: that meeting may be one of
+    /// the person's, so nobody goes until it reads.
+    static func otherRecords(excluding callID: String, paths: Paths) -> [CallRecord]? {
+        guard let names = MoveIntake.audioNames(paths.audio, missingIsEmpty: true) else { return nil }
+        var out: [CallRecord] = []
+        for name in names.sorted() where name != callID && !name.hasPrefix(".") {
+            let dir = paths.audio.appendingPathComponent(name)
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else { continue }
+            guard FileManager.default.fileExists(atPath: dir.appendingPathComponent(CallRecord.fileName).path) else { continue }
+            guard let r = try? CallRecord.load(from: dir) else { return nil }
+            out.append(r)
+        }
+        return out
+    }
+
+    /// No live link of the call is left in a book that reads; a book that does not read is not known.
+    static func sharesStopped(_ callID: String, paths: Paths) -> Bool {
+        guard let book = try? ShareBook.loadChecked(from: paths.shares) else { return false }
+        return !book.links.contains { $0.callID == callID && $0.stopping != true }
     }
 
     /// One step. True when it ended, also when the call folder is gone already. False stops the removal until the
@@ -92,8 +114,13 @@ public enum MoveRemoval {
             case .people:
                 guard let identity = library.identity else { return false }
                 let store = identity.people
+                // The list was decided once, maybe days ago: at the delete the rule is applied again to each person as
+                // they are now, and a record that does not read keeps everyone.
+                guard let others = otherRecords(excluding: callID, paths: paths) else { return false }
                 for id in out.people ?? [] {
                     let person = store.people.first { $0.id.rawValue == id }
+                    if let person, person.isLive,
+                       peopleToRemove(r, people: [person], samples: identity.samples.samples, others: others).isEmpty { continue }
                     let name = person?.displayName ?? ""
                     // The coach forgets first and the person goes last: a stop between them leaves the person, and the
                     // next run does it all again.
@@ -127,7 +154,7 @@ public enum MoveRemoval {
                 try stop("shares: stop")
                 actions.stopShares(callID)
                 // A link of the call that is still live on the server, with no saved mark, is a leak: not done.
-                guard !ShareBook.load(from: paths.shares).links.contains(where: { $0.callID == callID && $0.stopping != true }) else { return false }
+                guard sharesStopped(callID, paths: paths) else { return false }
             case .backup:
                 try stop("backup: delete")
                 guard await actions.backup(r) else { return false }

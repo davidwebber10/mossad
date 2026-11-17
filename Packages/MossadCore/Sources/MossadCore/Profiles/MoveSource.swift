@@ -72,7 +72,12 @@ public struct MoveSource: Sendable {
     // MARK: Start and cancel
 
     /// `name`: the target's name as the owner sees it, for the sentence of a refusal.
+    /// One start or advance of an id at a time: a second start (a double click) is refused while the first runs.
     public func start(_ callID: String, to target: String, name: String? = nil, afterCall: Bool = false) async -> Start {
+        await exclusive(callID, .refused(MoveWords.inWork)) { await startNow(callID, to: target, name: name, afterCall: afterCall) }
+    }
+
+    private func startNow(_ callID: String, to target: String, name: String?, afterCall: Bool) async -> Start {
         guard MovePaths.isID(callID), MovePaths.isID(target), target != s.profileID else { return .refused(MoveWords.inWork) }
         switch s.target(target) {
         case .paths: break
@@ -84,13 +89,19 @@ public struct MoveSource: Sendable {
         let move = MoveOut.load(callID, paths: s.paths)
         // A ledger of this id that does not read (damaged, or of a newer build) is never replaced.
         if move == nil, MoveOut.leftIDs(s.paths).contains(callID) { return .refused(MoveWords.inWork) }
+        // A call marked during its recording that waits here (its move ended, or its profile is gone) may go to
+        // another profile: the mark changes in one write, so it is never unmarked in between.
+        var replacing: String?
         switch MoveRules.offer(r, busy: await s.pipeline.isBusy(callID), files: names, usage: s.usage(callID), move: move) {
         case .offer: break
         case .moving(let to) where to == target && move == nil: break
+        case .moving(let to) where afterCall && move == nil: replacing = to
         case .refused(let words): return .refused(words)
         case .hidden, .moving: return .refused(MoveWords.inWork)
         }
         let out = MoveOut(callID: callID, to: target, started: s.now(), afterCall: afterCall)
+        // A new move of the id: the reason of the last one is no longer news.
+        MoveEnded.shown(callID, paths: s.paths)
         // The ledger first: a record marked with no ledger would never be processed nor moved.
         do {
             try s.stop("start: save the ledger")
@@ -102,21 +113,27 @@ public struct MoveSource: Sendable {
         }
         // A stop here leaves the ledger with no mark: the copy step sets the mark again first.
         do { try s.stop("start: mark the record") } catch { return .refused("") }
-        guard await s.pipeline.setMoveTarget(callID: callID, target) else {
+        let marked = if let replacing { await s.pipeline.setMoveTarget(callID: callID, target, replacing: replacing) }
+            else { await s.pipeline.setMoveTarget(callID: callID, target) }
+        guard marked else {
             MoveOut.delete(callID, paths: s.paths)
             return .refused(MoveWords.inWork)
         }
         return .started
     }
 
-    public enum CancelAnswer: Equatable, Sendable { case cancelled, tooLate, unreachable }
+    /// `unreadable`: this profile's own ledger of the move does not read; nothing changed.
+    public enum CancelAnswer: Equatable, Sendable { case cancelled, tooLate, unreachable, unreadable }
 
     /// The owner's Cancel. It waits for an advance of this id that runs, so a copy that ends meanwhile never writes
     /// over it. `tooLate`: the target has the marker (it claimed it). `unreachable`: the target's folder or the registry
     /// cannot be read now, and nothing changed: a marker that may be in the target is never left behind.
     public func cancelMove(_ callID: String) async -> CancelAnswer {
         let answer: CancelAnswer = await exclusiveWaiting(callID) {
-            guard var out = MoveOut.load(callID, paths: s.paths) else { return .cancelled }
+            guard var out = MoveOut.load(callID, paths: s.paths) else {
+                // No ledger is no move. A ledger that is there and does not read is not known: never "cancelled".
+                return MoveOut.leftIDs(s.paths).contains(callID) ? .unreadable : .cancelled
+            }
             if out.state == .cancelling { return .cancelled }
             guard [.copying, .copied, .waiting].contains(out.state) else { return .tooLate }
             do {
@@ -210,7 +227,11 @@ public struct MoveSource: Sendable {
         case .copy:
             guard let b = targetPaths else { return .waiting }
             // The mark goes with the ledger; set again here, as a stop can come between the two at the start.
-            _ = await s.pipeline.setMoveTarget(callID: callID, out.to)
+            if !(await s.pipeline.setMoveTarget(callID: callID, out.to)), out.afterCall,
+               let old = (try? CallRecord.load(from: s.paths.callDirectory(callID)))?.moveTo, old != out.to {
+                // A new mark of a held call that a stop cut short at its start.
+                _ = await s.pipeline.setMoveTarget(callID: callID, out.to, replacing: old)
+            }
             do {
                 var fetched: URL?
                 let dir = s.paths.callDirectory(callID)
@@ -305,6 +326,11 @@ public struct MoveSource: Sendable {
                     Log.error("Move: the mark of a cancelled move could not be taken off; the next look tries again")
                     return .waiting
                 }
+            }
+            // A reason the owner did not give is kept until the window app has shown it (a worker may end this).
+            if why != .byOwner {
+                try s.stop("keep the reason")
+                try MoveEnded(callID: callID, to: out.to, why: why, afterCall: out.afterCall, at: s.now()).save(s.paths)
             }
             try s.stop("delete the ledger")
             MoveOut.delete(callID, paths: s.paths)

@@ -153,8 +153,8 @@ final class MoveWorkerTests: XCTestCase {
         try out.save(a)
         // B moves the meeting back to A meanwhile: its copy waits in A's Incoming.
         let plan = try MoveCopy.plan(id, in: b, to: personal, owner: OwnerIdentity(name: "Avery Webb"), fetched: nil)
-        _ = try MoveCopy.write(plan, from: work, token: "token-back", incoming: a.incoming, now: t0)
-        try MoveCopy.publish(id, token: "token-back", incoming: a.incoming)
+        _ = try MoveCopy.write(plan, from: work, token: "bacc0004", incoming: a.incoming, now: t0)
+        try MoveCopy.publish(id, token: "bacc0004", incoming: a.incoming)
 
         let w = try worker(a, me: personal, target: { [work] in $0 == work ? .paths(b) : .gone })
         _ = await w.start()

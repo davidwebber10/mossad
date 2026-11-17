@@ -641,6 +641,20 @@ public actor Pipeline {
         return true
     }
 
+    /// Changes the mark of a call that waits for the owner from one profile to another in one write, so the call is
+    /// never unmarked in between. False unless the record is marked for `replacing` and not in flight.
+    @discardableResult
+    public func setMoveTarget(callID: String, _ profile: String, replacing old: String) -> Bool {
+        guard !inFlight.contains(callID), profile != old else { return false }
+        guard let r = edit(callID, { r in
+            guard r.status != .recording, r.moveTo == old else { return false }
+            r.moveTo = profile
+            return true
+        }) else { return false }
+        do { try store(r, dir: paths.callDirectory(callID)) } catch { return false }
+        return true
+    }
+
     /// Deletes like `delete` and returns the record as it was on disk, so the caller can remove what the meeting
     /// has outside this Mac (its archived recording) from the record's own values, not from a list in memory.
     public func remove(callID: String) -> CallRecord? { remove(callID: callID, keepNotes: false) }

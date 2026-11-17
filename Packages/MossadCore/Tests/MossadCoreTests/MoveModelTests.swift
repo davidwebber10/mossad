@@ -118,24 +118,24 @@ private struct MoveModel {
         World(sources: sources, incoming: nil, audio: audio, readable: readable, whole: whole)
     }
 
-    static var a: Source { Source(name: "default", token: "token-a", state: .copying) }
-    static var c: Source { Source(name: "5e6f7a8b", token: "token-c", state: .copying) }
+    static var a: Source { Source(name: "default", token: "aaaa0001", state: .copying) }
+    static var c: Source { Source(name: "5e6f7a8b", token: "cccc0003", state: .copying) }
 
     static var scenarios: [World] {
         var out = [start([a]), start([a], audio: [MoveModelTests.x: ""]), start([a], audio: [MoveModelTests.x: "", MoveModelTests.x + "-moved": ""]),
                    start([a], readable: false), start([a], whole: false)]
         // A marker with no ledger: A lost its file.
-        var noLedger = start([Source(name: "default", token: "token-a", state: nil)])
-        noLedger.incoming = Folder(token: "token-a", from: "default", file: .move)
+        var noLedger = start([Source(name: "default", token: "aaaa0001", state: nil)])
+        noLedger.incoming = Folder(token: "aaaa0001", from: "default", file: .move)
         out.append(noLedger)
         // A ledger with no marker.
-        out.append(start([Source(name: "default", token: "token-a", state: .waiting)]))
+        out.append(start([Source(name: "default", token: "aaaa0001", state: .waiting)]))
         return out + threeProfiles + moveBack
     }
 
     /// C and A each have a meeting with the id X and move it to B. And X that went from A to B to C: A's ledger is done.
     static var threeProfiles: [World] {
-        [start([a, c]), start([Source(name: "default", token: "token-a", has: false, tracked: false, state: .done), c])]
+        [start([a, c]), start([Source(name: "default", token: "aaaa0001", has: false, tracked: false, state: .done), c])]
     }
 
     static var moveBack: [World] {
@@ -385,12 +385,12 @@ private struct MoveModel {
 
     /// B sends A's meeting back: its marker in A's `Incoming/<id>`, and A takes it in by the same rules.
     func moveBackSteps(_ w: World) -> [(World, [String])] {
-        guard w.moveBack, !w.aTookBack, let ai = w.sources.firstIndex(where: { $0.token == "token-a" }) else { return [] }
+        guard w.moveBack, !w.aTookBack, let ai = w.sources.firstIndex(where: { $0.token == "aaaa0001" }) else { return [] }
         var n = w
         guard let f = w.back else {
             // B holds A's meeting whole and taken: it starts the move back.
-            guard w.status != .gone, let inc = w.incoming, inc.token == "token-a", inc.intake == .taken, w.audio.values.contains("token-a") else { return [] }
-            n.back = Folder(token: "token-b", from: MoveModelTests.b, file: .move)
+            guard w.status != .gone, let inc = w.incoming, inc.token == "aaaa0001", inc.intake == .taken, w.audio.values.contains("aaaa0001") else { return [] }
+            n.back = Folder(token: "bbbb0002", from: MoveModelTests.b, file: .move)
             return [(n, [])]
         }
         let a = w.sources[ai]
@@ -411,7 +411,7 @@ private struct MoveModel {
         var v: [String] = []
         for s in w.sources where s.tracked {
             let inB = w.audio.contains { $0.value == s.token } && (w.status != .gone || w.goneAfterRemoval)
-            let back = s.token == "token-a" && w.aTookBack
+            let back = s.token == "aaaa0001" && w.aTookBack
             if !s.has && !inB && !back { v.append("rule 1: \(s.name)'s meeting is in neither profile") }
         }
         return v
