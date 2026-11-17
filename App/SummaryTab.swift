@@ -38,7 +38,7 @@ struct SummaryTab: View {
                 if record.summary != nil, record.hasOutcomes != false || !record.actionItems.isEmpty {
                     LabelColumn(label: "Action items", labelTopPadding: Self.labelTop) { actionItems }
                 }
-                if MeetingPointsGroup.hasContent(controller.series.book, callID: record.id) { MeetingPointsGroup(callID: record.id) }
+                if MeetingPointsGroup.hasContent(controller.series.book, callID: record.id, record: record) { MeetingPointsGroup(callID: record.id) }
                 overview
                 if !record.topics.isEmpty {
                     LabelColumn(label: "Topics", labelTopPadding: Self.labelTop) {

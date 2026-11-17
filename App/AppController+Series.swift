@@ -51,6 +51,7 @@ final class SeriesModel: ObservableObject {
     }
 
     private struct Made: Sendable {
+        let upcoming: [UpcomingMeeting]
         let all: [MeetingSeries]
         let invited: [String: [String]]
         let usual: [String: [UsualPerson]]
@@ -104,7 +105,7 @@ final class SeriesModel: ObservableObject {
                         return UsualPerson(id: id, name: refs.name(of: id) ?? name)
                     }
                 }
-                return Made(all: all, invited: invited, usual: usual, people: refs)
+                return Made(upcoming: upcoming, all: all, invited: invited, usual: usual, people: refs)
             }.value
             guard !Task.isCancelled else { return }
             invitedIDs = made.invited
@@ -117,13 +118,21 @@ final class SeriesModel: ObservableObject {
                 var copy = book
                 if copy.refreshKeys(made.all) { owner.changeNextTime { $0.refreshKeys(made.all) } }
             }
+            // A point of one meeting follows its invite's times, and joins its series once it has one.
+            if let owner, book.points.contains(where: { $0.isOpen && $0.isForMeeting }) {
+                var copy = book
+                let records = inputs.records
+                if copy.followMeetings(upcoming: made.upcoming, series: made.all, records: records) {
+                    owner.changeNextTime { $0.followMeetings(upcoming: made.upcoming, series: made.all, records: records) }
+                }
+            }
         }
     }
 
     /// The owner's open points for an upcoming meeting: its series' and its invited people's.
     func points(for meeting: UpcomingMeeting) -> [NextTimePoint] {
         let refs = people
-        return book.points(for: SeriesCatalog.series(of: meeting, in: all), people: invitedIDs[meeting.id] ?? [], canonical: { refs.canonical($0) })
+        return book.points(for: SeriesCatalog.series(of: meeting, in: all), meeting: meeting, people: invitedIDs[meeting.id] ?? [], canonical: { refs.canonical($0) })
     }
 
     /// Reads the book again when its file changed.
@@ -194,7 +203,9 @@ extension AppController {
         var outcome = NextTimeAdd.Outcome.notFound("")
         changeNextTime { outcome = NextTimeAdd.add(text, series: query, person: person, series: series.all, people: refs, book: &$0) }
         switch outcome {
-        case .added(let p): return p.seriesTitle.map { "Saved for the next \($0)" } ?? "Saved for the next time you see \(p.personName ?? "them")"
+        case .added(let p):
+            if p.isForMeeting, let m = p.meeting { return "Saved for your \(m.title)" }
+            return p.seriesTitle.map { "Saved for the next \($0)" } ?? "Saved for the next time you see \(p.personName ?? "them")"
         case .choose(let titles): return "Choose one: \(titles.joined(separator: ", "))"
         case .notFound(let why): return why
         }
