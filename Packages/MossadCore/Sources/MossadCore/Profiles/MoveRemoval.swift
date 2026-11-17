@@ -128,10 +128,12 @@ public enum MoveRemoval {
                 // The list was decided once, maybe days ago: at the delete the rule is applied again to each person as
                 // they are now, and a record that does not read keeps everyone.
                 guard let others = otherRecords(excluding: callID, paths: paths) else { return false }
+                var goes: Set<String> = []
                 for id in out.people ?? [] {
                     let person = store.people.first { $0.id.rawValue == id }
                     if let person, person.isLive,
                        peopleToRemove(r, people: [person], samples: identity.samples.samples, others: others).isEmpty { continue }
+                    goes.insert(id)
                     let name = person?.displayName ?? ""
                     // The coach forgets first and the person goes last: a stop between them leaves the person, and the
                     // next run does it all again.
@@ -146,6 +148,9 @@ public enum MoveRemoval {
                         if store.people.contains(where: { $0.id == person.id && $0.isLive }) { try store.delete(person.id) }
                     }
                 }
+                // The migration's plan and report name the call and the people: written again without them.
+                try stop("people: the migration files")
+                try PeopleMigration.forget(callID: callID, people: goes, paths: paths)
             case .coach:
                 try stop("coach: the memory")
                 try actions.coach { $0.forgetMoved(callID: callID) }
