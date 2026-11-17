@@ -30,9 +30,12 @@ extension AppController {
         return (value as? [String])?.contains("CloudKit") == true
     }()
 
+    /// Whether this copy may write or delete the iCloud Keychain items: only once the launch decided, and never inert.
+    var writesSharedItems: Bool { Self.hasICloud && launchDecided && !isInert }
+
     /// Puts the chosen AI provider, model, and key in iCloud Keychain for the iPhone, or removes them.
     func updateSharedAIKey() {
-        guard Self.hasICloud else { return }
+        guard writesSharedItems else { return }
         // A local model is on this Mac, where the iPhone cannot reach it.
         guard shareAIKey, !aiProvider.isLocal, let apiKey = aiProvider.key, let key = keychain.get(apiKey) else {
             SharedAIKey.delete()
@@ -91,7 +94,7 @@ extension AppController {
         if syncWith == .server { syncWith = Self.hasICloud ? .icloud : .off }
         syncEngine = nil
         mirrorEngine = nil
-        ServerPairing.unshare()
+        if writesSharedItems { ServerPairing.unshare() }
         syncActivity = SyncActivity()
     }
 
@@ -106,7 +109,7 @@ extension AppController {
 
     /// The server's address and secret in iCloud Keychain for the iPhone, when the owner wants that.
     func updateSharedServer() {
-        guard Self.hasICloud else { return }
+        guard writesSharedItems else { return }
         if serverOnPhone, syncWith == .server, let c = serverConnection {
             if ServerPairing.shared() != c { try? ServerPairing.share(c) }
         } else {

@@ -24,22 +24,25 @@ public enum ServerPairing {
     // MARK: iCloud Keychain
 
     static let service = "com.dwebber.mossad.shared"
-    static let account = "server"
+    /// `server` for the first profile, as today; `server.<id>` for another. A process names only its own.
+    static func account(profile: String = AppIdentity.current.profile.id) -> String {
+        profile == Profile.defaultID ? "server" : "server." + profile
+    }
 
-    private static var query: [String: Any] {
+    static func query(profile: String = AppIdentity.current.profile.id) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
-         kSecAttrAccount as String: account,
+         kSecAttrAccount as String: account(profile: profile),
          kSecAttrAccessGroup as String: SharedAIKey.accessGroup,
          kSecAttrSynchronizable as String: true,
          kSecUseDataProtectionKeychain as String: true]
     }
 
     /// The server the Mac shared through iCloud Keychain, if any.
-    public static func shared() -> ServerConnection? {
+    public static func shared(profile: String = AppIdentity.current.profile.id) -> ServerConnection? {
         // A preview never reads the owner's iCloud Keychain.
         guard !AppIdentity.current.isPreview else { return nil }
-        var q = query
+        var q = query(profile: profile)
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var out: CFTypeRef?
@@ -47,12 +50,12 @@ public enum ServerPairing {
         return try? JSONDecoder().decode(ServerConnection.self, from: data)
     }
 
-    public static func share(_ c: ServerConnection) throws {
-        guard !AppIdentity.current.isPreview else { return }
+    public static func share(_ c: ServerConnection, profile: String = AppIdentity.current.profile.id) throws {
+        guard AppIdentity.current.writesSharedItems else { return }
         let data = try JSONEncoder().encode(c)
-        let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        let status = SecItemUpdate(query(profile: profile) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         if status == errSecItemNotFound {
-            var add = query
+            var add = query(profile: profile)
             add[kSecValueData as String] = data
             add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
             let result = SecItemAdd(add as CFDictionary, nil)
@@ -62,9 +65,9 @@ public enum ServerPairing {
         }
     }
 
-    public static func unshare() {
-        guard !AppIdentity.current.isPreview else { return }
-        SecItemDelete(query as CFDictionary)
+    public static func unshare(profile: String = AppIdentity.current.profile.id) {
+        guard AppIdentity.current.writesSharedItems else { return }
+        SecItemDelete(query(profile: profile) as CFDictionary)
     }
 }
 

@@ -4,26 +4,28 @@ import Foundation
 /// The records in the private iCloud database, in one zone.
 public actor CloudKitStore: RecordStore {
     public static let containerID = "iCloud.com.dwebber.mossad"
-    static let zone = CKRecordZone.ID(zoneName: "Mossad", ownerName: CKCurrentUserDefaultName)
+    /// The profile's own zone: `Mossad` for the first profile, `Mossad-<id>` for another.
+    let zone: CKRecordZone.ID
 
     private let database: CKDatabase
     private var zoneReady = false
 
-    public init() {
+    public init(zone: String = AppIdentity.current.cloudZone) {
         database = CKContainer(identifier: Self.containerID).privateCloudDatabase
+        self.zone = Self.zoneID(named: zone)
     }
 
-    static func id(_ name: String) -> CKRecord.ID { CKRecord.ID(recordName: name, zoneID: zone) }
+    func id(_ name: String) -> CKRecord.ID { CKRecord.ID(recordName: name, zoneID: zone) }
 
     public func prepare() async throws {
         guard !zoneReady else { return }
-        _ = try await database.modifyRecordZones(saving: [CKRecordZone(zoneID: Self.zone)], deleting: [])
+        _ = try await database.modifyRecordZones(saving: [CKRecordZone(zoneID: zone)], deleting: [])
         zoneReady = true
     }
 
     public func save(_ records: [StoredRecord]) async throws -> Set<String> {
         let ck = records.map { r -> CKRecord in
-            let record = CKRecord(recordType: r.type, recordID: Self.id(r.name))
+            let record = CKRecord(recordType: r.type, recordID: id(r.name))
             for (key, value) in r.fields {
                 switch value {
                 case .string(let s): record[key] = s
@@ -48,7 +50,7 @@ public actor CloudKitStore: RecordStore {
 
     public func delete(_ names: [String]) async throws -> Set<String> {
         guard !names.isEmpty else { return [] }
-        let (_, deleted) = try await database.modifyRecords(saving: [], deleting: names.map(Self.id), savePolicy: .allKeys, atomically: false)
+        let (_, deleted) = try await database.modifyRecords(saving: [], deleting: names.map(id), savePolicy: .allKeys, atomically: false)
         var gone = Set<String>()
         for (id, result) in deleted {
             // Already gone counts as deleted.
@@ -62,7 +64,7 @@ public actor CloudKitStore: RecordStore {
         var ck = token.flatMap { try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self, from: $0) }
         while true {
             do {
-                let changes = try await database.recordZoneChanges(inZoneWith: Self.zone, since: ck)
+                let changes = try await database.recordZoneChanges(inZoneWith: zone, since: ck)
                 var failed: [(name: String, error: any Error)] = []
                 let modified = changes.modificationResultsByID.compactMap { id, result -> ChangedRecord? in
                     switch result {
@@ -103,7 +105,7 @@ public actor CloudKitStore: RecordStore {
 
     /// The assets that came with a change are temporary files; a later try reads the record again.
     public func refetch(_ record: ChangedRecord) async throws -> ChangedRecord? {
-        do { return Self.changed(try await database.record(for: Self.id(record.name))) }
+        do { return Self.changed(try await database.record(for: id(record.name))) }
         catch let error as CKError where error.code == .unknownItem { return nil }
     }
 
@@ -113,6 +115,6 @@ public actor CloudKitStore: RecordStore {
     }
 
     public func discard(_ names: [String]) async {
-        _ = try? await database.modifyRecords(saving: [], deleting: names.map(Self.id), savePolicy: .allKeys, atomically: false)
+        _ = try? await database.modifyRecords(saving: [], deleting: names.map(id), savePolicy: .allKeys, atomically: false)
     }
 }

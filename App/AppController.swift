@@ -390,6 +390,9 @@ final class AppController: ObservableObject {
     /// A preview, Rehearsal, or a second copy on the same folder: it shows the meetings and records, processes,
     /// and syncs nothing.
     private(set) var isInert = false
+    /// Set once the launch knows whether this copy is inert. Before it, and in an inert copy, the iCloud Keychain
+    /// items the iPhone reads are neither written nor deleted.
+    private(set) var launchDecided = false
     /// Another copy held the folder's lock at launch (+SecondCopy). The menu says so, and nothing is processed.
     @Published private(set) var isSecondCopy = false
     /// The second copy saw the lock free: the menu offers "Restart Mossad".
@@ -652,6 +655,13 @@ final class AppController: ObservableObject {
         let inert = RunMode.decide(preview: preview || AppIdentity.current.isPreview, rehearsal: Rehearsal.isOn, secondCopy: isSecondCopy,
                                    madeUpRegistry: AppIdentity.current.madeUpRegistry) == .inert
         isInert = inert
+        launchDecided = true
+        if inert {
+            Log.info("iCloud Keychain: this copy is inert and leaves the items for the iPhone alone")
+        } else {
+            updateSharedAIKey()
+            updateSharedServer()
+        }
         // Reading the calendar records nothing. A preview lists made-up calendars, and its invites come from MOSSAD_UPCOMING.
         if inert { refreshUpcoming() }
         if !inert {

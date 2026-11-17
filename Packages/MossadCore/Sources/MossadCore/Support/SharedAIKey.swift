@@ -16,21 +16,24 @@ public struct SharedAIKey: Codable, Equatable, Sendable {
 
     public static let accessGroup = "35VNBDXR6B.com.dwebber.mossad.shared"
     static let service = "com.dwebber.mossad.shared"
-    static let account = "ai"
+    /// `ai` for the first profile, as today; `ai.<id>` for another. A process names only its own.
+    static func account(profile: String = AppIdentity.current.profile.id) -> String {
+        profile == Profile.defaultID ? "ai" : "ai." + profile
+    }
 
-    private static var query: [String: Any] {
+    static func query(profile: String = AppIdentity.current.profile.id) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
-         kSecAttrAccount as String: account,
+         kSecAttrAccount as String: account(profile: profile),
          kSecAttrAccessGroup as String: accessGroup,
          kSecAttrSynchronizable as String: true,
          kSecUseDataProtectionKeychain as String: true]
     }
 
-    public static func load() -> SharedAIKey? {
+    public static func load(profile: String = AppIdentity.current.profile.id) -> SharedAIKey? {
         // A preview never reads the owner's iCloud Keychain.
         guard !AppIdentity.current.isPreview else { return nil }
-        var q = query
+        var q = query(profile: profile)
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var out: CFTypeRef?
@@ -38,12 +41,12 @@ public struct SharedAIKey: Codable, Equatable, Sendable {
         return try? JSONDecoder().decode(SharedAIKey.self, from: data)
     }
 
-    public func save() throws {
-        guard !AppIdentity.current.isPreview else { return }
+    public func save(profile: String = AppIdentity.current.profile.id) throws {
+        guard AppIdentity.current.writesSharedItems else { return }
         let data = try JSONEncoder().encode(self)
-        let status = SecItemUpdate(Self.query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        let status = SecItemUpdate(Self.query(profile: profile) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         if status == errSecItemNotFound {
-            var add = Self.query
+            var add = Self.query(profile: profile)
             add[kSecValueData as String] = data
             add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
             let result = SecItemAdd(add as CFDictionary, nil)
@@ -53,8 +56,8 @@ public struct SharedAIKey: Codable, Equatable, Sendable {
         }
     }
 
-    public static func delete() {
-        guard !AppIdentity.current.isPreview else { return }
-        SecItemDelete(query as CFDictionary)
+    public static func delete(profile: String = AppIdentity.current.profile.id) {
+        guard AppIdentity.current.writesSharedItems else { return }
+        SecItemDelete(query(profile: profile) as CFDictionary)
     }
 }

@@ -152,6 +152,14 @@ extension AppIdentity {
         return defaults
     }
 
+    /// The profile's iCloud zone: `Mossad` for the first profile, as today; `Mossad-<id>` for another.
+    public var cloudZone: String { profile.isDefault ? "Mossad" : "Mossad-" + profile.id }
+    /// Where the profile's recordings go in a backup bucket: the bucket's root for the first profile, as today.
+    public var backupPrefix: String { profile.isDefault ? "" : "profiles/\(profile.id)/" }
+    /// Whether this copy may write or delete the iCloud Keychain items the iPhone reads: never a preview or a run on a
+    /// made-up registry.
+    public var writesSharedItems: Bool { !isPreview && !madeUpRegistry }
+
     /// The folder a note's `audio:` line names: a profile's `root` as written, else the fixed `~/Mossad` of before
     /// (also for Rehearsal and a `MOSSAD_ROOT` run).
     public var noteRoot: String {
