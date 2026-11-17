@@ -74,6 +74,12 @@ public enum MoveShow {
         return refusesCommand(r, name: name, me: me)
     }
 
+    /// The iPhone's chat field of a meeting that moves (its record carries the mark from the Mac): off before any
+    /// request, with one sentence that names no profile.
+    public static func phoneChatOff(_ r: CallRecord?) -> String? {
+        r?.moveTo == nil ? nil : MoveWords.movingOnMac
+    }
+
     public enum Menu: Equatable, Sendable {
         case none
         /// "Move to ▸" with one item for each target id.
@@ -130,6 +136,7 @@ public enum MoveShow {
 
 extension MoveWords {
     public static let cancelling = "Cancelling the move…"
+    public static let movingOnMac = "This meeting is moving to another profile on your Mac."
     public static let arriving = "Arriving from another profile…"
     public static let cancelled = "The move is cancelled. The meeting stays here."
     /// This profile's own record of the move does not read: the meeting stays marked and is not processed.

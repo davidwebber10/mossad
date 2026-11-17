@@ -70,14 +70,21 @@ struct MoveLineView: View {
 
     var body: some View {
         if let line = controller.moveLine {
-            Text(line.text)
-                .font(.system(size: Rhythm.secondarySize))
-                .foregroundStyle(Palette.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, Rhythm.listRowInset)
-                .padding(.top, Rhythm.itemGap)
-                .accessibilityAddTraits(.updatesFrequently)
+            text(line.text)
+        } else if let notice = controller.moveNotices.current {
+            // A reason is forgotten only once it is on the screen: this view appears only where the owner looks.
+            text(notice.text).task(id: notice.id) { controller.moveNoticeSeen(notice.id) }
         }
+    }
+
+    private func text(_ s: String) -> some View {
+        Text(s)
+            .font(.system(size: Rhythm.secondarySize))
+            .foregroundStyle(Palette.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, Rhythm.listRowInset)
+            .padding(.top, Rhythm.itemGap)
+            .accessibilityAddTraits(.updatesFrequently)
     }
 }
 

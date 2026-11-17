@@ -112,6 +112,7 @@ private struct HourGrid: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            MoveLineView().frame(maxWidth: .infinity, alignment: .leading)
             ScrollView {
                     GeometryReader { g in
                         let columnWidth = (g.size.width - gutter - 12) / CGFloat(days.count)

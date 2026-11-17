@@ -445,6 +445,8 @@ final class AppController: ObservableObject {
     @Published var moveProgress: [String: Double] = [:]
     /// "Moved to Work", or the sentence of a refusal, above the list for a short time.
     @Published var moveLine: MoveShow.Line?
+    /// The reasons a move left for the owner, until each line was on the screen.
+    @Published var moveNotices = MoveNotices()
     /// Why a move ended that the owner has not seen yet, or that holds a call marked during its recording.
     @Published var moveEnded: [String: MoveEnded] = [:]
     /// Why each other profile cannot take a meeting in now, as far as the app can tell.

@@ -8,8 +8,6 @@ struct MoveLook {
     var running = false
     var again = false
     var timer: Task<Void, Never>?
-    /// The reasons shown once in this run of the app.
-    var shown: Set<String> = []
 }
 
 /// The confirmation of "Move to", with what the first profile already sent, read off the main actor.
@@ -327,11 +325,7 @@ extension AppController {
                 self.moves = Dictionary(uniqueKeysWithValues: open.map { ($0.callID, $0) })
                 self.moveProgress = self.moveProgress.filter { id, _ in open.contains { $0.callID == id && $0.state == .copying } }
                 self.moveReach = reach
-                self.showEnded(kept)
-                for (callID, n) in phoneChats.sorted(by: { $0.key < $1.key }) {
-                    self.showMoveLine(.refusal(MoveWords.phoneChatsNotKept(n), at: Date()))
-                    Task.detached { MovingChats.shown(callID, paths: paths) }
-                }
+                self.showEnded(kept, phoneChats: phoneChats)
                 for (callID, to) in moved { self.movedHere(callID, to: to) }
                 guard ended || !taken.isEmpty else { return }
                 self.refresh()
@@ -342,17 +336,36 @@ extension AppController {
         }
     }
 
-    /// A reason kept in `Moves` shows once as the line. One of a call marked during its recording stays on the row
-    /// until the owner chooses; any other goes once it showed.
-    private func showEnded(_ kept: [MoveEnded]) {
+    /// A reason kept in `Moves` waits as a notice until its line was on the screen (`MoveNotices`). One of a call marked
+    /// during its recording stays on the row until the owner chooses; any other file goes once its line showed.
+    private func showEnded(_ kept: [MoveEnded], phoneChats: [String: Int]) {
         moveEnded = Dictionary(uniqueKeysWithValues: kept.filter(\.afterCall).map { ($0.callID, $0) })
         let paths = paths
-        for e in kept where !moveLook.shown.contains(e.callID) {
-            moveLook.shown.insert(e.callID)
+        var notices: [MoveNotices.Notice] = []
+        for e in kept {
             if let text = MoveWords.refusal(e.why, target: profileName(e.to) ?? MoveWords.otherProfile) {
-                showMoveLine(.refusal(text, at: Date()))
+                notices.append(.init(callID: e.callID, kind: .ended, text: text, keepsFile: e.afterCall))
+            } else if !e.afterCall {
+                Task.detached { MoveEnded.shown(e.callID, paths: paths) }
             }
-            if !e.afterCall { Task.detached { MoveEnded.shown(e.callID, paths: paths) } }
+        }
+        for (callID, n) in phoneChats.sorted(by: { $0.key < $1.key }) {
+            notices.append(.init(callID: callID, kind: .phoneChats, text: MoveWords.phoneChatsNotKept(n), keepsFile: false))
+        }
+        moveNotices.offer(notices)
+    }
+
+    /// The line of a notice was on the screen (the view's own appear): only now is it forgotten, and its file goes.
+    func moveNoticeSeen(_ id: String) {
+        guard let n = moveNotices.shown(id) else { return }
+        showMoveLine(.refusal(n.text, at: Date()))
+        guard !n.keepsFile else { return }
+        let paths = paths
+        Task.detached {
+            switch n.kind {
+            case .ended: MoveEnded.shown(n.callID, paths: paths)
+            case .phoneChats: MovingChats.shown(n.callID, paths: paths)
+            }
         }
     }
 

@@ -176,8 +176,13 @@ struct MeetingDetailView: View {
         switch tab {
         case .summary:
             ScrollView {
-                SummaryTab(record: record, people: people, player: player, delete: record.canDelete ? { deleting = record } : nil)
-                    .detailColumn(top: Self.underTabs + 32)
+                VStack(alignment: .leading, spacing: Rhythm.groupGap) {
+                    // A written meeting that moves: its row's line and the move's answers on its own page too.
+                    if record.status == .written, let row = controller.moveRow(record) { MoveRowLine(record: record, row: row) }
+                    MoveLineView()
+                    SummaryTab(record: record, people: people, player: player, delete: record.canDelete ? { deleting = record } : nil)
+                }
+                .detailColumn(top: Self.underTabs + 32)
             }
         case .transcript:
             TranscriptTab(record: record, people: people, player: player, top: Self.underTabs + 28, highlight: highlight)
