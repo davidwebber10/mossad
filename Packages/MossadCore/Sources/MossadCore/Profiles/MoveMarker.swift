@@ -11,7 +11,8 @@ public struct MoveMarker: Codable, Equatable, Sendable {
     public static let partSuffix = ".part", callFolder = "call", chatsFolder = "chats", arrivalName = "arrival.json"
     public static let currentVersion = 1
     public static let allowedKeys: Set<String> = ["version", "callID", "from", "to", "made", "token", "files", "path", "size", "sha256",
-                                                  "ownerKeys", "intake", "finalID", "refusal", "count", "chatIDs"]
+                                                  "ownerKeys", "intake", "finalID", "refusal", "count", "chatIDs",
+                                                  "arrived", "tries"]
 
     public struct File: Codable, Equatable, Sendable {
         public var path: String
@@ -47,6 +48,11 @@ public struct MoveMarker: Codable, Equatable, Sendable {
     public var count: Int?
     /// The chat id of the first profile to the id it gets here.
     public var chatIDs: [String: String]?
+    /// The target's first half ended: `call/call.json` is the record as it arrives (or `call/arrival.json` is, until
+    /// its rename).
+    public var arrived: Bool?
+    /// The failed tries of the rename into `Audio`: after `MoveIntake.maxTries` the target refuses.
+    public var tries: Int?
 
     public init(callID: String, from: String, to: String, made: Date, token: String, files: [File], ownerKeys: [String]) {
         version = Self.currentVersion

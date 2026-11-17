@@ -21,7 +21,8 @@ public actor ProfileWorker {
         public var profileID: String = "default"
         /// Where another profile's folder is now: `MoveRules.target` with the registry read again at each call.
         public var target: @Sendable (String) -> MoveRules.TargetPlace = { _ in .unknown }
-        /// The DEBUG proofs: the process ends when a move's ledger says "copied", or a take-in says "takingIn".
+        /// The DEBUG proofs: the process ends when a move's ledger says "copied", or a take-in says "takingIn"; "refuse"
+        /// makes the take-in's rename into `Audio` fail as on another volume, after its first half.
         public var proofStop: String? = nil
 
         public init(paths: Paths, settings: ServiceSettings, key: @escaping @Sendable (APIKey) -> String?, google: any GoogleSecrets,
@@ -170,8 +171,13 @@ public actor ProfileWorker {
                 return await archive.fetch(r, into: folder)
             },
             usage: { usage.events(forCall: $0).events }, actions: actions, now: setup.now, stop: stop))
+        var rename: @Sendable (String, String) -> Int32 = MoveFiles.exclusive
+        #if DEBUG
+        // The proof of a refusal after the first half: the rename into `Audio` meets "another volume".
+        if setup.proofStop == "refuse" { rename = { from, to in to.hasPrefix(paths.audio.path + "/") ? EXDEV : MoveFiles.exclusive(from, to) } }
+        #endif
         let intake = MoveIntake(paths: paths, me: setup.profileID, library: library, ownerName: { settings.ownerName },
-                                voiceFingerprints: { settings.voiceFingerprints }, stop: stop)
+                                voiceFingerprints: { settings.voiceFingerprints }, stop: stop, rename: rename)
         return (source, intake)
     }
 

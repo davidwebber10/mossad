@@ -98,7 +98,9 @@ enum WorkerEntry {
         setup.target = { id in registryFile.map { MoveRules.target(id, registryFile: $0, home: home, madeUpRegistry: madeUp) } ?? .unknown }
         #if DEBUG
         // The proofs of a move, on a made-up registry only: the end of the process at a state of the ledger or the marker.
-        if madeUp { setup.proofStop = env["MOSSAD_PROOF_MOVE_STOP"] ?? env["MOSSAD_PROOF_INTAKE_STOP"] }
+        if madeUp {
+            setup.proofStop = env["MOSSAD_PROOF_MOVE_STOP"] ?? env["MOSSAD_PROOF_INTAKE_STOP"] ?? (env["MOSSAD_PROOF_INTAKE_REFUSE"] == "1" ? "refuse" : nil)
+        }
         #endif
         let worker = ProfileWorker(setup)
         Task {
