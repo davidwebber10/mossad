@@ -33,6 +33,8 @@ struct MossadPhoneApp: App {
             .tabViewSearchActivation(.searchTabSelection)
             .onSubmit(of: .search) { store.remember(search: query) }
             .tint(Palette.accent)
+            // Over the recorder's screen instead while it is open, so a shared file is never hidden behind it.
+            .callImportSheet(when: !store.recorderScreenOpen)
             .environment(store)
             .preferredColorScheme(PhoneStore.previewScheme)
             .task { await store.sync() }
@@ -44,7 +46,6 @@ struct MossadPhoneApp: App {
                     store.open(link)
                 }
             }
-            .sheet(item: $store.incomingAudio) { CallImportScreen(incoming: $0) }
             .onChange(of: phase) { _, now in if now == .active { Task { await store.sync() } } }
             // While a room recording waits for its meeting and the app stays open, look now and then.
             .task(id: phase == .active && store.waitsForTheMac) {

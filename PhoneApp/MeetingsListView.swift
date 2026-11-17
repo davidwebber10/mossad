@@ -83,6 +83,7 @@ struct MeetingsListView: View {
                 }
             }
             .fullScreenCover(isPresented: $recording) { RecordingView() }
+            .onChange(of: recording, initial: true) { _, open in store.recorderScreenOpen = open }
             .sheet(isPresented: $settings) { PhoneSettingsView() }
             .sheet(isPresented: $findings) {
                 NavigationStack {
@@ -99,6 +100,12 @@ struct MeetingsListView: View {
         }
     }
 
+    /// "3:05 PM" today; an imported call of another day also says its day: "Nov 12, 3:05 PM".
+    private func when(_ start: Date) -> String {
+        let time = start.formatted(date: .omitted, time: .shortened)
+        return Calendar.current.isDateInToday(start) ? time : "\(start.formatted(.dateTime.month(.abbreviated).day())), \(time)"
+    }
+
     /// Room recordings made here that the Mac has not written up yet.
     @ViewBuilder
     private var outbox: some View {
@@ -109,9 +116,10 @@ struct MeetingsListView: View {
                 HStack(alignment: .top, spacing: Space.m) {
                     Circle().fill(Palette.recording).frame(width: 8, height: 8).padding(.top, 6).accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: Rhythm.pairGap) {
-                        Text(item.recording.title ?? "In-person meeting").textRole(.headline).foregroundStyle(Palette.ink)
+                        Text(item.recording.title ?? (item.recording.isPhoneCall ? CallImport.placeholder : "In-person meeting"))
+                            .textRole(.headline).foregroundStyle(Palette.ink)
                         HStack(spacing: Space.s) {
-                            Text("\(item.recording.start.formatted(date: .omitted, time: .shortened)) · " + status(item))
+                            Text("\(when(item.recording.start)) · " + status(item))
                             if !item.isSent { PhoneProcessingMark() }
                         }
                         .textRole(.secondary)

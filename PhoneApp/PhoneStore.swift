@@ -62,7 +62,9 @@ final class PhoneStore {
     /// A short message for a link that cannot open, such as to a meeting that is not on this iPhone yet.
     var notice: String?
     /// An audio file that iOS handed over from the share sheet, shown in the import screen until it closes.
-    var incomingAudio: IncomingAudio?
+    var incomingAudio: IncomingAudio? = PhoneStore.hook("MOSSAD_IMPORT").map { IncomingAudio(url: URL(fileURLWithPath: $0)) }
+    /// The room recorder's screen is open: the import screen shows over it.
+    var recorderScreenOpen = false
 
     /// The pages open in the Analytics tab; People lives there.
     var analyticsPath = NavigationPath()

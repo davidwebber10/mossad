@@ -391,6 +391,7 @@ struct RecordingView: View {
             }
         }
         .interactiveDismissDisabled(recorder.state != .idle)
+        .callImportSheet(when: true)
         .task { if recorder.state == .idle, PhoneStore.hook("MOSSAD_ROOM") == nil { await store.startRecording() } }
         // The name is kept a moment after the owner stops typing, for a recording that the app never finishes.
         .task(id: recorder.title) {
