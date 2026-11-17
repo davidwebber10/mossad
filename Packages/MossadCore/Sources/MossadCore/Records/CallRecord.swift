@@ -224,7 +224,8 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// Short text for the last error, such as "AssemblyAI key missing"; nil once a step succeeds.
     public var failureReason: String?
     /// The calendar could not be read when the invite was looked for (a worker), so "no invite" is not known: the
-    /// next launch of the profile's window app looks again. Never written as false.
+    /// next launch of the profile's window app looks again. Never written as false. An older build drops this when it
+    /// saves the record; then the invite is not looked for again.
     public var inviteUnknown: Bool?
     /// Speaker key (`me:A`, `them:B`) → person name. The name is a label: `speakerPeople` says who it is.
     public var speakerNames: [String: String] = [:]
