@@ -58,6 +58,8 @@ final class PhoneStore {
     var moment: Moment?
     /// A short message for a link that cannot open, such as to a meeting that is not on this iPhone yet.
     var notice: String?
+    /// An audio file that iOS handed over from the share sheet, shown in the import screen until it closes.
+    var incomingAudio: IncomingAudio?
 
     /// The pages open in the Analytics tab; People lives there.
     var analyticsPath = NavigationPath()

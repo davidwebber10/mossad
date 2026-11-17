@@ -36,7 +36,15 @@ struct MossadPhoneApp: App {
             .environment(store)
             .preferredColorScheme(PhoneStore.previewScheme)
             .task { await store.sync() }
-            .onOpenURL { url in if let link = ChatLink.parse(url) { store.open(link) } }
+            // A shared audio file comes as a file URL, the app's own links as `mossad://`.
+            .onOpenURL { url in
+                if url.isFileURL {
+                    store.incomingAudio = IncomingAudio(url: url)
+                } else if let link = ChatLink.parse(url) {
+                    store.open(link)
+                }
+            }
+            .sheet(item: $store.incomingAudio) { CallImportScreen(incoming: $0) }
             .onChange(of: phase) { _, now in if now == .active { Task { await store.sync() } } }
             // While a room recording waits for its meeting and the app stays open, look now and then.
             .task(id: phase == .active && store.waitsForTheMac) {
