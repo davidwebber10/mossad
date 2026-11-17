@@ -50,7 +50,7 @@ public final class ProfileUploader {
     @ObservationIgnored public let writes = SerialQueue()
     @ObservationIgnored private let parts: Parts
     @ObservationIgnored private let offline: Bool
-    @ObservationIgnored private let background: @MainActor (String) -> @MainActor () -> Void
+    @ObservationIgnored let background: @MainActor (String) -> @MainActor () -> Void
 
     /// Room recordings made here, and shared calls, that the Mac has not turned into meetings yet.
     public internal(set) var outbox = Outbox()
