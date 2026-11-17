@@ -83,6 +83,12 @@ public enum MoveShow {
         r?.moveTo == nil ? nil : MoveWords.movingOnMac
     }
 
+    /// The same rule for the store's own guard: a question about a meeting that moves gets this sentence, and no request.
+    public static func phoneChatOff(about callID: String?, in records: [CallRecord]) -> String? {
+        guard let callID else { return nil }
+        return phoneChatOff(records.first { $0.id == callID })
+    }
+
     public enum Menu: Equatable, Sendable {
         case none
         /// "Move to ▸" with one item for each target id.
