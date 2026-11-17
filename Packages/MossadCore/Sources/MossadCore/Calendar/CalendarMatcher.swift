@@ -346,6 +346,19 @@ public final class EventKitCalendarSource: CalendarSource, @unchecked Sendable {
 
     public init() {}
 
+    /// The Mac's answer for this process: "fullAccess", "writeOnly", "denied", "restricted", or "notDetermined".
+    /// It only reads the status: it never asks.
+    public static var permissionName: String {
+        switch EKEventStore.authorizationStatus(for: .event) {
+        case .fullAccess: "fullAccess"
+        case .writeOnly: "writeOnly"
+        case .denied: "denied"
+        case .restricted: "restricted"
+        case .notDetermined: "notDetermined"
+        @unknown default: "notDetermined"
+        }
+    }
+
     public func requestAccess() async -> Bool {
         (try? await currentStore().requestFullAccessToEvents()) ?? false
     }
