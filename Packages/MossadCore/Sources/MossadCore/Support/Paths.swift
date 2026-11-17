@@ -50,6 +50,11 @@ public struct Paths: Sendable {
     /// Copies made before a migration changed a file, so it can be undone by hand.
     public var backups: URL { root.appendingPathComponent("Backups") }
 
+    /// Meetings that another profile is moving here (`Incoming/<id>`), and this profile's own moves out (`Moves`).
+    /// Made by the first move, never by `ensureDirectories`: with one profile neither folder exists.
+    public var incoming: URL { root.appendingPathComponent("Incoming") }
+    public var moves: URL { root.appendingPathComponent("Moves") }
+
     public func callDirectory(_ id: String) -> URL {
         audio.appendingPathComponent(id)
     }
