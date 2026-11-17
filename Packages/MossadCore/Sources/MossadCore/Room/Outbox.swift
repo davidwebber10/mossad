@@ -74,6 +74,13 @@ public struct Outbox: Equatable, Sendable {
         }
     }
 
+    /// A recording whose audio is already whole on disk, such as an imported call: it waits to upload at once. An
+    /// entry with the same id stays as it is, so the recording in progress is never touched.
+    public mutating func addFinished(_ recording: PhoneRecording) {
+        guard self[recording.id] == nil else { return }
+        entries.append(Entry(recording: recording, state: .waiting))
+    }
+
     /// The name the owner types during the recording, kept so a recording the app never finished still has it.
     public mutating func retitle(_ id: String, _ title: String?) {
         update(id) { $0.recording.title = title }

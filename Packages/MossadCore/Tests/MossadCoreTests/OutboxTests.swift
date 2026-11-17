@@ -174,4 +174,25 @@ final class OutboxTests: XCTestCase {
         o.finish("20261109-120000", end: t0, title: nil)
         XCTAssertEqual(o.settle(arrived: ["20261109-120000-iphone"]), ["20261109-120000"])
     }
+
+    func testAnImportedRecordingWaitsToUploadAtOnce() {
+        let call = PhoneRecording(id: "20270115-090000", start: t0, end: t0 + 600, title: nil, kind: .phoneCall, person: "Sam Carter", personID: "p1")
+        var o = Outbox()
+        o.addFinished(call)
+        XCTAssertEqual(o[call.id]?.state, .waiting)
+        XCTAssertEqual(o[call.id]?.recording, call)
+        XCTAssertEqual(o.due(store: "icloud", now: t0).map(\.id), [call.id])
+    }
+
+    func testAnImportedRecordingDoesNotTouchTheRecordingInProgress() {
+        var o = Outbox()
+        o.begin(rec("a"))
+        o.addFinished(rec("b"))
+        o.addFinished(rec("a"))
+        XCTAssertEqual(o["a"]?.state, .recording)
+        XCTAssertEqual(o.needsRecovery(audioIDs: ["a", "b"], active: "a"), [])
+        XCTAssertEqual(o.due(store: "icloud", now: t0).map(\.id), ["b"])
+        XCTAssertFalse(o.canRemove("a", active: "a", busy: []))
+        XCTAssertTrue(o.canRemove("b", active: "a", busy: []))
+    }
 }

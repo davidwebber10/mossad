@@ -176,6 +176,40 @@ public enum RoomAudio {
         return Joined(length: Double(written) / TrackWriter.sampleRate, setAside: aside)
     }
 
+    /// The folder already has audio for that id.
+    public struct Taken: Error {}
+
+    /// Puts a file from outside in the folder as `<id>.m4a`: a copy as it is, or with `convert` an AAC file by
+    /// `PhoneRecording.settings`. It is written in the temporary folder and moved in whole. The source stays.
+    /// Returns the seconds of audio. Never replaces audio of the same id; a file it cannot read in full throws
+    /// `Unreadable` and leaves nothing in the folder.
+    @discardableResult
+    public static func adopt(_ source: URL, as id: String, in dir: URL, convert: Bool) throws -> TimeInterval {
+        func taken() -> Bool { FileManager.default.fileExists(atPath: finished(id, in: dir).path) || !parts(of: id, in: dir).isEmpty }
+        guard !taken() else { throw Taken() }
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).m4a")
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let unreadable = Unreadable(file: source.lastPathComponent)
+        let length: TimeInterval
+        if convert {
+            guard let input = try? AVAudioFile(forReading: source) else { throw unreadable }
+            let output = try AVAudioFile(forWriting: temp, settings: PhoneRecording.settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+            let written = try append(input, to: output)
+            output.close()
+            // A read throws at the end and also in the middle; only the position tells them apart.
+            guard written > 0, input.framePosition >= input.length else { throw unreadable }
+            length = Double(written) / output.processingFormat.sampleRate
+        } else {
+            try FileManager.default.copyItem(at: source, to: temp)
+            guard let seconds = self.length(of: temp), seconds > 0 else { throw unreadable }
+            length = seconds
+        }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        guard !taken() else { throw Taken() }
+        try FileManager.default.moveItem(at: temp, to: finished(id, in: dir))
+        return length
+    }
+
     /// Deletes the files of a recording. The parts set aside as unreadable go only with `setAside`, which is the
     /// owner's own "Remove".
     public static func delete(_ id: String, in dir: URL, setAside: Bool = false) {
