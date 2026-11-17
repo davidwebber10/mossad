@@ -62,6 +62,7 @@ func fullRecord(id: String = "20261101-100000") -> CallRecord {
     r.personHint = PersonHint(name: "Sam Carter", personID: "p-sam")
     r.deletedScreens = ["000020000.heic"]
     r.moveTo = "5e6f7a8b"
+    r.inviteUnknown = true
     return r
 }
 

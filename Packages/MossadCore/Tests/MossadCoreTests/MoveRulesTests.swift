@@ -95,7 +95,8 @@ final class MoveRulesTests: XCTestCase {
         let real = AppIdentity(bundleID: "com.dwebber.mossad", registry: read)
         XCTAssertTrue(MoveRules.mayMove(mode: .full, identity: real, registry: read))
         XCTAssertFalse(MoveRules.mayMove(mode: .inert, identity: real, registry: read))
-        // `.worker` comes with Part 2's `RunMode`; the rule is `mode == .full`, so a worker is refused as `.inert` is.
+        // A worker goes on with a move (`Duty.takeInMoved`) and never starts one.
+        XCTAssertFalse(MoveRules.mayMove(mode: .worker, identity: real, registry: read))
         for state in [ProfileRegistry.State.none, .newer, .unreadable, .partial] {
             let other = ProfileRegistry.Loaded(registry: read.registry, state: state)
             XCTAssertFalse(MoveRules.mayMove(mode: .full, identity: real, registry: other), "\(state)")

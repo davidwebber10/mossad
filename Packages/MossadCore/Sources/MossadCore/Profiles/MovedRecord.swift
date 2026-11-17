@@ -22,6 +22,10 @@ public enum MovedRecord {
         // its provider's account; a document of its Google account; the count and the words of its failed tries.
         for k in ["speakerPeople", "markdownPath", "cloudKey", "cloudSize", "cloudBackend", "cloudServer", "cloudHash", "cloudLeftovers",
                   "transcriptionJobs", "gemini", "attempts", "nextAttempt", "failureReason"] { f[k] = .cleared }
+        // "The first profile's calendar could not be read": a note about that profile's own read, not the target's. Set
+        // in the target, it would make the target match the invite again with its own calendar, and whether the first
+        // profile's invite goes with a meeting is still the owner's decision.
+        f["inviteUnknown"] = .cleared
         return f
     }()
 
@@ -43,6 +47,7 @@ public enum MovedRecord {
         m.attempts = 0
         m.nextAttempt = nil
         m.failureReason = nil
+        m.inviteUnknown = nil
         return m
     }
 
