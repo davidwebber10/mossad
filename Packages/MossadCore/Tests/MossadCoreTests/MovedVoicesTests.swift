@@ -80,11 +80,83 @@ final class MovedVoicesTests: XCTestCase {
         let whole = MovedVoices.decide(record(names: ["them:A": "Carter, Sam"], prints: ["them:A": axis(0)]), ownerKeys: [], library: lib,
                                        ownerName: "Avery Webb")
         XCTAssertEqual(whole.names["them:A"], "Sam Carter")
-        XCTAssertEqual(whole.learn["them:A"], .ownerNamed)
+        XCTAssertEqual(whole.learn["them:A"], MovedVoices.Learn.none, "B has a voice of that name and it did not match: a label only")
         let guess = MovedVoices.decide(record(names: ["them:A": "Sam"], prints: ["them:A": axis(0)]), ownerKeys: [], library: lib,
                                        ownerName: "Avery Webb")
         XCTAssertEqual(guess.names["them:A"], "Sam")
         XCTAssertEqual(guess.learn["them:A"], .ownerNamed)
+    }
+
+    /// I4: a name alone never adds to, or replaces, a voice that B already has.
+    func testANameAloneNeverChangesAVoiceThatTheTargetHas() throws {
+        let other = near(0, 0.2, other: 1)
+        let (firm, _) = try library { try $0.add(other, to: "Sam Carter") }
+        var r = record(names: ["them:A": "Sam Carter"], prints: ["them:A": axis(0)])
+        let n = MovedVoices.decide(r, ownerKeys: [], library: firm, ownerName: "Avery Webb")
+        XCTAssertEqual(n.names["them:A"], "Sam Carter")
+        XCTAssertEqual(n.learn["them:A"], MovedVoices.Learn.none)
+        try MovedVoices.apply(n, to: &r, callID: id, library: firm)
+        XCTAssertEqual(firm.profiles.first { $0.name == "Sam Carter" }?.embeddings, [other], "B's voice is as it was")
+
+        let (provisional, _) = try library {
+            try $0.add(other, to: "Sam Carter", source: VoiceSampleSource(callID: "20261020-090000", speakerKey: "them:A", recorded: t0,
+                                                                          seconds: 30, quality: 0.8, origin: .inviteInference))
+        }
+        var p = record(names: ["them:A": "Sam Carter"], prints: ["them:A": axis(0)], seconds: ["them:A": 30], fromInvite: ["them:A"])
+        let pn = MovedVoices.decide(p, ownerKeys: [], library: provisional, ownerName: "Avery Webb")
+        XCTAssertEqual(pn.learn["them:A"], MovedVoices.Learn.none)
+        try MovedVoices.apply(pn, to: &p, callID: id, library: provisional)
+        XCTAssertEqual(provisional.provisional["Sam Carter"], "20261020-090000", "B's provisional voice keeps its samples and its mark")
+        XCTAssertEqual(provisional.profiles.first { $0.name == "Sam Carter" }?.embeddings, [other])
+    }
+
+    /// I5: with fingerprints off in B, the record keeps no fingerprint, as B's own `identify` keeps none.
+    func testWithFingerprintsOffTheRecordKeepsNone() throws {
+        let (lib, _) = try library()
+        var r = record(names: ["them:A": "Sam Carter"], prints: ["them:A": axis(0)], fromInvite: ["them:A"])
+        let n = MovedVoices.decide(r, ownerKeys: [], library: lib, ownerName: "Avery Webb", fingerprints: false)
+        try MovedVoices.apply(n, to: &r, callID: id, library: lib)
+        XCTAssertTrue(r.speakerEmbeddings.isEmpty)
+        XCTAssertNil(r.speakerSamples)
+        XCTAssertNil(r.fromInvite)
+        XCTAssertTrue(lib.profiles.isEmpty)
+        XCTAssertEqual(r.speakerNames["them:A"], "Sam Carter")
+    }
+
+    /// A voice that loses its name, and the letters of the other voices with no name, change the summary's words.
+    func testAVoiceThatLosesItsNameIsRenamedToItsLetter() throws {
+        let (lib, _) = try library()
+        var r = record(names: ["them:A": "lee@example.com"], unknown: ["them:B"], prints: ["them:A": axis(0), "them:B": axis(4)])
+        XCTAssertEqual(MarkdownWriter.displayNames(r)["them:B"], "Speaker A")
+        r.summary = "lee@example.com spoke, then Speaker A."
+        let n = MovedVoices.decide(r, ownerKeys: [], library: lib, ownerName: "Avery Webb")
+        XCTAssertTrue(n.changed, "a new summary follows")
+        try MovedVoices.apply(n, to: &r, callID: id, library: lib)
+        XCTAssertEqual(MarkdownWriter.displayNames(r), ["them:A": "Speaker A", "them:B": "Speaker B"])
+        XCTAssertEqual(r.summary, "Speaker A spoke, then Speaker B.", "each label at once, never one into the other")
+    }
+
+    /// After a stop in the first half of a take-in, the second run finds the voice the first run learned: a voice named
+    /// from the invite keeps its mark.
+    func testASecondRunOfTheTakeInKeepsTheInviteMark() throws {
+        let (lib, _) = try library()
+        var r = record(names: ["them:A": "Sam Carter"], prints: ["them:A": axis(0)], seconds: ["them:A": 30], fromInvite: ["them:A"])
+        let first = MovedVoices.decide(r, ownerKeys: [], library: lib, ownerName: "Avery Webb", callID: id)
+        var copy = r
+        try MovedVoices.apply(first, to: &copy, callID: id, library: lib)
+        let again = MovedVoices.decide(r, ownerKeys: [], library: lib, ownerName: "Avery Webb", callID: id)
+        XCTAssertEqual(again.names["them:A"], "Sam Carter")
+        XCTAssertEqual(again.fromInvite, ["them:A"])
+        try MovedVoices.apply(again, to: &r, callID: id, library: lib)
+        XCTAssertEqual(lib.provisional["Sam Carter"], id)
+    }
+
+    /// With no "Your name" in B, the owner's lines keep the name they had.
+    func testAnEmptyOwnerNameKeepsTheOwnersName() throws {
+        let (lib, _) = try library()
+        let n = MovedVoices.decide(record(names: ["me:A": "Avery Webb"], prints: ["me:A": axis(6)]), ownerKeys: ["me:A"], library: lib, ownerName: "  ")
+        XCTAssertEqual(n.names["me:A"], "Avery Webb")
+        XCTAssertTrue(n.renamed.isEmpty)
     }
 
     func testANameFromTheInviteStaysProvisional() throws {

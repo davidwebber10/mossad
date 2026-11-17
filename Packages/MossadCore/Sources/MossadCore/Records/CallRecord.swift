@@ -538,14 +538,24 @@ extension CallRecord {
     }
 
     /// Swaps labels such as "Speaker A" for names in the summary, topics, decisions, and action items. Whole
-    /// words only, so "Speaker A" never matches inside "Speaker AB".
+    /// words only, so "Speaker A" never matches inside "Speaker AB". All at once: a label that becomes another label
+    /// ("Speaker B" to "Speaker A") never then becomes the name meant for the first.
     mutating func replaceSpeakerLabels(_ labels: [String: String]) {
         guard !labels.isEmpty else { return }
+        let pattern = labels.keys.sorted { $0.count > $1.count }.map { "\\b\(NSRegularExpression.escapedPattern(for: $0))\\b" }.joined(separator: "|")
+        let regex = try? NSRegularExpression(pattern: pattern)
         func swap(_ text: String) -> String {
-            labels.reduce(text) { text, pair in
-                text.replacingOccurrences(of: "\\b\(NSRegularExpression.escapedPattern(for: pair.key))\\b", with: NSRegularExpression.escapedTemplate(for: pair.value),
-                                          options: .regularExpression)
+            guard let regex else { return text }
+            let ns = text as NSString
+            var out = ""
+            var at = 0
+            for m in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                out += ns.substring(with: NSRange(location: at, length: m.range.location - at))
+                let found = ns.substring(with: m.range)
+                out += labels[found] ?? found
+                at = m.range.location + m.range.length
             }
+            return out + ns.substring(from: at)
         }
         summary = summary.map(swap)
         topics = topics.map { SummaryTopic(title: swap($0.title), summary: swap($0.summary)) }

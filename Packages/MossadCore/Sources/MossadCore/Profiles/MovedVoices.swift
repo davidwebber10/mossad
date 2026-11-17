@@ -17,12 +17,18 @@ public enum MovedVoices {
         public var renamed: [String: String]
         /// The keys that are the owner here: their samples go to this library's own owner voice, whatever its name.
         public var owner: Set<String> = []
+        /// False when "Voice fingerprints" is off here: the record then keeps no fingerprint, and nothing is learned.
+        public var fingerprints = true
         public var changed: Bool { !renamed.isEmpty }
     }
 
     /// Reads the library and changes nothing. `record` is the record as the first profile wrote it (its ids are gone).
+    /// `callID` is the id the meeting has here: a second run after a stop finds a provisional voice that the first run
+    /// learned as made by this call, so the voice keeps its mark from the invite.
     public static func decide(_ record: CallRecord, ownerKeys: Set<String>, library: VoiceLibrary, ownerName: String,
-                              fingerprints: Bool = true) -> Naming {
+                              fingerprints: Bool = true, callID: String? = nil) -> Naming {
+        // With no "Your name" here, the owner's lines keep the name they had.
+        let ownerName = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
         var names: [String: String] = [:]
         var learn: [String: Learn] = [:]
         var ownerHere = Set<String>()
@@ -35,7 +41,8 @@ public enum MovedVoices {
         // 1. The owner's keys of the first profile are the owner here. The owner's voice is learned only on a sure
         // match with this library's own owner voice; it is never made here.
         for k in keys where ownerKeys.contains(k) {
-            names[k] = ownerName
+            guard let name = ownerName.isEmpty ? record.speakerNames[k] : ownerName else { continue }
+            names[k] = name
             ownerHere.insert(k)
             if let e = prints[k], let owner = library.owner, let c = VoiceLibrary.centroid(owner.embeddings) {
                 let s = VoiceLibrary.cosine(e, c)
@@ -55,12 +62,20 @@ public enum MovedVoices {
             let roster = CallInvite(record: record, sure: false)
                 .map { InviteRoster(invite: $0, profiles: library.profiles, people: library.identity?.people.people ?? []) }
             let d = InviteVoiceRules.decide(voices, roster: roster, owner: library.owner?.name, provisional: library.provisional,
-                                            matchThreshold: library.matchThreshold, learnThreshold: SpeakerIdentifier.learnThreshold)
+                                            callID: callID, matchThreshold: library.matchThreshold, learnThreshold: SpeakerIdentifier.learnThreshold)
             for v in voices {
-                guard case .named(let name, let score, let l)? = d.verdicts[v.key] else { continue }
-                if name == library.owner?.name { ownerHere.insert(v.key) }
-                names[v.key] = name == library.owner?.name ? ownerName : name
-                learn[v.key] = l ? .autoMatch(score) : Learn.none
+                switch d.verdicts[v.key] {
+                case .named(let name, let score, let l)?:
+                    if name == library.owner?.name { ownerHere.insert(v.key) }
+                    names[v.key] = name == library.owner?.name && !ownerName.isEmpty ? ownerName : name
+                    learn[v.key] = l ? .autoMatch(score) : Learn.none
+                case .inferred(let name, let l)?:
+                    // A provisional voice that this very call made (a second run): the same voice again.
+                    names[v.key] = name
+                    learn[v.key] = l ? .inviteInference : Learn.none
+                default:
+                    continue
+                }
                 byLibrary.insert(v.key)
             }
             decidedFromInvite = d.fromInvite.intersection(byLibrary)
@@ -69,7 +84,7 @@ public enum MovedVoices {
         // 3. A voice the library did not name keeps the name it had: the saved person of that whole name or address,
         // else the name itself. An address with no person is no name; the owner's name on a voice that is not the
         // owner's is no name.
-        let owner = OwnerIdentity(name: ownerName, also: [library.owner?.name].compactMap { $0 })
+        let owner = OwnerIdentity(name: ownerName.isEmpty ? (library.owner?.name ?? "") : ownerName, also: [library.owner?.name].compactMap { $0 })
         var kept: [String] = []
         var refused: [String] = []
         for k in keys where names[k] == nil {
@@ -81,7 +96,11 @@ public enum MovedVoices {
             }
             names[k] = name
             kept.append(k)
-            if prints[k] == nil {
+            // A voice this library has under that name did not match this one: the name stays a label, and nothing is
+            // added to that voice or takes its samples. A name alone never changes a voice that is here.
+            if library.profiles.contains(where: { $0.name == name && !$0.embeddings.isEmpty }) {
+                learn[k] = Learn.none
+            } else if prints[k] == nil {
                 learn[k] = Learn.none
             } else if record.fromInvite?.contains(k) == true {
                 learn[k] = (seconds(k) ?? 0) >= InviteVoiceRules.inferenceSpeech ? .inviteInference : Learn.none
@@ -102,13 +121,19 @@ public enum MovedVoices {
         var unknown = record.unknownSpeakers.filter { names[$0] == nil }
         for k in refused where !unknown.contains(k) { unknown.append(k) }
 
-        // 5. What the words of the summary call each voice now, where that changed.
+        // 5. What the words of the summary call each voice now, where that changed: a new name, a name that is gone,
+        // and the letter of a voice with no name that moved because another voice got or lost one.
         let shown = MarkdownWriter.displayNames(record)
+        var after = record
+        after.speakerNames = names
+        after.unknownSpeakers = unknown
+        let now = MarkdownWriter.displayNames(after)
         var renamed: [String: String] = [:]
-        for (k, name) in names { if let old = shown[k], old != name { renamed[old] = name } }
+        for (k, old) in shown { if let new = now[k], new != old { renamed[old] = new } }
 
         let fromInvite = decidedFromInvite.union(kept.filter { record.fromInvite?.contains($0) == true })
-        return Naming(names: names, learn: learn, unknown: unknown, fromInvite: fromInvite.sorted(), renamed: renamed, owner: ownerHere)
+        return Naming(names: names, learn: fingerprints ? learn : learn.mapValues { _ in Learn.none }, unknown: unknown,
+                      fromInvite: fingerprints ? fromInvite.sorted() : [], renamed: renamed, owner: ownerHere, fingerprints: fingerprints)
     }
 
     /// Puts the names into the record, swaps the changed names in the summary's words, and teaches the library.
@@ -118,6 +143,13 @@ public enum MovedVoices {
         record.unknownSpeakers = naming.unknown
         record.fromInvite = naming.fromInvite.isEmpty ? nil : naming.fromInvite
         record.replaceSpeakerLabels(naming.renamed)
+        // "Voice fingerprints" off here: the record keeps none, as this profile's own `identify` keeps none.
+        guard naming.fingerprints else {
+            record.speakerEmbeddings = [:]
+            record.speakerSamples = nil
+            record.fromInvite = nil
+            return
+        }
         for (key, how) in naming.learn.sorted(by: { $0.key < $1.key }) {
             guard let e = record.speakerEmbeddings[key], let name = naming.names[key] else { continue }
             let origin: VoiceSample.Origin
