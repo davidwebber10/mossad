@@ -64,7 +64,7 @@ public struct FriendlyError: Equatable, Sendable {
     public enum Kind: String, Sendable {
         case cancelled, offline, unreachable, timedOut, serverTrouble, busy, rateLimited
         case unauthorized, wrongSecret, missingKey, billing, rejected, tooLarge, refused, unreadable, transcriptionFailed
-        case notMossad, notConnected, microphoneBusy, microphoneDenied, recordingFailed, interrupted, resumeFailed, diskFull, fileMissing, notSignedIn, iCloudFull
+        case notMossad, networkBlocked, notConnected, microphoneBusy, microphoneDenied, recordingFailed, interrupted, resumeFailed, diskFull, fileMissing, notSignedIn, iCloudFull
         case badFile, tooManySteps, other
         /// Nothing answers at the local AI server's address, or Apple's on-device model cannot run.
         case localServerDown, onDeviceUnavailable
@@ -181,6 +181,9 @@ public struct FriendlyError: Equatable, Sendable {
         case .transcriptionFailed:
             return ("\(S) couldn't transcribe this audio", said ?? "The audio is saved. Retry, or choose another service in \(aiSettings).", true)
         case .notMossad: return ("That address isn't a Mossad server", "Check the address, then try again.", false)
+        case .networkBlocked:
+            return ("Your network blocks your server",
+                    "Try another network, or ask the network's administrator to allow \(said ?? "your server's address").", false)
         case .notConnected: return ("Your server isn't connected", "Connect it in \(syncSettings).", false)
         case .microphoneBusy: return ("Another app is using the microphone", "End the call or recording there, then try again.", true)
         case .microphoneDenied: return ("Mossad can't use the microphone", "Allow it in \(micSettings), then try again.", false)
@@ -251,6 +254,7 @@ public struct FriendlyError: Equatable, Sendable {
         case LocalServerError.notRunning: return .init(kind: .localServerDown)
         case let e as OnDeviceModelError: return .init(kind: .onDeviceUnavailable, said: e.description)
         case ServerError.notMossad: return .init(kind: .notMossad)
+        case ServerError.networkBlocked(let host): return .init(kind: .networkBlocked, said: host)
         case ServerError.wrongSecret: return .init(kind: .wrongSecret, service: "your server")
         case ServerError.http(let code, let message):
             if code == 0 { return .init(kind: .other, said: humane(message)) }

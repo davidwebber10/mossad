@@ -54,6 +54,8 @@ extension Data {
 
 public enum ServerError: Error, LocalizedError, Equatable {
     case notMossad
+    /// The address may be right, but a network gateway answers in its place (`HelloAnswer.blocked`).
+    case networkBlocked(host: String)
     case wrongSecret
     /// The server is from before this call, or its database is: the owner must update it.
     case needsUpdate
@@ -62,6 +64,7 @@ public enum ServerError: Error, LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .notMossad: "That address does not answer like a Mossad server."
+        case .networkBlocked(let host): "A network gateway answers in place of \(host)."
         case .wrongSecret: "The server does not accept this secret."
         case .needsUpdate: "Your server is an older version. Update it to use this."
         case .http(let code, let message): message.isEmpty ? "The server answered with HTTP \(code)." : message
@@ -109,9 +112,26 @@ public struct ServerClient: Sendable {
     }
 
     private func hello(_ request: URLRequest) async throws -> Hello {
-        let (data, response) = try await session.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200,
-              let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any], body["mossad"] as? Bool == true else { throw ServerError.notMossad }
+        let host = request.url?.host ?? ""
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            // Offline or no such host keeps its own words; only a certificate that is not the server's is a block.
+            if HelloAnswer(status: nil, contentType: nil, body: Data(), error: error.code, host: host, finalHost: nil) == .blocked {
+                throw ServerError.networkBlocked(host: host)
+            }
+            throw error
+        }
+        let http = response as? HTTPURLResponse
+        switch HelloAnswer(status: http?.statusCode, contentType: http?.value(forHTTPHeaderField: "Content-Type"), body: data, error: nil,
+                           host: host, finalHost: response.url?.host) {
+        case .mossad: break
+        case .blocked: throw ServerError.networkBlocked(host: host)
+        case .noAnswer, .notMossad: throw ServerError.notMossad
+        }
+        guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ServerError.notMossad }
         let recordings = body["recordings"] as? [String: Any]
         let limit = (recordings?["maxBytes"] as? NSNumber)?.int64Value
         return Hello(authorized: body["authorized"] as? Bool == true, mcp: (body["mcp"] as? String).flatMap(URL.init(string:)), chat: body["chat"] as? Bool == true,
