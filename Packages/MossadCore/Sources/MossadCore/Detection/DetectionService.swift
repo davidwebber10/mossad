@@ -68,6 +68,7 @@ public final class DetectionService: @unchecked Sendable {
     static let labelsFreshFor: TimeInterval = 4
     private var running = false
     private var tracker = MuteTracker()
+    private var shownMute = ShownMute.none
     private var trackerCall = 0
     /// Read on the mute queue only: readings with labels but no known mute button, before any known state.
     private var unknownLabelReads = 0
@@ -91,6 +92,10 @@ public final class DetectionService: @unchecked Sendable {
     /// The same change, with the last reading that saw "muted" as it was at the change: the end of a mute span
     /// when "muted" turned unknown. Called just before `onMuteChange`.
     public var onMuteChangeAt: (_ muted: Bool, _ lastMutedSeen: Date?) -> Void = { _, _ in }
+    /// What the app shows, when it changed: an unmute that comes only from the unknown limit shows as "muted when
+    /// last seen", and a later sure "unmuted" clears it though the tracker did not change. Runs on the mute queue,
+    /// after `onMuteChange`.
+    public var onShownMute: (ShownMute) -> Void = { _ in }
     /// Called once per mic session when an app seems to be in a call that Mossad cannot confirm, so nothing records.
     public var onUnconfirmed: (UnconfirmedCall) -> Void = { _ in }
 
@@ -174,6 +179,7 @@ public final class DetectionService: @unchecked Sendable {
             muteTarget = nil
             lastLabels = nil
             tracker = MuteTracker()
+            shownMute = .none
             setMuteTimer(on: false)
         }
     }
@@ -437,6 +443,7 @@ public final class DetectionService: @unchecked Sendable {
             let target = muteTarget
             if let target, target.call != trackerCall {
                 tracker = MuteTracker()
+                shownMute = .none
                 trackerCall = target.call
                 fresh = true
             }
@@ -448,12 +455,18 @@ public final class DetectionService: @unchecked Sendable {
         let labels = mute.labels(bundleID: target.bundleID, platform: target.platform, meetingID: target.meetingID, pace: pace)
         let state = labels.flatMap { MuteState.from(labels: $0, platform: target.platform) }
         var seen: Date?
+        var shown: ShownMute?
         let change: Bool? = muteLock.withLock {
             // The call ended or changed during the read: its answer belongs to no call.
             guard muteTarget?.call == target.call else { return nil }
             lastLabels = (target.call, time, labels)
             let change = tracker.record(state, at: time)
             seen = tracker.lastMutedSeen
+            let reading: ShownMute.Reading? = state.map { .sure(muted: $0) } ?? (change == false ? .unreadable : nil)
+            if let reading, shownMute.after(reading) != shownMute {
+                shownMute = shownMute.after(reading)
+                shown = shownMute
+            }
             return change
         }
         if let labels, state == nil, muteLock.withLock({ tracker.muted == nil }) {
@@ -464,10 +477,12 @@ public final class DetectionService: @unchecked Sendable {
         } else if state != nil {
             unknownLabelReads = 0
         }
-        guard let change else { return }
-        if state == nil { Log.info("The mute state could not be read for \(Int(MuteTracker.unknownLimit)) s; recording the mic as unmuted") }
-        onMuteChangeAt(change, seen)
-        onMuteChange(change)
+        if let change {
+            if state == nil { Log.info("The mute state could not be read for \(Int(MuteTracker.unknownLimit)) s; recording the mic as unmuted") }
+            onMuteChangeAt(change, seen)
+            onMuteChange(change)
+        }
+        if let shown { onShownMute(shown) }
     }
 
     /// The Teams app's labels for the current call: the mute check's reading when it is fresh, so the tick does

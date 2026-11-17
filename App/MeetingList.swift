@@ -1,13 +1,12 @@
 import MossadCore
 import SwiftUI
 
-/// The list column: the call being recorded, upcoming invites, then one group per day. Rows are plain type on the
+/// The list column: upcoming invites, then one group per day. The call being recorded is the sidebar's Now card. Rows are plain type on the
 /// window, and the selected one sits on a quiet fill; the arrow keys move the selection.
 struct MeetingList: View {
     @EnvironmentObject var controller: AppController
     @EnvironmentObject var filters: MeetingFilterModel
     let days: [MeetingGroups.Day]
-    let live: [CallRecord]
     @Binding var selection: String?
     @Binding var deleting: CallRecord?
     /// Opens the calendar at a day: the "more" row over the invites.
@@ -36,7 +35,7 @@ struct MeetingList: View {
 
     /// Every row's id in the order shown, for the arrow keys.
     private var order: [String] {
-        live.map(\.id) + upcoming.map(\.id) + days.flatMap { $0.records.map(\.id) }
+        upcoming.map(\.id) + days.flatMap { $0.records.map(\.id) }
     }
 
     var body: some View {
@@ -44,23 +43,12 @@ struct MeetingList: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     MoveLineView(inScroll: true)
-                    if !live.isEmpty {
-                        GroupHeader(title: "Now", color: Palette.recording, first: true)
-                        // Its own id in the stack: with the record's id, a stopped call's row moved to its day kept
-                        // the live row's view, timer and all.
-                        ForEach(live, id: \.liveRowID) { r in
-                            CurrentCallRow(record: r)
-                                .listRow(selected: selection == r.id, tint: Palette.recordingTint) { select(r.id) }
-                                .contextMenu { MeetingMenuItems(record: r, deleting: $deleting) }
-                        }
-                    }
                     if let list = upcomingList, list.more > 0 {
                         MoreUpcomingRow(count: list.more) { showCalendar(list.after) }
-                            // Under the call that records now, the gap of a new group: the row is the far end of the invites, not of "Now".
-                            .padding(.top, live.isEmpty ? Rhythm.itemGap : Rhythm.listHeaderTop)
+                            .padding(.top, Rhythm.itemGap)
                     }
                     ForEach(Array(upcomingDays.enumerated()), id: \.element.date) { i, day in
-                        GroupHeader(title: day.title, first: i == 0 && live.isEmpty && (upcomingList?.more ?? 0) == 0)
+                        GroupHeader(title: day.title, first: i == 0 && (upcomingList?.more ?? 0) == 0)
                         ForEach(day.meetings) { m in
                             UpcomingRow(meeting: m, dated: false).listRow(selected: selection == m.id) { select(m.id) }
                         }
@@ -68,7 +56,7 @@ struct MeetingList: View {
                     ForEach(Array(days.enumerated()), id: \.element.date) { i, day in
                         // Today's invites and today's meetings share one "Today".
                         if i > 0 || upcomingDays.last?.date != day.date {
-                            GroupHeader(title: day.title, first: i == 0 && live.isEmpty && upcomingDays.isEmpty)
+                            GroupHeader(title: day.title, first: i == 0 && upcomingDays.isEmpty)
                         }
                         ForEach(day.records, id: \.id) { r in
                             let match = searching ? controller.meetingListMatches[r.id] : nil
@@ -149,13 +137,8 @@ struct MeetingList: View {
 
     /// Only a row off screen: scrolling to one already in view moved the list under the toolbar.
     private func reveal(_ id: String?, _ proxy: ScrollViewProxy) {
-        guard let id, !visible.contains(stackID(id)), order.contains(id) else { return }
-        proxy.scrollTo(stackID(id), anchor: .center)
-    }
-
-    /// The id of a row in the stack: the live row has its own (see `liveRowID`), every other row the record's.
-    private func stackID(_ id: String) -> String {
-        live.contains { $0.id == id } ? CallRecord.liveRowID(id) : id
+        guard let id, !visible.contains(id), order.contains(id) else { return }
+        proxy.scrollTo(id, anchor: .center)
     }
 
     private func select(_ id: String) {
@@ -169,7 +152,7 @@ struct MeetingList: View {
         guard let id else { return .ignored }
         scrolledHere = id
         selection = id
-        proxy.scrollTo(stackID(id))
+        proxy.scrollTo(id)
         return .handled
     }
 
@@ -183,8 +166,7 @@ struct MeetingList: View {
         guard inBurst || !Self.playerKeys.contains(characters.lowercased()) else { return .ignored }
         typed = inBurst ? typed + characters : characters
         typedAt = Date()
-        let titles = live.map { ($0.id, $0.title) } + upcoming.map { ($0.id, $0.title) }
-            + days.flatMap { $0.records.map { ($0.id, $0.title) } }
+        let titles = upcoming.map { ($0.id, $0.title) } + days.flatMap { $0.records.map { ($0.id, $0.title) } }
         guard let match = titles.first(where: { $0.1.lowercased().hasPrefix(typed.lowercased()) }) else { return .handled }
         return jump(to: match.0, proxy)
     }
@@ -195,21 +177,20 @@ struct MeetingList: View {
         let index = selection.flatMap { ids.firstIndex(of: $0) }.map { min(max($0 + by, 0), ids.count - 1) } ?? 0
         scrolledHere = ids[index]
         selection = ids[index]
-        proxy.scrollTo(stackID(ids[index]))
+        proxy.scrollTo(ids[index])
         return .handled
     }
 }
 
 extension View {
     /// A list row: the canvas's padding, the quiet selection fill, and a click that selects.
-    fileprivate func listRow(selected: Bool, tint: Color? = nil, select: @escaping () -> Void) -> some View {
-        modifier(ListRow(selected: selected, tint: tint, select: select))
+    fileprivate func listRow(selected: Bool, select: @escaping () -> Void) -> some View {
+        modifier(ListRow(selected: selected, select: select))
     }
 }
 
 private struct ListRow: ViewModifier {
     let selected: Bool
-    let tint: Color?
     let select: () -> Void
     @State private var hovering = false
 
@@ -217,14 +198,8 @@ private struct ListRow: ViewModifier {
         content
             .padding(.vertical, Rhythm.listRowPadding).padding(.horizontal, Rhythm.listRowInset)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                // The selection lies over a tint (the call being recorded) so a selected live row still reads as selected.
-                let shape = RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
-                ZStack {
-                    if let tint { shape.fill(tint) }
-                    shape.fill(selected ? Palette.selection : hovering ? Palette.fill.opacity(0.5) : .clear)
-                }
-            }
+            .background(selected ? Palette.selection : hovering ? Palette.fill.opacity(0.5) : .clear,
+                        in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
             .onTapGesture(perform: select)
             .onHover { hovering = $0 }
@@ -383,38 +358,4 @@ struct ProcessingMark: View {
         .frame(width: 16, height: 4)
         .accessibilityHidden(true)
     }
-}
-
-/// The call being recorded: a red tint, a pulsing dot, the running time, and a small live waveform.
-private struct CurrentCallRow: View {
-    @EnvironmentObject var controller: AppController
-    let record: CallRecord
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Rhythm.itemGap) {
-            HStack(spacing: Space.m) {
-                StatusDot(color: controller.isPaused ? Palette.tertiaryMark : Palette.recording, size: 8, pulsing: !controller.isPaused)
-                Text(record.titleSource == .platform ? "Current call" : record.title)
-                    .font(.system(size: Rhythm.bodySize, weight: .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
-                Spacer(minLength: 6)
-                LengthText(record: record).font(.system(size: Rhythm.secondarySize, weight: .medium)).monospacedDigit()
-            }
-            HStack(spacing: Space.s) {
-                if controller.isMuted, !controller.isPaused {
-                    Label("Muted", systemImage: "mic.slash.fill").font(.system(size: Rhythm.secondarySize, weight: .medium)).foregroundStyle(Palette.accent)
-                } else {
-                    Text(controller.isPaused ? "Paused" : "\(record.platform.shortName) · recording")
-                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
-                }
-                LiveWaveform(bars: 28, rowHeight: 8, showLabels: false, framesPerSecond: 4).frame(maxWidth: 120)
-            }
-            .padding(.leading, 18)
-        }
-    }
-}
-
-extension CallRecord {
-    /// The live row's id in the list's stack, apart from the same call's row in its day.
-    static func liveRowID(_ id: String) -> String { "now:" + id }
-    var liveRowID: String { Self.liveRowID(id) }
 }

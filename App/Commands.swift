@@ -18,6 +18,10 @@ struct MossadCommands: Commands {
             Divider()
             Button("Search Everything…") { controller.toggleSearch() }.keyboardShortcut("k")
             Divider()
+            // The sidebar's Now card from the keyboard. No key of its own: the sections took the free ones.
+            Button("Current Call") { controller.openNowCall() }
+                .disabled(controller.nowCall == nil)
+            Divider()
             // In the order of the sidebar, a group for each item with pages under it. Coach opens on Findings.
             ForEach([AppController.Section.meetings] + AppController.Section.underMeetings) { go($0) }
             Divider()

@@ -21,4 +21,15 @@ final class MeetingOpenRouteTests: XCTestCase {
         XCTAssertFalse(MeetingOpenRoute.keepsSeek(for: "a", opening: "b"))
         XCTAssertFalse(MeetingOpenRoute.keepsSeek(for: nil, opening: "b"))
     }
+
+    /// Calendar mode keeps a request only for the live call whose record has not arrived yet. A request for any other
+    /// id in no list (a link to a deleted meeting) is taken at once, so it never acts later, far from the click.
+    func testOnlyTheLiveCallWaitsForItsRecord() {
+        XCTAssertTrue(MeetingOpenRoute.waits(calendarMode: true, request: "live", known: false, liveID: "live"))
+        XCTAssertFalse(MeetingOpenRoute.waits(calendarMode: true, request: "gone", known: false, liveID: "live"))
+        XCTAssertFalse(MeetingOpenRoute.waits(calendarMode: true, request: "gone", known: false, liveID: nil))
+        XCTAssertFalse(MeetingOpenRoute.waits(calendarMode: true, request: "live", known: true, liveID: "live"), "known: it opens")
+        XCTAssertFalse(MeetingOpenRoute.waits(calendarMode: false, request: "live", known: false, liveID: "live"),
+                       "List mode keeps the selection and needs no request")
+    }
 }

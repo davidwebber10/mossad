@@ -11,4 +11,10 @@ public enum MeetingOpenRoute {
     public static func keepsSeek(for seekCallID: String?, opening: String) -> Bool {
         seekCallID == opening
     }
+
+    /// Whether Calendar mode keeps an open request for later: only for the call that records now, whose record is not
+    /// in the list in its first moment. Any other id in no list is taken at once, so it never acts far from its click.
+    public static func waits(calendarMode: Bool, request: String, known: Bool, liveID: String?) -> Bool {
+        calendarMode && !known && request == liveID
+    }
 }

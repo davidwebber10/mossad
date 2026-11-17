@@ -20,6 +20,9 @@ final class NavigationModel: ObservableObject {
     @Published private(set) var recorder = NavigationRecorder()
     /// Bumped when Back or Forward shows a place, so the page on screen takes its part.
     @Published private(set) var restoreTick = 0
+    /// The Meetings page's part alone, for the sidebar's Now card: in Calendar mode it says which meeting is open.
+    /// Its own value, so a key in another page's search does not make the history buttons again.
+    @Published private(set) var meetingsPart: Part?
     var history: NavigationHistory { recorder.history }
     /// The place that Back or Forward shows, until the window shows it.
     var pending: NavigationPlace? { recorder.pending }
@@ -84,6 +87,7 @@ final class NavigationModel: ObservableObject {
     func report(_ section: AppController.Section, _ part: Part) {
         guard parts[section] != part else { return }
         parts[section] = part
+        if section == .meetings { meetingsPart = part }
         note()
     }
 

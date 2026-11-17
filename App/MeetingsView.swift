@@ -39,7 +39,8 @@ struct MeetingsView: View {
     private static let searchPrompt = "Search titles, transcripts, people"
 
     /// The meetings that the search text and the filter leave. The call that records now stays under any search and
-    /// filter: it has no transcript, people, or summary to match yet, and the owner must see that it records.
+    /// filter (Calendar mode draws it; the list leaves it to the sidebar's Now card): it has no transcript, people,
+    /// or summary to match yet, and the owner must see that it records.
     private var results: [CallRecord] {
         MeetingListRows.visible(controller.meetings, found: controller.meetingMatches, kept: filters.matches)
     }
@@ -113,7 +114,10 @@ struct MeetingsView: View {
             TranscribeAgainSheet(record: r)
         }
         .onAppear {
-            if controller.selectedMeetingID == nil { controller.selectedMeetingID = controller.meetings.first?.id }
+            // The first row of the list; the live call's page on a first call, when it is the only meeting.
+            if controller.selectedMeetingID == nil {
+                controller.selectedMeetingID = MeetingListRows.firstSelection(controller.meetings, liveID: controller.nowCall?.id)
+            }
             let preview = CommandLine.arguments.contains("--ui-preview")
             // Development hook for screenshots: MOSSAD_MEETING=<call id> opens that meeting.
             if preview, let id = ProcessInfo.processInfo.environment["MOSSAD_MEETING"], controller.meetings.contains(where: { $0.id == id }) {
@@ -156,6 +160,7 @@ struct MeetingsView: View {
         }
         .onAppear(perform: takeOpenRequest)
         .onChange(of: controller.meetingToOpen) { _, _ in takeOpenRequest() }
+        .onChange(of: controller.meetings.count) { _, _ in if controller.meetingToOpen != nil { takeOpenRequest() } }
         // The flyout belongs to this page's button; it must not come back by itself with the page.
         .onDisappear { filters.isOpen = false }
         .navigationPart(.meetings, .init(page: mode == .calendar ? "calendar" : nil, item: opened ?? openedUpcoming?.id), restore: restore)
@@ -165,7 +170,7 @@ struct MeetingsView: View {
 
     /// The invite whose page is open in the list view. An invite leaves the list when its call starts to record.
     /// Its page stays open until the recording or the invite ends: the first minutes of the call are when the
-    /// open items and the promises are needed. The live call is one click away in the list.
+    /// open items and the promises are needed. The live call is one click away in the sidebar's Now card.
     private var openInvite: UpcomingMeeting? {
         guard let id = controller.selectedMeetingID else { return nil }
         if let m = controller.calendarUpcoming.first(where: { $0.id == id }) {
@@ -185,8 +190,8 @@ struct MeetingsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10).padding(.top, 2).padding(.bottom, Space.xs)
                 CoachMoment(compact: true).padding(.horizontal, 10).padding(.top, Space.s)
-                MeetingList(days: MeetingGroups.byDay(results.filter { $0.status != .recording }),
-                            live: results.filter { $0.status == .recording },
+                // The call that records now is the sidebar's Now card, not a row.
+                MeetingList(days: MeetingGroups.byDay(MeetingListRows.listed(results, liveID: controller.nowCall?.id)),
                             selection: $controller.selectedMeetingID, deleting: $deleting, showCalendar: { showCalendar(at: $0) })
             }
             DetailColumn { toolbar } content: {
@@ -260,6 +265,9 @@ struct MeetingsView: View {
     /// Opens the meeting that another page asked for, in either mode.
     private func takeOpenRequest() {
         guard let id = controller.meetingToOpen else { return }
+        // A call in its first moment is not in the list yet: Calendar mode keeps that one request until its record arrives.
+        let known = controller.meetings.contains { $0.id == id } || controller.calendarUpcoming.contains { $0.id == id }
+        if MeetingOpenRoute.waits(calendarMode: mode == .calendar, request: id, known: known, liveID: controller.nowCall?.id) { return }
         controller.meetingToOpen = nil
         // A recorded meeting or an invite: Prepare opens an invite's page in Calendar mode too.
         if let shown = MeetingOpenRoute.fullPane(calendarMode: mode == .calendar, request: id, shown: opened), shown != opened {

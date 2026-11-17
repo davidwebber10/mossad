@@ -2,40 +2,6 @@ import AppKit
 import MossadCore
 import SwiftUI
 
-/// Two rows of bars that move with the live audio: your mic and the call audio. The list row's small copy.
-struct LiveWaveform: View {
-    @EnvironmentObject var controller: AppController
-    @Environment(\.animationsActive) private var active
-    var bars = 64
-    var rowHeight: CGFloat = 36
-    var showLabels = true
-    /// Redraws a second; the small copy in the list row needs fewer.
-    var framesPerSecond: Double = 12
-
-    var body: some View {
-        let meters = controller.meters
-        let running = active && !controller.isPaused
-        VStack(alignment: .leading, spacing: 8) {
-            row(controller.isMuted ? "Muted" : "You", meters.me, color: controller.isMuted ? Palette.tertiaryMark : Palette.speaker(0), running: running)
-                .opacity(controller.isMuted ? 0.5 : 1)
-            row("Call audio", meters.them, color: Palette.speaker(1), running: running)
-        }
-        .opacity(controller.isPaused ? 0.4 : 1)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Live audio levels")
-    }
-
-    private func row(_ label: String, _ meter: LevelMeter, color: Color, running: Bool) -> some View {
-        HStack(spacing: 10) {
-            if showLabels {
-                Text(label).font(.system(size: Rhythm.noteSize, weight: .medium)).foregroundStyle(.secondary).frame(width: 64, alignment: .leading)
-            }
-            WaveformBars(style: .row(meter, NSColor(color)), bars: bars, framesPerSecond: framesPerSecond, running: running)
-                .frame(height: rowHeight)
-        }
-    }
-}
-
 /// The meeting band's one row: each bar is the louder of your mic and the call audio, in your hue or the call's,
 /// and silence is a short neutral bar. A room has one mic that hears everyone, so its bars take one hue per voice
 /// heard so far, up to four.
@@ -49,7 +15,7 @@ struct LiveBandWaveform: View {
 
     var body: some View {
         let meters = controller.meters
-        WaveformBars(style: .merged(me: meters.me, them: meters.them, muted: controller.isMuted, room: room ? voices : nil),
+        WaveformBars(style: .merged(me: meters.me, them: meters.them, muted: controller.shownMute == .muted, room: room ? voices : nil),
                      bars: bars, framesPerSecond: 12, running: active && !controller.isPaused)
             .frame(height: 40)
             .opacity(controller.isPaused ? 0.4 : 1)
@@ -79,7 +45,6 @@ private struct WaveformBars: NSViewRepresentable {
 
 final class WaveformView: NSView {
     enum Style {
-        case row(LevelMeter, NSColor)
         /// `room` is the number of voices heard in a room, nil for a call.
         case merged(me: LevelMeter, them: LevelMeter, muted: Bool, room: Int?)
     }
@@ -131,27 +96,15 @@ final class WaveformView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         switch style {
-        case .row(let meter, let color): drawRow(meter, color)
         case .merged(let meMeter, let themMeter, let muted, let room): drawMerged(meMeter, themMeter, muted: muted, room: room)
         case nil: break
-        }
-    }
-
-    private func drawRow(_ meter: LevelMeter, _ color: NSColor) {
-        let step = bounds.width / CGFloat(bars)
-        let width = max(1.5, step * 0.55)
-        for (i, level) in levels(meter).enumerated() {
-            let h = height(level, minimum: 2)
-            let rect = NSRect(x: CGFloat(i) * step, y: (bounds.height - h) / 2, width: width, height: h)
-            color.withAlphaComponent(level > 0.002 ? 1 : 0.35).setFill()
-            NSBezierPath(roundedRect: rect, xRadius: width / 2, yRadius: width / 2).fill()
         }
     }
 
     private func drawMerged(_ meMeter: LevelMeter, _ themMeter: LevelMeter, muted: Bool, room: Int?) {
         let gap: CGFloat = 2
         let width = max(1.5, (bounds.width - gap * CGFloat(bars - 1)) / CGFloat(bars))
-        // Muted, the mic records silence; the bars show only the call.
+        // Muted, the mic records silence; the bars show only the call. "Muted when last seen" records the mic.
         let mine = muted ? Array(repeating: Float(0), count: bars) : levels(meMeter)
         let theirs = room != nil ? Array(repeating: Float(0), count: bars) : levels(themMeter)
         let hues = max(1, min(room ?? 1, voices.count))

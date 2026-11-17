@@ -118,22 +118,25 @@
           "id": "mute",
           "title": "Muted means silent",
           "body": "When you mute in the call app, Mossad writes silence over your track for that time.",
-          "details": [],
+          "details": [
+            "When Mossad cannot see the mute button, it shows that you were muted when it last looked, and it keeps your mic, so none of your words is lost"
+          ],
           "icon": "mic.slash",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Detection/MuteState.swift", "Packages/MossadCore/Sources/MossadCore/Records/MutedAudio.swift", "App/MutedBanner.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Detection/MuteState.swift", "Packages/MossadCore/Sources/MossadCore/Detection/ShownMute.swift", "Packages/MossadCore/Sources/MossadCore/Records/MutedAudio.swift", "App/MutedBanner.swift"]
         },
         {
           "id": "controls",
           "title": "Pause, stop, or skip",
           "body": "Pause a recording, stop it early, or skip a call and delete it from the menu bar.",
           "details": [
+            "The call you record is always one click away, at the top of the window, from any page",
             "Mark a meeting or a whole series in the calendar as do not record",
             "Record a meeting in a room by hand"
           ],
           "icon": "pause.circle",
           "comingSoon": false,
-          "sources": ["App/CallControls.swift", "App/MenuContent.swift", "Packages/MossadCore/Sources/MossadCore/Calendar/NoRecordBook.swift"]
+          "sources": ["App/CallControls.swift", "App/MenuContent.swift", "App/SidebarNowCard.swift", "Packages/MossadCore/Sources/MossadCore/Calendar/NoRecordBook.swift"]
         },
         {
           "id": "calls-first",

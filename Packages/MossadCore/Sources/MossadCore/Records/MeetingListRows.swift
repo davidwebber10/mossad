@@ -21,4 +21,16 @@ public enum MeetingListRows {
         if inList { return true }
         return known && query.trimmingCharacters(in: .whitespaces).isEmpty
     }
+
+    /// The list's rows: every meeting but the call that records now, which is the sidebar's Now card. Only that call,
+    /// by its id: a record that another copy of the app left as "recording" stays a row, never invisible.
+    public static func listed(_ records: [CallRecord], liveID: String?) -> [CallRecord] {
+        guard let liveID else { return records }
+        return records.filter { $0.id != liveID }
+    }
+
+    /// The meeting the list opens on: its first row, or the live call when it is the only meeting (a first call).
+    public static func firstSelection(_ records: [CallRecord], liveID: String?) -> String? {
+        listed(records, liveID: liveID).first?.id ?? records.first?.id
+    }
 }

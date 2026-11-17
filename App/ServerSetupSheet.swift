@@ -185,7 +185,8 @@ struct ServerSetupSheet: View {
             } catch {
                 foundAddress = nil
                 Log.error("Checking the server address failed: \(error)")
-                addressCheck = .problem(FriendlyError(error is ServerError ? ServerError.notMossad : error, context: .connectingServer, service: "your server"))
+                addressCheck = .problem(FriendlyError(HelloAnswer.setupError(error, typedHost: url.host, connectedHost: controller.serverConnection?.address.host),
+                                                        context: .connectingServer, service: "your server"))
             }
         }
     }

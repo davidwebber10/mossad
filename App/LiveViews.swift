@@ -16,8 +16,8 @@ struct LiveBand: View {
                 LivePeopleLine(model: controller.live, record: record, names: controller.choice(forCall: record.id) == .here)
             }
             .padding(.top, Space.m)
-            if controller.isMuted, !controller.isPaused, !room {
-                MutedBanner(platform: record.platform).padding(.top, Space.l)
+            if controller.shownMute.shows, !controller.isPaused, !room {
+                MutedBanner(mute: controller.shownMute, platform: record.platform).padding(.top, Space.l)
             }
             Group {
                 if room { RoomWaveform(model: controller.live) } else { LiveBandWaveform() }
