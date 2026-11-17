@@ -121,7 +121,7 @@ extension AppController {
     /// store is in step and the name is one saved person on a sure match. It changes nothing when there is
     /// nothing new to link.
     func linkCoachPeople() {
-        guard !isInert, coachEnabled, meetingsLoaded, let people = library.identity?.people.people, !people.isEmpty else { return }
+        guard mode.does(.people), coachEnabled, meetingsLoaded, let people = library.identity?.people.people, !people.isEmpty else { return }
         let records = meetings
         do {
             var linked = 0

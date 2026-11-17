@@ -203,7 +203,7 @@ extension AppController {
     /// After meetings are written: checks the owner's points against them. Never while a call records, and never
     /// with no points.
     func runNextTimeCheck() {
-        guard !isInert, !isRecording, !series.checking, let llm = languageModel else { return }
+        guard mode.does(.nextTime), !isRecording, !series.checking, let llm = languageModel else { return }
         refreshSeries()
         guard series.book.points.contains(where: \.isOpen) else { return }
         series.checking = true

@@ -6,6 +6,8 @@ import MossadCore
 /// only. The installed copy runs none of them, except `--open-window`, which only opens a page.
 @MainActor
 enum DevHooks {
+    /// Hooks of the profiles' workers: `MOSSAD_PROOF_WORKERS`, `MOSSAD_PROOF_CALL` (in `WorkerEntry`), and in a preview
+    /// `MOSSAD_WORKER_LINES`.
     /// `--ui-preview` opens the UI on $MOSSAD_ROOT with no detection, recording, or processing, so the screens can
     /// be checked while the installed copy records a call.
     static let preview = CommandLine.arguments.contains("--ui-preview")
@@ -29,6 +31,16 @@ enum DevHooks {
 
     private static func has(_ flag: String) -> Bool { CommandLine.arguments.contains(flag) }
     private static var env: [String: String] { ProcessInfo.processInfo.environment }
+
+    /// `MOSSAD_PROOF_WORKERS=1` on a made-up registry, in a debug build: the window app starts the workers of the
+    /// registry's other profiles (never `default`), for the proofs. Those workers stay in their made-up folders.
+    static var proofWorkers: Bool {
+        #if DEBUG
+        env["MOSSAD_PROOF_WORKERS"] == "1" && AppIdentity.current.madeUpRegistry && !preview
+        #else
+        false
+        #endif
+    }
 
     static func run(_ c: AppController, inert: Bool) {
         // `--regenerate-summaries` writes new summaries for today's finished meetings.
@@ -90,6 +102,13 @@ enum DevHooks {
         // `MOSSAD_PROFILES=<file>` shows a made-up registry in the switcher and Settings (loaded by `AppIdentity`).
         // `MOSSAD_PROFILE_SHEET=add|rename|delete|code` opens that sheet of Settings > General > Profiles; rename and
         // delete for the first profile that is not `default`.
+        // `MOSSAD_WORKER_LINES="1a2b3c4d=2 meetings in work"` (more with `;`): the switcher's second lines.
+        if preview, let lines = env["MOSSAD_WORKER_LINES"] {
+            c.workerLines = Dictionary(lines.split(separator: ";").compactMap { pair -> (String, String)? in
+                let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
+                return parts.count == 2 ? (parts[0], parts[1]) : nil
+            }, uniquingKeysWith: { $1 })
+        }
         if preview, let sheet = env["MOSSAD_PROFILE_SHEET"] {
             let other = c.profiles.registry.live.first { !$0.isDefault }?.id
             let chosen: ProfileSheet? = switch sheet {

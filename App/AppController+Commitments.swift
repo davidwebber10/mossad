@@ -9,7 +9,7 @@ extension AppController {
 
     /// Reads new calls for what the owner promised, one at a time.
     func runCommitments() {
-        guard !isInert else { return }
+        guard mode.does(.commitments) else { return }
         guard !findingCommitments, let llm = languageModel else { return }
         if commitmentsSince == 0 { commitmentsSince = Date().addingTimeInterval(-Self.commitmentsBackfillDays * 86_400).timeIntervalSince1970 }
         findingCommitments = true
@@ -39,7 +39,7 @@ extension AppController {
     /// now after a rename. It writes only when something changed, with a copy of the book as it was before the
     /// first change. An id is not the owner's change, so the time of the last change stays.
     func linkCommitmentPeople(_ people: [Person], records: [CallRecord]) {
-        guard !isInert, !people.isEmpty else { return }
+        guard mode.does(.people), !people.isEmpty else { return }
         let refs = PersonReferences(people: people)
         let file = paths.commitments.appendingPathComponent(CommitmentBook.fileName)
         guard let book = try? CommitmentBook.load(from: paths.commitments), refs.refresh(book, records: records) != book,

@@ -829,17 +829,53 @@ public actor Pipeline {
     @discardableResult
     private func matchInvite(_ r: inout CallRecord) async -> Bool {
         detail(r.id, "Finding the calendar invite")
-        let events = await calendar.events(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
+        let (found, read) = await invite(for: r)
+        guard let found else {
+            // No invite, or a calendar that could not be read: then "no invite" is not known, and the record says so.
+            r.inviteUnknown = read.known ? nil : true
+            return false
+        }
+        r.setInvite(found.event)
+        r.inviteUnknown = nil
+        return found.sure
+    }
+
+    /// The invite of a call by the rules of its platform, or nil.
+    private func invite(for r: CallRecord) async -> (found: (event: CalendarEventInfo, sure: Bool)?, read: CalendarRead) {
+        let read = await calendar.read(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
+        let events = read.events
         if r.platform == .phoneCall {
             // Only the event of its one person; the owner's typed title stays, as `customTitle` wins over the invite's.
             guard let event = CalendarMatcher.phoneCallEvent(start: r.start, end: r.end, in: events, hint: r.personHint,
-                                                             people: library.identity?.people.people ?? []) else { return false }
-            r.setInvite(event)
-            return true
+                                                             people: library.identity?.people.people ?? []) else { return (nil, read) }
+            return ((event, true), read)
         }
-        guard let match = CalendarMatcher.match(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) else { return false }
-        r.setInvite(match.event)
-        return match.sure
+        guard let match = CalendarMatcher.match(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.end, in: events) else { return (nil, read) }
+        return ((match.event, match.sure), read)
+    }
+
+    /// Looks again for the invite of each written meeting marked `inviteUnknown` that ended in the last `days` days,
+    /// when this calendar can be read. A match gives the title and the people and writes the note again; the summary
+    /// and the names of the voices stay. No match only clears the mark. Returns how many it matched.
+    public func matchUnknownInvites(newerThan days: Int = 30) async -> Int {
+        guard await calendar.canRead() else { return 0 }
+        let since = now().addingTimeInterval(-Double(days) * 86_400)
+        var matched = 0
+        for r in ProcessingQueue(paths: paths).allRecords() where r.inviteUnknown == true && r.status == .written && r.end >= since {
+            let (found, read) = await invite(for: r)
+            // A read that failed, Google's too (offline, or slower than the wait): no match is no answer, and the mark
+            // stays for the next launch, within the days.
+            if found == nil, !read.known || read.google == .failed { continue }
+            guard var saved = edit(r.id, { record in
+                record.inviteUnknown = nil
+                if let found { record.setInvite(found.event) }
+                return true
+            }) else { continue }
+            save(&saved, dir: paths.callDirectory(r.id))
+            if found != nil { matched += 1 }
+        }
+        if matched > 0 { Log.info("Calendar: \(matched) meetings got their invite at launch") }
+        return matched
     }
 
     /// Adds calendar details and the summary. Returns false when the summary should be retried later.
@@ -939,14 +975,15 @@ public actor Pipeline {
     /// Runs a heavy step off this actor at the plan's priority. A step that ran during a call logs its time.
     private func runHeavy<T: Sendable>(_ id: String, _ step: HeavyStep, _ plan: HeavyWorkPlan,
                                        _ body: @escaping @Sendable () async throws -> T) async throws -> T {
-        guard plan.duringCall else { return try await HeavyWork.run(priority: plan.priority, body) }
+        guard plan.usesLane else { return try await HeavyWork.run(priority: plan.priority, body) }
         let heavy = heavy
+        let logs = plan.duringCall
         return try await heavy.lane.run {
             let clock = ContinuousClock(), start = clock.now
             var failed = true
             defer {
                 let d = (clock.now - start).components
-                heavy.log(step.logLine(callID: id, seconds: Double(d.seconds) + Double(d.attoseconds) / 1e18, failed: failed))
+                if logs { heavy.log(step.logLine(callID: id, seconds: Double(d.seconds) + Double(d.attoseconds) / 1e18, failed: failed)) }
             }
             let value = try await HeavyWork.run(priority: plan.priority, body)
             failed = false
@@ -1421,6 +1458,17 @@ public struct MissingAPIKey: Error, CustomStringConvertible {
     public let service: String
     public init(service: String) { self.service = service }
     public var description: String { "No \(service) API key. Run scripts/import-keys.sh, then reopen Mossad." }
+}
+
+/// Used when no key is stored for the chosen transcription: the call stays queued until a key exists.
+public struct MissingKeyTranscriber: Transcribing {
+    public let service: String
+
+    public init(service: String) { self.service = service }
+
+    public func transcribe(file: URL, track: Track, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> [Utterance] {
+        throw MissingAPIKey(service: service)
+    }
 }
 
 private extension CallRecord {

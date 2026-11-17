@@ -32,6 +32,8 @@ struct MossadEntry {
         CompanyDomains.loadSaved()
         // The build flag says what this copy does; the bundle id picks its folder and Keychain. They must agree.
         if let mismatch = AppIdentity.current.mismatch(rehearsalBuild: Rehearsal.isOn) { preconditionFailure(mismatch) }
+        // `--profile <id> --worker`: a profile's background run, with no window. Handed over before anything else.
+        if WorkerLaunch.isWorker(CommandLine.arguments) { WorkerEntry.run(identity) }
         // `--import-keys` copies API keys from the environment (Doppler) into the Keychain and exits.
         if CommandLine.arguments.contains("--import-keys") {
             let stored = importKeys(from: ProcessInfo.processInfo.environment, into: .app)
@@ -318,6 +320,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var quitPending = false
+
+    /// The workers of the other profiles stop with this app: `stopping` in the file and SIGTERM, no wait.
+    func applicationWillTerminate(_ notification: Notification) {
+        AppController.current?.workers?.quit()
+    }
 
     private func finishQuit() {
         guard quitPending else { return }

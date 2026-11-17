@@ -23,6 +23,8 @@ public struct Paths: Sendable {
     public var audio: URL { root.appendingPathComponent("Audio") }
     public var voices: URL { root.appendingPathComponent("Voices") }
     public var logs: URL { root.appendingPathComponent("Logs") }
+    /// A worker's status file; made only by a worker, never by `ensureDirectories`.
+    public var worker: URL { root.appendingPathComponent("Worker") }
     /// The coach's profile of the owner: patterns, the current focus, and notes on each person.
     public var coach: URL { root.appendingPathComponent("Coach") }
     /// One JSON file per chat in the Chat tab.

@@ -840,13 +840,14 @@
             "Each profile has its own keys, people, voices, coach, sync, and backup",
             "A call is recorded by the profile you are in, and the menu bar shows which one",
             "An AI app that you connect to one profile never reads the other",
+            "The profile you are not in still finishes its meetings and keeps its sync and backup up to date",
             "On your iPhone, each profile has its own meetings, and you change profile in Settings",
             "A phone call that you share goes to the profile you pick",
             "With one profile, nothing changes"
           ],
           "icon": "person.2.crop.square.stack",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Profiles/ProfileRegistry.swift", "Packages/MossadCore/Sources/MossadCore/Support/AppIdentity.swift", "App/ProfileSwitcher.swift", "App/ProfileSettings.swift", "PhoneApp/PhoneProfiles.swift", "PhoneApp/ProfilesScreen.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/PhoneProfileBook.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Profiles/ProfileRegistry.swift", "Packages/MossadCore/Sources/MossadCore/Support/AppIdentity.swift", "App/ProfileSwitcher.swift", "App/ProfileSettings.swift", "Packages/MossadCore/Sources/MossadCore/Worker/ProfileWorker.swift", "PhoneApp/PhoneProfiles.swift", "PhoneApp/ProfilesScreen.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/PhoneProfileBook.swift"]
         }
       ]
     },

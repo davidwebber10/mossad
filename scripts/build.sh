@@ -73,6 +73,14 @@ gone() {
 }
 # A copy that does not answer would keep the lock and run from a replaced bundle. The next launch recovers its call.
 gone || { pkill -9 -f "$APP_PROCESS" || true; gone || { echo "The old copy of Mossad did not end." >&2; exit 1; }; }
+# The workers of the other profiles end by themselves once the app is gone (they watch its pid). The script sends
+# them no signal: it waits up to 5 s for them, then goes on.
+WORKER_PROCESS='/Mossad.app/Contents/MacOS/Mossad --profile [a-z0-9]+ --worker$'
+workers_gone() {
+  for _ in $(seq 1 50); do pgrep -f "$WORKER_PROCESS" >/dev/null || return 0; sleep 0.1; done
+  return 1
+}
+workers_gone || echo "A worker of another profile is still ending; installing anyway." >&2
 rm -rf /Applications/Mossad.app
 cp -R build/Build/Products/Release/Mossad.app /Applications/
 if [ "${1:-}" != "--no-launch" ]; then open /Applications/Mossad.app; fi

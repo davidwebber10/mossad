@@ -7,7 +7,7 @@ extension AppController {
     /// Who may send: never a preview, Rehearsal, a second copy, a demo folder (`MOSSAD_ROOT`), or a debug build
     /// without the hidden flag.
     var usageStatsGate: UsageReportPlan.Gate {
-        UsageReportPlan.Gate(enabled: usageStatsEnabled, inert: isInert, rehearsal: Rehearsal.isOn,
+        UsageReportPlan.Gate(enabled: usageStatsEnabled, inert: !mode.does(.usageStats), rehearsal: Rehearsal.isOn,
                              rootOverride: !(ProcessInfo.processInfo.environment["MOSSAD_ROOT"] ?? "").isEmpty,
                              debugBuild: DevHooks.debug, debugFlag: MacDefaults.store.bool(forKey: UsageReportPlan.debugKey))
     }
