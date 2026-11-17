@@ -46,14 +46,19 @@ public enum HeavyWorkPlan: Equatable, Sendable {
     case behindCall
     /// Until the call ends, or until the owner releases this call.
     case wait
+    /// No call records, but this is a worker: the app in front comes first, so at the lowest priority, one at a time.
+    case behindApp
 
-    public static func plan(for step: HeavyStep, callRecording: Bool, released: Bool) -> HeavyWorkPlan {
-        guard callRecording else { return .run }
+    public static func plan(for step: HeavyStep, callRecording: Bool, released: Bool, worker: Bool = false) -> HeavyWorkPlan {
+        guard callRecording else { return worker ? .behindApp : .run }
         return step.runsDuringCall || released ? .behindCall : .wait
     }
 
     public var priority: TaskPriority { self == .run ? .utility : .background }
-    public var duringCall: Bool { self != .run }
+    /// The step runs, or waits, beside a live call: the "During a call" line is written for it.
+    public var duringCall: Bool { self == .behindCall || self == .wait }
+    /// One heavy job at a time, through the gate's one lane.
+    public var usesLane: Bool { self == .behindCall || self == .behindApp }
 }
 
 /// The words of the "Process now" button where it releases every call that waits (the sidebar, the menu). The
@@ -142,13 +147,16 @@ public final class HeavyWorkGate: Sendable {
     /// How often a wait looks for "Process now": a click must not wait for the next check of the call.
     private static let releaseInterval: Duration = .milliseconds(250)
     let log: @Sendable (String) -> Void
-    /// Every step that runs behind a call goes through this lane.
+    /// Every step that runs behind a call, or behind the app in front, goes through this lane.
     let lane = HeavyLane()
+    /// A worker's gate: with no call, each step runs behind the app in front.
+    let worker: Bool
 
-    public init(pollInterval: Duration = .seconds(5), isCallRecording: (@Sendable () async -> Bool)? = nil,
+    public init(pollInterval: Duration = .seconds(5), isCallRecording: (@Sendable () async -> Bool)? = nil, worker: Bool = false,
                 log: @escaping @Sendable (String) -> Void = { Log.info($0) }) {
         self.pollInterval = pollInterval
         self.state = Mutex(State(check: isCallRecording))
+        self.worker = worker
         self.log = log
     }
 
@@ -186,8 +194,8 @@ public final class HeavyWorkGate: Sendable {
 
     public func plan(_ step: HeavyStep, callID: String) async -> HeavyWorkPlan {
         let released = isReleased(callID)
-        if released { return await isHeld ? .behindCall : .run }
-        return HeavyWorkPlan.plan(for: step, callRecording: await isHeld, released: false)
+        if released { return await isHeld ? .behindCall : (worker ? .behindApp : .run) }
+        return HeavyWorkPlan.plan(for: step, callRecording: await isHeld, released: false, worker: worker)
     }
 
     /// Returns the plan once the step may run: at once in most cases. A cancelled task does not wait; it runs

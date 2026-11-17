@@ -939,14 +939,15 @@ public actor Pipeline {
     /// Runs a heavy step off this actor at the plan's priority. A step that ran during a call logs its time.
     private func runHeavy<T: Sendable>(_ id: String, _ step: HeavyStep, _ plan: HeavyWorkPlan,
                                        _ body: @escaping @Sendable () async throws -> T) async throws -> T {
-        guard plan.duringCall else { return try await HeavyWork.run(priority: plan.priority, body) }
+        guard plan.usesLane else { return try await HeavyWork.run(priority: plan.priority, body) }
         let heavy = heavy
+        let logs = plan.duringCall
         return try await heavy.lane.run {
             let clock = ContinuousClock(), start = clock.now
             var failed = true
             defer {
                 let d = (clock.now - start).components
-                heavy.log(step.logLine(callID: id, seconds: Double(d.seconds) + Double(d.attoseconds) / 1e18, failed: failed))
+                if logs { heavy.log(step.logLine(callID: id, seconds: Double(d.seconds) + Double(d.attoseconds) / 1e18, failed: failed)) }
             }
             let value = try await HeavyWork.run(priority: plan.priority, body)
             failed = false
