@@ -37,6 +37,14 @@ enum DevHooks {
         }
         let looks = preview || debug
         #if DEBUG
+        // `MOSSAD_PROOF_HOTKEY=1` on a made-up registry: one made-up global key (F19 with Control, Option, Shift, and
+        // Command: no keyboard has a key the owner presses by accident there, and no app uses it), for the proof
+        // that a switch hands the hot keys over. Registered with the same retries as the real keys.
+        if env["MOSSAD_PROOF_HOTKEY"] == "1", AppIdentity.current.madeUpRegistry, !preview {
+            let key = HotKeyShortcut(keyCode: 0x50, modifiers: [.control, .option, .shift, .command])
+            let held = c.hotKeys.register(.proof, key, retrying: true) {}
+            Log.info("Proof hot key: \(held ? "held at launch" : "taken by another copy at launch; trying again")")
+        }
         // `MOSSAD_PROFILE_SWITCH=<id>` on a made-up registry: one real switch, a few seconds after launch.
         if let id = env["MOSSAD_PROFILE_SWITCH"], let file = env["MOSSAD_PROFILES"], AppIdentity.current.madeUpRegistry, !preview {
             let failing = env["MOSSAD_PROFILE_SWITCH_FAIL"] == "1"

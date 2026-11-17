@@ -241,16 +241,23 @@ final class AppController: ObservableObject {
     @Published private(set) var noRecord = NoRecordBook()
     private let noRecordGate = NoRecordGate()
     /// The other profiles' do-not-record lists, read once at launch for the gate only: never shown, never logged.
-    var otherNoRecord: [(name: String, book: NoRecordBook)] = []
+    var otherNoRecord: [(id: String, name: String, book: NoRecordBook)] = []
     /// Every other live profile with its NoRecord folder; none for a copy that takes no profiles or runs on a made-up
     /// registry.
-    var otherNoRecordFolders: [(name: String, folder: URL)] {
+    var otherNoRecordFolders: [(id: String, name: String, folder: URL)] {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        return AppIdentity.current.otherProfiles.map { ($0.name, Paths(root: $0.rootURL(home: home)).noRecord) }
+        return AppIdentity.current.otherProfiles(in: profiles.registry).map { ($0.id, $0.name, Paths(root: $0.rootURL(home: home)).noRecord) }
+    }
+
+    /// The other profiles' lists again after the registry changed (an Add, a Rename, a Delete): a deleted profile's
+    /// list leaves the gate at once, a new profile's joins it.
+    func refreshOtherNoRecord() {
+        otherNoRecord = otherNoRecordFolders.map { ($0.id, $0.name, NoRecordBook.peek(from: $0.folder)) }
+        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord.map(\.book)))
     }
     /// Why calls with an invite are kept off the record with no choice of the owner: an unknown list, the active
     /// profile's or another's.
-    var noRecordProblem: NoRecordListProblem? { NoRecordListProblem.find(own: noRecord, others: otherNoRecord) }
+    var noRecordProblem: NoRecordListProblem? { NoRecordListProblem.find(own: noRecord, others: otherNoRecord.map { ($0.name, $0.book) }) }
     /// Calls still to come, without the ones being recorded or already recorded.
     /// Views ask for this each time they draw. The list changes with the events, the meetings, and the clock, so it
     /// is computed once for each of those and for each minute.
@@ -392,9 +399,13 @@ final class AppController: ObservableObject {
     /// The registry as the switcher and Settings show it; read again before each change.
     @Published var profiles: ProfileRegistry.Loaded = AppIdentity.current.registry
     /// Why the last change of profiles did not happen, in words for the owner.
-    @Published var profileProblem: String?
+    @Published var profileProblem: String? { didSet { profileProblemSince = Date() } }
     /// The sheet of Settings > General > Profiles that is open.
     @Published var profileSheet: ProfileSheet?
+    /// When `profileProblem` was set, for how long it shows.
+    var profileProblemSince = Date()
+    /// A switch is going on: no other change of profiles starts until it ends.
+    var switching = false
     /// A preview, Rehearsal, or a second copy on the same folder: it shows the meetings and records, processes,
     /// and syncs nothing.
     private(set) var isInert = false
@@ -626,7 +637,7 @@ final class AppController: ObservableObject {
         noRecord = NoRecordBook.load(from: paths.noRecord)
         // Not recording is Mac-wide: another profile's refusal blocks here too, and its blocked call goes on.
         let otherFolders = otherNoRecordFolders
-        otherNoRecord = otherFolders.map { ($0.name, NoRecordBook.peek(from: $0.folder)) }
+        otherNoRecord = otherFolders.map { ($0.id, $0.name, NoRecordBook.peek(from: $0.folder)) }
         noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord.map(\.book)))
         noRecordGate.persistSession(in: paths.noRecord)
         noRecordGate.adopt(sessionsIn: otherFolders.map(\.folder))
@@ -798,8 +809,10 @@ final class AppController: ObservableObject {
             }
             requestPermissions()
             _ = updater
-            hotKeys.register(.bookmark, HotKeyShortcut.bookmark) { [weak self] in self?.bookmarkCurrentCall() }
-            registerAskShortcut()
+            // Tried again for a while: after a switch the instance before may still hold them for a moment.
+            hotKeys.onRegistered = { [weak self] id in if id == .ask { self?.askShortcutFailed = false } }
+            hotKeys.register(.bookmark, HotKeyShortcut.bookmark, retrying: true) { [weak self] in self?.bookmarkCurrentCall() }
+            registerAskShortcut(retrying: true)
 
             refreshUpcoming()
             // Chats and notes from the phone arrive within five minutes.

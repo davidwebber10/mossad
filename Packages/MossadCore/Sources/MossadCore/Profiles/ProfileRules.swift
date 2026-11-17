@@ -3,13 +3,17 @@ import Foundation
 
 /// The pure rules of profiles: names, folders, ids, colors, the delete rule, and the server each profile owns.
 public enum ProfileRules {
-    public static let nameLimit = 40
+    /// The longest name of a profile, in characters (an emoji is one).
+    public static let nameLimit = 30
+    /// The most characters of the name that a folder keeps.
+    public static let folderLimit = 40
     /// Folders that are never a new profile's: the first profile's and Rehearsal's.
     static let reservedFolders: Set<String> = ["mossad", "mossad rehearsal"]
 
     public static func nameProblem(_ typed: String, in registry: ProfileRegistry, renaming id: String? = nil) -> String? {
         let name = typed.trimmingCharacters(in: .whitespacesAndNewlines)
         if name.isEmpty { return "Give the profile a name." }
+        if name.count > nameLimit { return "Use a name of \(nameLimit) characters or fewer." }
         let taken = registry.live.contains { $0.id != id && $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == name.lowercased() }
         return taken ? "Another profile has this name." : nil
     }
@@ -19,7 +23,7 @@ public enum ProfileRules {
     public static func folderName(for name: String, taken: Set<String>) -> String {
         let kept = String(name.filter { $0.isLetter || $0.isWholeNumber || $0 == " " || $0 == "-" || $0 == "_" })
         let words = kept.split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
-        let short = String(words.prefix(nameLimit)).trimmingCharacters(in: .whitespaces)
+        let short = String(words.prefix(folderLimit)).trimmingCharacters(in: .whitespaces)
         let base = "Mossad " + (short.isEmpty ? "Profile" : short)
         let all = Set(taken.map { $0.lowercased() }).union(reservedFolders)
         guard all.contains(base.lowercased()) else { return base }
@@ -47,7 +51,8 @@ public enum ProfileRules {
 
     public static func deleteProblem(_ id: String, in registry: ProfileRegistry, active: String, typed: String) -> String? {
         if id == Profile.defaultID { return "The first profile cannot be deleted." }
-        if id == active { return "Switch to another profile first." }
+        // This copy's profile, and the file's active one (the target of a switch that is still going on).
+        if id == active || id == registry.active { return "Switch to another profile first." }
         guard let profile = registry.profile(id), typed.trimmingCharacters(in: .whitespacesAndNewlines) == profile.name else {
             return "Type the profile's name to delete it."
         }
@@ -110,6 +115,23 @@ public enum ProfileSwitch {
     public static func afterStart(started: Bool, saved: Bool, was active: String) -> AfterStart {
         if started { return .quit }
         return saved ? .restore(active: active) : .stay
+    }
+
+    /// Whether a change of profiles may start: a copy that changes the registry, and no switch going on.
+    public static func mayChange(inert: Bool, mayChangeRegistry: Bool, switching: Bool) -> Bool {
+        !inert && mayChangeRegistry && !switching
+    }
+
+    /// The tries to take the Mac-wide lock again after a switch that did not happen, while the new instance ends.
+    public static let lockRetries: [TimeInterval] = [0.2, 0.5, 1, 2, 4]
+
+    /// How long a problem shows under the switcher; a refusal for a call goes as soon as no call records.
+    public static let problemShows: TimeInterval = 30
+
+    public static func problemStays(_ problem: String, recording: Bool, age: TimeInterval) -> Bool {
+        guard age <= problemShows else { return false }
+        if problem == refusal || problem == addRefusal { return recording }
+        return true
     }
 
     /// Right before the old instance quits: a call that started after the decision stops the switch.

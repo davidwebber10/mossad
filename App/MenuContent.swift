@@ -17,11 +17,11 @@ struct MenuContent: View {
             if let menu = controller.profileMenu {
                 PanelRow {
                     ProfileDot(color: menu.color)
-                    Text(menu.title).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
+                    Text(menu.title).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary).lineLimit(1)
                     Spacer(minLength: 0)
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Profile, \(menu.title)")
+                .accessibilityLabel(ProfileSettingsWords.accessibilityLabel(controller.activeProfile))
             }
             statusSection
             if controller.processing > 0 { processingRow }

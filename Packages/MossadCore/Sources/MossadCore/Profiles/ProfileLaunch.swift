@@ -9,7 +9,19 @@ public enum ProfileLaunch {
     /// the foreground app. Only with a registry file: with none, nothing new is made on disk. A made-up registry
     /// takes its own lock beside its file.
     public static func takesForegroundLock(_ identity: AppIdentity) -> Bool {
-        identity.takesProfiles && identity.registry.state != .none
+        takesForegroundLock(identity, now: identity.registry.state)
+    }
+
+    /// With the state of the file now: after the first Add, a copy that started with no file takes the lock too.
+    public static func takesForegroundLock(_ identity: AppIdentity, now state: ProfileRegistry.State) -> Bool {
+        identity.takesProfiles && state != .none
+    }
+
+    /// Whether a command of this profile may go on: the profile is still live in the file of now. `default` always
+    /// is; a file that cannot be read now is not known, so the command goes on.
+    public static func stillServes(_ id: String, registry: ProfileRegistry.Loaded) -> Bool {
+        if id == Profile.defaultID || registry.state == .unreadable { return true }
+        return registry.registry.live.contains { $0.id == id }
     }
 
     public static func choice(arguments: [String], registry: ProfileRegistry.Loaded) -> Choice {

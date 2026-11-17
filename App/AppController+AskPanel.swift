@@ -21,12 +21,12 @@ extension AppController {
     }
 
     /// Registered all the time, as the owner chose, so it opens the quick chat with no call too.
-    func registerAskShortcut() {
+    func registerAskShortcut(retrying: Bool = false) {
         guard let shortcut = askShortcut else {
             askShortcutFailed = false
             return hotKeys.unregister(.ask)
         }
-        askShortcutFailed = !hotKeys.register(.ask, shortcut) { [weak self] in self?.toggleAskPanel() }
+        askShortcutFailed = !hotKeys.register(.ask, shortcut, retrying: retrying) { [weak self] in self?.toggleAskPanel() }
     }
 
     /// The shortcut that works now, for the menu and the panel's keys; nil when cleared or not registered.

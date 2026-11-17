@@ -181,9 +181,12 @@ extension AppIdentity {
     /// The registry's other live profiles, for the Mac-wide reads (the do-not-record lists). None for a copy that
     /// takes no profiles, and none on a made-up registry, whose `default` would be the owner's real folder. With an
     /// unreadable registry the other profiles are not known (it holds `default` only), so they cannot block a call.
-    public var otherProfiles: [Profile] {
+    public var otherProfiles: [Profile] { otherProfiles(in: registry.registry) }
+
+    /// The same rule with the registry as it is now: a profile added or deleted after the launch counts.
+    public func otherProfiles(in now: ProfileRegistry) -> [Profile] {
         guard takesProfiles, !madeUpRegistry else { return [] }
-        return registry.registry.live.filter { $0.id != profile.id }
+        return now.live.filter { $0.id != profile.id }
     }
 
     public func otherProfileRoots(home: URL) -> [URL] { otherProfiles.map { $0.rootURL(home: home) } }

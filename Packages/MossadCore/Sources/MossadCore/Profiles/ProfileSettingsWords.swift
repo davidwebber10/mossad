@@ -41,6 +41,15 @@ public enum ProfileSettingsWords {
         return loaded.registry.removing.isEmpty ? nil : "A deleted profile is still being removed. Mossad tries again at the next launch."
     }
 
+    /// Why no change of the list may be made now, or nil when one may.
+    public static func changeRefusal(_ loaded: ProfileRegistry.Loaded) -> String? {
+        switch loaded.state {
+        case .none, .read: nil
+        case .newer: "This Mac has a profile list from a newer Mossad. Update Mossad to change profiles."
+        case .partial, .unreadable: footer(loaded)
+        }
+    }
+
     public static func deleteText(_ profile: Profile) -> String {
         "This removes the profile's keys and settings from this Mac and its meetings from iCloud, and moves \(profile.root) to the Trash."
     }

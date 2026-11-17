@@ -50,7 +50,16 @@ struct MossadEntry {
             // call, so a switch turned off reaches this process, which an AI app keeps for days.
             // `--mcp --profile <id>` serves that profile under its own name; `--mcp` alone is the first profile, `mossad`.
             let name = MCPCommand(profile: identity.profile, among: identity.registry.registry.live).serverName
-            MCPServer(paths: .live, owner: owner, name: name, settings: { ToolSettings.read(.standard) }).run()
+            // A profile deleted while an AI app keeps this process: each tool call reads the registry once and ends.
+            let check: @Sendable () -> Bool = {
+                let env = ProcessInfo.processInfo.environment
+                let home = FileManager.default.homeDirectoryForCurrentUser
+                let madeUp = env["MOSSAD_PROFILES"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+                let read = madeUp.map { ProfileRegistry.load(from: $0) } ?? ProfileRegistry.load(from: ProfileRegistry.fileURL(home: home), home: home)
+                return ProfileLaunch.stillServes(identity.profile.id, registry: read)
+            }
+            let stillServes: (@Sendable () -> Bool)? = identity.profile.isDefault ? nil : check
+            MCPServer(paths: .live, owner: owner, name: name, stillServes: stillServes, settings: { ToolSettings.read(.standard) }).run()
             exit(0)
         }
         // `--persona-eval --gold <folder> [--cap 15] [--model claude-sonnet-5-5] [--out <folder>] [--estimate-only]` runs the

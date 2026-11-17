@@ -19,7 +19,19 @@ extension AppController {
     var profileMenu: ProfileMenu? { ProfileMenu(profiles.registry, active: activeProfile.id, recording: isRecording) }
 
     /// Only the real app changes the real registry: never a preview, an inert copy, or a run on a made-up registry.
-    private var changesProfiles: Bool { !isInert && AppIdentity.current.mayChangeRegistry }
+    private var changesProfiles: Bool {
+        ProfileSwitch.mayChange(inert: isInert, mayChangeRegistry: AppIdentity.current.mayChangeRegistry, switching: switching)
+    }
+
+    /// The problem as the switcher and Settings show it: for a while, and a refusal for a call only during one.
+    var visibleProfileProblem: String? {
+        guard let problem = profileProblem,
+              ProfileSwitch.problemStays(problem, recording: isRecording, age: Date().timeIntervalSince(profileProblemSince)) else { return nil }
+        return problem
+    }
+
+    /// Why a change of the list is refused: the state's own words, never "could not be read" for a newer file.
+    private func refusal(_ read: ProfileRegistry.Loaded) -> String { ProfileSettingsWords.changeRefusal(read) ?? Self.unreadableProfiles }
 
     /// The file as it is now, read again before each change: another instance may have written it since launch.
     private func readProfiles() -> ProfileRegistry.Loaded {
@@ -79,6 +91,9 @@ extension AppController {
         config.arguments = arguments
         config.environment = environment
         let start = Date()
+        switching = true
+        // The new instance takes the hot keys and the Mac-wide lock: this one lets go of both first.
+        hotKeys.suspendAll()
         foregroundLock = nil
         Log.info("Profiles: switching")
         Task {
@@ -104,10 +119,9 @@ extension AppController {
                     if restore.canSave { try? restore.save(to: file) }
                 }
                 self.profiles = ProfileRegistry.load(from: file, home: home)
-                if self.foregroundLock == nil, ProfileLaunch.takesForegroundLock(AppIdentity.current),
-                   case .held(let lock) = InstanceLock.acquire(root: Self.macWideLockFolder) {
-                    self.foregroundLock = lock
-                }
+                self.switching = false
+                self.hotKeys.resumeAll()
+                self.retakeMacWideLock()
                 self.profileProblem = problem
                 Log.info("Profiles: the switch did not happen; this copy goes on")
             }
@@ -127,6 +141,23 @@ extension AppController {
         }
     }
 
+    /// After a switch that did not happen: the Mac-wide lock again, by the file of now (the first Add made it), tried
+    /// a few times while the failed new instance ends.
+    private func retakeMacWideLock() {
+        guard foregroundLock == nil, ProfileLaunch.takesForegroundLock(AppIdentity.current, now: profiles.state) else { return }
+        Task { @MainActor [weak self] in
+            for delay in [0] + ProfileSwitch.lockRetries {
+                if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+                guard let self, self.foregroundLock == nil else { return }
+                if case .held(let lock) = InstanceLock.acquire(root: Self.macWideLockFolder) {
+                    self.foregroundLock = lock
+                    return
+                }
+            }
+            Log.error("Profiles: the Mac-wide lock could not be taken again")
+        }
+    }
+
     private static func seconds(since start: Date) -> String { String(format: "%.2f", Date().timeIntervalSince(start)) }
 
     /// The folder of the Mac-wide lock: beside the registry, or beside a made-up one.
@@ -139,7 +170,7 @@ extension AppController {
         profileProblem = nil
         if isRecording { profileProblem = ProfileSwitch.addRefusal; return }
         let read = readProfiles()
-        guard read.canSave else { profileProblem = Self.unreadableProfiles; return }
+        guard read.canSave else { profileProblem = refusal(read); return }
         if let problem = ProfileRules.nameProblem(name, in: read.registry) { profileProblem = problem; return }
         let taken = Set(((try? FileManager.default.contentsOfDirectory(atPath: Self.home.path)) ?? []).map { $0.lowercased() })
         var next = read
@@ -161,6 +192,8 @@ extension AppController {
             if (try? FileManager.default.contentsOfDirectory(atPath: folder.path))?.isEmpty == true { try? FileManager.default.removeItem(at: folder) }
             return
         }
+        profiles = readProfiles()
+        refreshOtherNoRecord()
         Log.info("Profiles: added one")
         // The first file of the Mac: this copy started with no Mac-wide lock. It takes it now, so the new instance
         // waits for it to quit, as after every later switch.
@@ -174,7 +207,7 @@ extension AppController {
         guard changesProfiles else { return }
         profileProblem = nil
         let read = readProfiles()
-        guard read.canSave else { profileProblem = Self.unreadableProfiles; return }
+        guard read.canSave else { profileProblem = refusal(read); return }
         if let problem = ProfileRules.nameProblem(name, in: read.registry, renaming: id) { profileProblem = problem; return }
         var next = read
         next.registry.rename(id, name: name, color: color)
@@ -184,6 +217,7 @@ extension AppController {
             return
         }
         profiles = readProfiles()
+        refreshOtherNoRecord()
     }
 
     /// Another profile of this Mac that already uses this server, or nil.
@@ -213,7 +247,7 @@ extension AppController {
         guard changesProfiles else { return }
         profileProblem = nil
         let read = readProfiles()
-        guard read.canSave else { profileProblem = Self.unreadableProfiles; return }
+        guard read.canSave else { profileProblem = refusal(read); return }
         switch ProfileRemoval.start(id, in: read.registry, active: activeProfile.id, typed: typed, home: Self.home) {
         case .refused(let why):
             profileProblem = why
@@ -226,6 +260,7 @@ extension AppController {
                 return
             }
             profiles = readProfiles()
+            refreshOtherNoRecord()
             Log.info("Profiles: deleting one")
             finishRemovals(holding: [id: lock])
         }
@@ -295,6 +330,7 @@ extension AppController {
         read.registry.remove(id)
         do { try read.save(to: file) } catch { Log.error("Profiles: the end of a delete could not be saved: \(error)") }
         profiles = readProfiles()
+        refreshOtherNoRecord()
         Log.info("Profiles: a profile was deleted")
     }
 }

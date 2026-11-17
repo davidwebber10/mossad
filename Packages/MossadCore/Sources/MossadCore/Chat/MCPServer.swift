@@ -23,18 +23,26 @@ public struct MCPServer: Sendable {
     /// The owner's settings, read again at each call: a switch turned off reaches a process that runs for days.
     let settings: (@Sendable () -> ToolSettings)?
 
-    public init(paths: Paths, owner: String, name: String = "mossad", settings: @escaping @Sendable () -> ToolSettings) {
+    /// Whether the profile this server serves still exists, read at each tool call: a deleted profile's server answers
+    /// with an error and ends, and never makes its folder again.
+    let stillServes: (@Sendable () -> Bool)?
+    public static let profileRemoved = "This profile was deleted in Mossad. Remove this connection from the AI app."
+
+    public init(paths: Paths, owner: String, name: String = "mossad", stillServes: (@Sendable () -> Bool)? = nil,
+                settings: @escaping @Sendable () -> ToolSettings) {
         self.paths = paths
         self.owner = owner
         self.name = name
+        self.stillServes = stillServes
         personaTraits = false
         self.settings = settings
     }
 
-    public init(paths: Paths, owner: String, name: String = "mossad", personaTraits: Bool = true) {
+    public init(paths: Paths, owner: String, name: String = "mossad", personaTraits: Bool = true, stillServes: (@Sendable () -> Bool)? = nil) {
         self.paths = paths
         self.owner = owner
         self.name = name
+        self.stillServes = stillServes
         self.personaTraits = personaTraits
         settings = nil
     }
@@ -42,9 +50,20 @@ public struct MCPServer: Sendable {
     /// Reads requests from stdin until it closes; replies go to stdout, logs to stderr.
     public func run() {
         while let line = readLine(strippingNewline: true) {
-            guard let reply = handle(line) else { continue }
-            FileHandle.standardOutput.write(Data((reply + "\n").utf8))
+            let (reply, ends) = respond(line)
+            if let reply { FileHandle.standardOutput.write(Data((reply + "\n").utf8)) }
+            if ends { return }
         }
+    }
+
+    /// The reply to one line, and whether the server ends after it: a tool call for a profile that was deleted.
+    public func respond(_ line: String) -> (reply: String?, ends: Bool) {
+        if let stillServes, let message = (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any],
+           message["method"] as? String == "tools/call", let id = message["id"], !stillServes() {
+            let result: [String: Any] = ["content": [["type": "text", "text": Self.profileRemoved]], "isError": true]
+            return (encode(["jsonrpc": "2.0", "id": id, "result": result]), true)
+        }
+        return (handle(line), false)
     }
 
     /// The reply to one line, or nil for a notification.

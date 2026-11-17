@@ -22,7 +22,7 @@ struct ProfileSettingsGroup: View {
 
     var body: some View {
         let rows = ProfileSettingsWords.rows(controller.profiles.registry, active: controller.activeProfile.id)
-        SettingsGroup(label: "Profiles", footer: ProfileSettingsWords.footer(controller.profiles, problem: controller.profileProblem)) {
+        SettingsGroup(label: "Profiles", footer: ProfileSettingsWords.footer(controller.profiles, problem: controller.visibleProfileProblem)) {
             if rows.isEmpty {
                 SettingsRow(title: ProfileSettingsWords.oneTitle, detail: ProfileSettingsWords.oneDetail) {
                     addButton
@@ -65,7 +65,7 @@ private struct ProfileRow: View {
             ProfileDot(color: row.color)
             VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 HStack(spacing: Space.s) {
-                    Text(row.name).font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink)
+                    Text(row.name).font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink).lineLimit(1)
                     if row.active {
                         Text("Active").font(.system(size: Rhythm.noteSize, weight: .medium)).foregroundStyle(Palette.secondary)
                     }

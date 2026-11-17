@@ -55,7 +55,10 @@ struct ProfileSwitcher: View {
             }
             Divider()
             Button(ProfileMenu.add) { controller.openProfileSettings(sheet: .add) }
-                .disabled(menu.note != nil)
+                .disabled(menu.note != nil || !controller.profiles.canSave)
+            if let why = ProfileSettingsWords.changeRefusal(controller.profiles) {
+                Text(why)
+            }
             Button(ProfileMenu.manage) { controller.openProfileSettings(sheet: nil) }
         } label: {
             HStack(spacing: Chrome.navIconGap) {
@@ -79,8 +82,26 @@ struct ProfileSwitcher: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize(horizontal: false, vertical: true)
-        .accessibilityLabel("Profile, \(menu.title)")
+        .accessibilityLabel(ProfileSettingsWords.accessibilityLabel(controller.activeProfile))
         .help("Change the profile")
+    }
+}
+
+/// Under the switcher, quiet: why the last switch or Add did not happen, for a while, and a refusal for a call only
+/// while one records.
+struct ProfileProblemLine: View {
+    @EnvironmentObject var controller: AppController
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 5)) { _ in
+            if let problem = controller.visibleProfileProblem {
+                Text(problem)
+                    .font(.system(size: Rhythm.secondarySize))
+                    .foregroundStyle(Palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, Chrome.navRowPadding)
+            }
+        }
     }
 }
 
