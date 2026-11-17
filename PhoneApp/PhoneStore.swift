@@ -121,6 +121,10 @@ final class PhoneStore {
     @ObservationIgnored private var loading: Task<Void, Never>?
 
     /// A development hook for screenshots, read only with a sample folder so a real install never sees one.
+    #if DEBUG
+    private static var roomHookFired = false
+    #endif
+
     static func hook(_ name: String) -> String? {
         let env = ProcessInfo.processInfo.environment
         return env["MOSSAD_ROOT"] == nil ? nil : env[name]
@@ -183,7 +187,9 @@ final class PhoneStore {
         #if DEBUG
         // `MOSSAD_ROOM_START=1` starts the room recorder at launch, while the recovery reads the folder. Without the
         // microphone: in a headless simulator the recorder would use the Mac's own.
-        if Self.hook("MOSSAD_ROOM_START") != nil {
+        if Self.hook("MOSSAD_ROOM_START") != nil, !Self.roomHookFired {
+            // Once in a run: the store that a switch builds does not start a second one.
+            Self.roomHookFired = true
             Task { [weak self] in
                 guard let self, life.allows(.record) else { return }
                 await uploader.ready()
