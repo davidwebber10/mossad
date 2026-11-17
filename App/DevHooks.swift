@@ -6,7 +6,9 @@ import MossadCore
 /// only. The installed copy runs none of them, except `--open-window`, which only opens a page.
 @MainActor
 enum DevHooks {
-    /// Hooks of the profiles' workers: `MOSSAD_PROOF_WORKERS`, `MOSSAD_PROOF_CALL` (in `WorkerEntry`), and in a preview
+    /// Hooks of the profiles' workers: `MOSSAD_PROOF_WORKERS`, `MOSSAD_PROOF_CALL`, the move's `MOSSAD_PROOF_MEETING`,
+    /// `MOSSAD_PROOF_MOVE` (with `MOSSAD_PROOF_MOVE_AFTER`), `MOSSAD_PROOF_MOVE_STOP=copied`, and
+    /// `MOSSAD_PROOF_INTAKE_STOP=takingIn` (in `WorkerEntry`, on a made-up registry only), and in a preview
     /// `MOSSAD_WORKER_LINES`.
     /// `--ui-preview` opens the UI on $MOSSAD_ROOT with no detection, recording, or processing, so the screens can
     /// be checked while the installed copy records a call.

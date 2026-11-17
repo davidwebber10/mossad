@@ -62,14 +62,23 @@ enum WorkerEntry {
         try? paths.ensureDirectories()
         Log.directory = paths.logs
         _ = NetworkPath.shared
+        let settings = ServiceSettings.read(.standard, fullUserName: NSFullUserName())
         #if DEBUG
         // 4. A made-up recorded call for a proof, on a made-up registry only, in an empty folder.
         if identity.madeUpRegistry, let file = env["MOSSAD_PROOF_CALL"], !hasMeetings(paths) {
             importProofCall(URL(fileURLWithPath: file), paths: paths)
         }
+        // A made-up meeting for the proof of a move, the same way, with its chat and its words in the books.
+        if identity.madeUpRegistry, let file = env["MOSSAD_PROOF_MEETING"], !hasMeetings(paths) {
+            do {
+                let id = try MoveProof.makeWritten(audio: URL(fileURLWithPath: file), paths: paths, ownerName: settings.ownerName, now: Date())
+                Log.info("Worker: a made-up meeting for a proof is in the folder (\(id))")
+            } catch {
+                say("Mossad: the proof meeting was not made: \(error)")
+            }
+        }
         #endif
         // 5. A profile whose setup is not finished gets no worker.
-        let settings = ServiceSettings.read(.standard, fullUserName: NSFullUserName())
         guard WorkerLaunch.setupDone(finished: settings.setupDone, hasMeetings: hasMeetings(paths)) else {
             Log.info("Worker: setup is not finished")
             Log.flush()
@@ -77,15 +86,36 @@ enum WorkerEntry {
         }
         // 6. The watch, then the run, for the life of the process.
         watcher.start()
-        let worker = ProfileWorker(.init(paths: paths, settings: settings, key: { Keychain.app.get($0) }, google: Keychain.app,
-                                         remember: { UserDefaults.standard.set($1, forKey: $0) },
-                                         hasICloud: CloudEntitlement.hasCloudKit, madeUpRegistry: identity.madeUpRegistry,
-                                         macCalendarAuthorized: { CalendarSnapshot.Access.Read.macCalendar == .yes },
-                                         callRecords: { watcher.callRecords }, now: Date.init))
+        var setup = ProfileWorker.Setup(paths: paths, settings: settings, key: { Keychain.app.get($0) }, google: Keychain.app,
+                                        remember: { UserDefaults.standard.set($1, forKey: $0) },
+                                        hasICloud: CloudEntitlement.hasCloudKit, madeUpRegistry: identity.madeUpRegistry,
+                                        macCalendarAuthorized: { CalendarSnapshot.Access.Read.macCalendar == .yes },
+                                        callRecords: { watcher.callRecords }, now: Date.init)
+        // A move's target: the registry file in use, read again at each call.
+        let madeUp = identity.madeUpRegistry
+        let registryFile = madeUp ? env["MOSSAD_PROFILES"].map { URL(fileURLWithPath: $0) } : ProfileRegistry.fileURL(home: home)
+        setup.profileID = identity.profile.id
+        setup.target = { id in registryFile.map { MoveRules.target(id, registryFile: $0, home: home, madeUpRegistry: madeUp) } ?? .unknown }
+        #if DEBUG
+        // The proofs of a move, on a made-up registry only: the end of the process at a state of the ledger or the marker.
+        if madeUp { setup.proofStop = env["MOSSAD_PROOF_MOVE_STOP"] ?? env["MOSSAD_PROOF_INTAKE_STOP"] }
+        #endif
+        let worker = ProfileWorker(setup)
         Task {
             withExtendedLifetime(attempt) {}
             await worker.run()
         }
+        #if DEBUG
+        // `MOSSAD_PROOF_MOVE=<profile id>`: after `MOSSAD_PROOF_MOVE_AFTER` seconds (20 when not given), the one written
+        // meeting of this folder moves to that profile.
+        if madeUp, let target = env["MOSSAD_PROOF_MOVE"] {
+            let after = env["MOSSAD_PROOF_MOVE_AFTER"].flatMap(Double.init) ?? 20
+            Task {
+                try? await Task.sleep(for: .seconds(after))
+                await worker.proofMove(to: target)
+            }
+        }
+        #endif
         dispatchMain()
     }
 

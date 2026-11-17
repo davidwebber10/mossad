@@ -213,4 +213,71 @@ final class MoveIntakeTests: XCTestCase {
         XCTAssertTrue(ChatStore(directory: b.chats).all().isEmpty, "the chats of the first half are gone")
         XCTAssertTrue(VoiceLibrary(directory: b.voices).profiles.allSatisfy { $0.embeddings.isEmpty }, "the voices it learned are gone")
     }
+
+    /// A name that the target's own library changed: the arrival is `identified`, and the new summary is made by the
+    /// target's pipeline with its own service, never at the take-in and never by the first profile.
+    func testTheNewSummaryIsTheTargetsOwnStep() async throws {
+        let (a, b, _) = try arrive(fill: { b in
+            let library = VoiceLibrary(directory: b.voices)
+            library.identity = VoiceIdentity(people: PeopleStore(directory: b.people), samples: VoiceSampleStore(directory: b.voices))
+            try library.add((0..<8).map { Float(($0 + 1) % 8) / 8 }, to: "Samuel Carter")
+        })
+        let before = listing(a.root)
+        let summarizerA = FakeSummarizer(), summarizerB = FakeSummarizer()
+        XCTAssertEqual(intake(b).run(), [id])
+        var r = try CallRecord.load(from: b.callDirectory(id))
+        XCTAssertEqual(r.status, .identified)
+        XCTAssertEqual(r.speakerNames["them:A"], "Samuel Carter")
+        XCTAssertEqual(summarizerB.calls, 0, "the take-in sends nothing")
+        let library = VoiceLibrary(directory: b.voices)
+        library.identity = VoiceIdentity(people: PeopleStore(directory: b.people), samples: VoiceSampleStore(directory: b.voices))
+        let pipeline = Pipeline(paths: b, transcriber: FakeTranscriber(), library: library, embeddings: ToneEmbeddingProvider(), calendar: FakeCalendar(),
+                                summarizer: summarizerB, notify: { _ in }, now: { [t0] in t0 }, ownerName: "Avery Webb")
+        await pipeline.runPending()
+        XCTAssertEqual(summarizerB.calls, 1)
+        r = try CallRecord.load(from: b.callDirectory(id))
+        XCTAssertEqual(r.status, .written)
+        let note = try XCTUnwrap(r.markdownPath)
+        XCTAssertTrue(note.hasPrefix(b.meetings.path), note)
+        let text = try String(contentsOfFile: note, encoding: .utf8)
+        XCTAssertTrue(text.components(separatedBy: "\n").contains { $0.hasPrefix("audio: ") && $0.hasSuffix("/Audio/\(id)") })
+        XCTAssertEqual(summarizerA.calls, 0)
+        XCTAssertEqual(listing(a.root), before, "no file of the first profile changed")
+    }
+
+    /// A recorded meeting arrives as `recorded`, with no name, and the target's pipeline transcribes it with its own
+    /// service.
+    func testARecordedMeetingArrivesForTheTargetsOwnPipeline() async throws {
+        let a = temp(), b = temp()
+        try a.ensureDirectories()
+        try b.ensureDirectories()
+        let dir = a.callDirectory(id)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try writeSegments(dir.appendingPathComponent("me.caf"), total: 30, [(0, 10, 200)])
+        try writeSegments(dir.appendingPathComponent("them.caf"), total: 30, [(11, 20, 400)])
+        let start = Date(timeIntervalSince1970: 1_793_520_000)
+        try CallRecord(id: id, platform: .meet, bundleID: "com.google.Chrome", start: start, end: start + 1800, status: .recorded).save(to: dir)
+        let plan = try MoveCopy.plan(id, in: a, to: work, owner: OwnerIdentity(name: "Avery Webb"), fetched: nil)
+        _ = try MoveCopy.write(plan, from: "default", token: token, incoming: b.incoming, now: t0)
+        try MoveCopy.publish(id, token: token, incoming: b.incoming)
+
+        XCTAssertEqual(intake(b).run(), [id])
+        var r = try CallRecord.load(from: b.callDirectory(id))
+        XCTAssertEqual(r.status, .recorded)
+        XCTAssertTrue(r.speakerNames.isEmpty)
+        XCTAssertNil(r.moveTo)
+        let transcriber = FakeTranscriber()
+        transcriber.result = [
+            .me: [Utterance(track: .me, speakerLabel: "A", start: 0, end: 10, text: "Where is the zebra?")],
+            .them: [Utterance(track: .them, speakerLabel: "A", start: 11, end: 20, text: "It left on Friday.")],
+        ]
+        let library = VoiceLibrary(directory: b.voices)
+        library.identity = VoiceIdentity(people: PeopleStore(directory: b.people), samples: VoiceSampleStore(directory: b.voices))
+        let pipeline = Pipeline(paths: b, transcriber: transcriber, library: library, embeddings: ToneEmbeddingProvider(), calendar: FakeCalendar(),
+                                summarizer: FakeSummarizer(), notify: { _ in }, now: { [t0] in t0 }, ownerName: "Avery Webb")
+        await pipeline.runPending()
+        XCTAssertFalse(transcriber.calls.isEmpty, "the target's own transcription service")
+        r = try CallRecord.load(from: b.callDirectory(id))
+        XCTAssertEqual(r.status, .written)
+    }
 }

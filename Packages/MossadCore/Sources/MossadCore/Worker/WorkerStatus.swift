@@ -31,7 +31,9 @@ public struct WorkerStatus: Codable, Equatable, Sendable {
     }
 
     /// The first that applies: a key that is missing, the meetings that fail (the kind of the newest), the backup, the sync.
-    public static func make(records: [CallRecord], missing: Set<ServiceSettings.MissingKey>, backupFailed: Int, syncFailed: Bool, now: Date) -> WorkerStatus {
+    /// `incoming`: the meetings that another profile moved here and that wait in `Incoming`, which count in work.
+    public static func make(records: [CallRecord], incoming: Int = 0, missing: Set<ServiceSettings.MissingKey>, backupFailed: Int,
+                            syncFailed: Bool, now: Date) -> WorkerStatus {
         let inWork = records.filter { ProcessingStep(status: $0.status) != nil }
         var failure: Failure?
         let waiting = (missing.contains(.transcription) ? inWork.filter { $0.status == .recorded }.count : 0)
@@ -54,7 +56,7 @@ public struct WorkerStatus: Codable, Equatable, Sendable {
         }
         if failure == nil, backupFailed > 0 { failure = Failure(kind: .backup, count: backupFailed) }
         if failure == nil, syncFailed { failure = Failure(kind: .sync, count: 0) }
-        return WorkerStatus(written: now, inWork: inWork.count, failure: failure)
+        return WorkerStatus(written: now, inWork: inWork.count + max(0, incoming), failure: failure)
     }
 
     public static func url(root: URL) -> URL { Paths(root: root).worker.appendingPathComponent(fileName) }

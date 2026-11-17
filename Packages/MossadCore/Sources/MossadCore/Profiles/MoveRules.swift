@@ -89,8 +89,34 @@ public enum MoveRules {
         return .paths(Paths(root: root))
     }
 
+    /// The registry file in use, read again at each call. A made-up registry (a proof) is read with no home, and only
+    /// its own made-up folders are targets: never the first profile, which is the owner's real `~/Mossad`, and never
+    /// a root that is not absolute or that is one of the home's own `Mossad` folders.
+    public static func target(_ id: String, registryFile: URL, home: URL, madeUpRegistry: Bool) -> TargetPlace {
+        guard madeUpRegistry else { return target(id, in: ProfileRegistry.load(from: registryFile, home: home), home: home) }
+        let loaded = ProfileRegistry.load(from: registryFile, home: nil)
+        guard loaded.state == .read else { return .unknown }
+        guard id != Profile.default.id, let profile = loaded.registry.live.first(where: { $0.id == id }), profile.root.hasPrefix("/") else { return .gone }
+        let root = URL(fileURLWithPath: profile.root).standardizedFileURL
+        let homeMossad = home.standardizedFileURL.appendingPathComponent("Mossad").path
+        guard !root.path.hasPrefix(homeMossad) else { return .gone }
+        return target(id, in: loaded, home: home)
+    }
+
     /// The look at `Incoming` and `Moves`; the row's line after that long; how long a result and a refusal show.
     public static let look: TimeInterval = 15, slowAfter: TimeInterval = 60, resultShows: TimeInterval = 8, refusalShows: TimeInterval = 30
+
+    /// The window app's look at `Incoming` and `Moves`, and its timer: only a mode that takes in, with two live profiles
+    /// or more. With one profile there is no look, no timer, and no folder. A worker has its own look.
+    public static func looks(mode: RunMode, liveProfiles: Int) -> Bool {
+        mode == .full && mode.does(.takeInMoved) && liveProfiles >= 2
+    }
+
+    /// A move of this profile that is not done, or a meeting that waits in its `Incoming`. Two folder listings; it
+    /// makes no folder.
+    public static func hasWork(_ paths: Paths) -> Bool {
+        MoveOut.hasWork(paths) || MoveIntake.hasWork(paths)
+    }
 }
 
 /// Every sentence of a move.

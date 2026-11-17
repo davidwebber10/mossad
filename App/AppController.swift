@@ -418,8 +418,13 @@ final class AppController: ObservableObject {
     private(set) var mode: RunMode = .full
     /// The workers of the other profiles; nothing with one profile.
     private(set) var workers: WorkerManager!
-    /// The switcher's second line of each other profile, from its worker's status file.
-    @Published var workerLines: [String: String] = [:]
+    /// The switcher's second line of each other profile, from its worker's status file. A change can mean that a
+    /// worker took in a meeting that this profile moved: the moves are looked at.
+    @Published var workerLines: [String: String] = [:] {
+        didSet { if workerLines != oldValue { checkMoves() } }
+    }
+    /// The look at the moves of this profile (`AppController+Moves`); nothing with one profile.
+    var moveLook = MoveLook()
     /// Set once the launch knows whether this copy is inert. Before it, and in an inert copy, the iCloud Keychain
     /// items the iPhone reads are neither written nor deleted.
     private(set) var launchDecided = false
@@ -906,6 +911,9 @@ final class AppController: ObservableObject {
         if !inert {
             // A delete of a profile that stopped goes on.
             finishRemovals()
+            // A move of this profile goes on, and a meeting moved here is taken in: with two profiles or more only.
+            checkMoves()
+            startMoveLook()
             // A meeting that a worker finished while it could not read the calendar gets its invite now. With one
             // profile (no registry file) nothing is read.
             if WorkerCalendar.looksAgainAtLaunch(registry: profiles.state, macCalendar: .macCalendar, googleCalendar: google.has(.calendar)),
@@ -2115,6 +2123,7 @@ final class AppController: ObservableObject {
     }
 
     private func runHousekeeping() async {
+        checkMoves()
         consumeBackupMoveRequest()
         await track { await self.pipeline.runPending() }
         let audio = paths.audio, days = deleteRecordings ? max(1, recordingDays) : nil, tracks = max(1, rawTracksDays)

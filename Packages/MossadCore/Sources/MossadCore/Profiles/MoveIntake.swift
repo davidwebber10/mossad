@@ -31,6 +31,11 @@ public struct MoveIntake: Sendable {
 
     public func waiting() -> [String] { Self.waiting(paths) }
 
+    /// The meetings that wait here and are not in `Audio` yet, for the worker's status: a count, never an id.
+    public static func waitingCount(_ paths: Paths) -> Int {
+        waiting(paths).filter { FileManager.default.fileExists(atPath: MoveMarker.folder($0, in: paths).appendingPathComponent(MoveMarker.callFolder).path) }.count
+    }
+
     static func waiting(_ paths: Paths) -> [String] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: paths.incoming.path)) ?? []
         return names.filter { !$0.hasSuffix(MoveMarker.partSuffix) && !$0.hasPrefix(".") }.sorted().filter { name in
