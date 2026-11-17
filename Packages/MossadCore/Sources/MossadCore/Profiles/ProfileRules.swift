@@ -15,13 +15,13 @@ public enum ProfileRules {
     }
 
     /// "Mossad <Name>" with only letters, digits, spaces, `-`, and `_` of the name (40 at most), so the note's
-    /// `audio:` line stays valid YAML; " 2", " 3" when taken. `taken` is in lower case.
+    /// `audio:` line stays valid YAML; " 2", " 3" when taken, letter case ignored.
     public static func folderName(for name: String, taken: Set<String>) -> String {
         let kept = String(name.filter { $0.isLetter || $0.isWholeNumber || $0 == " " || $0 == "-" || $0 == "_" })
         let words = kept.split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
         let short = String(words.prefix(nameLimit)).trimmingCharacters(in: .whitespaces)
         let base = "Mossad " + (short.isEmpty ? "Profile" : short)
-        let all = taken.union(reservedFolders)
+        let all = Set(taken.map { $0.lowercased() }).union(reservedFolders)
         guard all.contains(base.lowercased()) else { return base }
         var n = 2
         while all.contains("\(base) \(n)".lowercased()) { n += 1 }

@@ -39,6 +39,9 @@ public struct AppIdentity: Sendable, Equatable {
         self.madeUpRegistry = madeUpRegistry
         let takes = bundleID != Self.rehearsalBundleID && !isPreview && !onOtherRoot
         switch takes ? ProfileLaunch.choice(arguments: arguments, registry: loaded) : .profile(.default) {
+        // On a made-up registry `default` is the owner's real install: a proof run never starts as it.
+        case .profile(let chosen) where madeUpRegistry && chosen.isDefault:
+            profile = .default; profileRefusal = "Mossad: a made-up registry needs --profile <id>; not starting."
         case .profile(let chosen): profile = chosen; profileRefusal = nil
         case .refused(let why): profile = .default; profileRefusal = why
         }
@@ -64,7 +67,7 @@ public struct AppIdentity: Sendable, Equatable {
         #if os(macOS)
         let madeUp = environment["MOSSAD_PROFILES"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
         if readsRegistry(bundleID: bundleID, arguments: arguments, environment: environment) {
-            let loaded = ProfileRegistry.load(from: madeUp ?? ProfileRegistry.fileURL(home: home))
+            let loaded = madeUp.map { ProfileRegistry.load(from: $0) } ?? ProfileRegistry.load(from: ProfileRegistry.fileURL(home: home), home: home)
             return AppIdentity(bundleID: bundleID, arguments: arguments, environment: environment, registry: loaded,
                                madeUpRegistry: madeUp != nil)
         }
@@ -155,12 +158,15 @@ extension AppIdentity {
         takesProfiles && !profile.isDefault ? profile.root : "~/Mossad"
     }
 
-    /// The folders of the registry's other live profiles, for the Mac-wide reads (the do-not-record lists). None for a
-    /// copy that takes no profiles, and none on a made-up registry, whose `default` would be the owner's real folder.
-    public func otherProfileRoots(home: URL) -> [URL] {
+    /// The registry's other live profiles, for the Mac-wide reads (the do-not-record lists). None for a copy that
+    /// takes no profiles, and none on a made-up registry, whose `default` would be the owner's real folder. With an
+    /// unreadable registry the other profiles are not known (it holds `default` only), so they cannot block a call.
+    public var otherProfiles: [Profile] {
         guard takesProfiles, !madeUpRegistry else { return [] }
-        return registry.registry.live.filter { $0.id != profile.id }.map { $0.rootURL(home: home) }
+        return registry.registry.live.filter { $0.id != profile.id }
     }
+
+    public func otherProfileRoots(home: URL) -> [URL] { otherProfiles.map { $0.rootURL(home: home) } }
 
     /// A profile's own settings, untouched: never emptied, no registered defaults. Nil for `default` and a preview.
     public func profileSettings() -> UserDefaults? {
@@ -173,6 +179,11 @@ extension AppIdentity {
     /// held first in `MacDefaults` for the Mac-wide keys. Call it first, before anything reads a setting. False when
     /// the settings could not be isolated: the caller must then stop.
     public func isolateDefaults() -> Bool {
+        isolateDefaults(makeSuite: { UserDefaults(suiteName: $0) })
+    }
+
+    /// `makeSuite` makes a profile's settings; a profile whose settings cannot be made never goes on with the real ones.
+    func isolateDefaults(makeSuite: (String) -> UserDefaults?) -> Bool {
         if isPreview {
             guard let defaults = previewSettings(), Self.swap(to: { _ in defaults }) else { return false }
             MacDefaults.hold(defaults)
@@ -180,16 +191,30 @@ extension AppIdentity {
         }
         let real = UserDefaults.standard
         MacDefaults.hold(real)
-        guard let defaults = profileSettings() else { return true }
+        guard let suite = defaultsSuite else { return true }
+        guard let defaults = makeSuite(suite) else { return false }
         let swap = DefaultsSwap(real: real, profile: defaults)
         guard Self.swap(to: { _ in swap.current(handingOver: MacDefaults.handingOver, isMainThread: Thread.isMainThread) }) else { return false }
         return UserDefaults.standard === defaults
     }
 
+    /// The getter's own implementation, kept at the first swap, so a test can put it back.
+    nonisolated(unsafe) private static var replaced: IMP?
+
     private static func swap(to block: @escaping @convention(block) (AnyObject) -> UserDefaults) -> Bool {
         guard let method = class_getClassMethod(UserDefaults.self, #selector(getter: UserDefaults.standard)) else { return false }
-        method_setImplementation(method, imp_implementationWithBlock(block))
+        let old = method_setImplementation(method, imp_implementationWithBlock(block))
+        if replaced == nil { replaced = old }
         return true
+    }
+
+    /// For tests: the real `standard` again, and nothing held.
+    static func undoIsolation() {
+        if let replaced, let method = class_getClassMethod(UserDefaults.self, #selector(getter: UserDefaults.standard)) {
+            method_setImplementation(method, replaced)
+        }
+        replaced = nil
+        MacDefaults.release()
     }
 }
 

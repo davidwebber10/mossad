@@ -6,6 +6,10 @@ public enum ProfileLaunch {
     public enum Choice: Equatable, Sendable { case profile(Profile), refused(String) }
 
     public static func choice(arguments: [String], registry: ProfileRegistry.Loaded) -> Choice {
+        // `--profile=<id>` and the like would read as no profile, and a command would then serve `default`.
+        if let typo = arguments.first(where: { $0.hasPrefix("--profile") && $0 != "--profile" }) {
+            return .refused("Mossad: \(typo) is not --profile <id>; not starting.")
+        }
         if let i = arguments.firstIndex(of: "--profile") {
             guard let id = arguments.dropFirst(i + 1).first, !id.hasPrefix("-") else {
                 return .refused("Mossad: --profile needs a profile id; not starting.")

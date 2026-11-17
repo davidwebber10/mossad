@@ -37,7 +37,6 @@ public struct Profile: Codable, Equatable, Sendable, Identifiable {
 
     public func rootURL(home: URL) -> URL {
         if isDefault { return home.appendingPathComponent("Mossad") }
-        if root == "~" { return home }
         if root.hasPrefix("~/") { return home.appendingPathComponent(String(root.dropFirst(2))) }
         return URL(fileURLWithPath: root)
     }

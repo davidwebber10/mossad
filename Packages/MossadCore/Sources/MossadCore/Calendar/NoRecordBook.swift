@@ -188,6 +188,37 @@ public struct NoRecordBook: Codable, Equatable, Sendable {
     }
 }
 
+/// Why a call with an invite is kept off the record when no choice of the owner says so: a do-not-record list that
+/// cannot be read. Another profile's list has its own words: resetting the active profile's list does not end it.
+public enum NoRecordListProblem: Equatable, Sendable {
+    case own
+    case otherProfile(String)
+
+    /// The active profile's own list first; else the first other profile whose list is unknown.
+    public static func find(own: NoRecordBook, others: [(name: String, book: NoRecordBook)]) -> NoRecordListProblem? {
+        if own.unreadable { return .own }
+        return others.first(where: \.book.unreadable).map { .otherProfile($0.name) }
+    }
+
+    public var notificationBody: String {
+        switch self {
+        case .own:
+            "The do-not-record list could not be read. Press Record to record this call. To end this, set a choice for any upcoming meeting, or reset the list in Settings, Recording."
+        case .otherProfile:
+            settingsFooter + " Press Record to record this call."
+        }
+    }
+
+    public var settingsFooter: String {
+        switch self {
+        case .own:
+            "The do-not-record list could not be read, so calls with an invite are not recorded. Reset the list, or set a choice for any upcoming meeting, to record them again."
+        case .otherProfile(let name):
+            "Mossad cannot read the do-not-record list of the profile \(name). Switch to that profile and reset its list."
+        }
+    }
+}
+
 /// The book and the calendar for the detection queue, which cannot wait for the main actor before a call starts.
 /// It also remembers a blocked call for its whole session: a meeting that runs past its planned end, or a call that
 /// detection starts again (a mic gap, Off then On, a restart), stays off the record.
@@ -258,17 +289,29 @@ public final class NoRecordGate: @unchecked Sendable {
         }
     }
 
-    /// After a switch: the blocked call that another profile's gate kept goes on here. Takes the newest one that has
-    /// not ended, unless this gate's own is newer and goes on; without its title, which is that profile's. Reads only.
+    /// After a switch: the blocked call that another profile's gate kept goes on here. Reads the other folders only.
+    /// - This gate's own call, seen later by another profile, takes that copy's end and last time, so a call that
+    ///   ended there does not block here.
+    /// - Then the newest call that has not ended is taken, unless this gate's own is newer and goes on. It comes
+    ///   without its title and its key (the other profile's meeting title and link), so neither reaches this
+    ///   profile's file; the session itself holds the block.
     public func adopt(sessionsIn dirs: [URL]) {
         let found = dirs.compactMap { dir -> BlockedCall? in
             guard let data = try? Data(contentsOf: dir.appendingPathComponent(Self.sessionFileName)) else { return nil }
             return try? JSONDecoder.callRecord.decode(BlockedCall.self, from: data)
         }
-        guard var newest = found.filter({ !$0.ended }).max(by: { $0.lastSeen < $1.lastSeen }) else { return }
-        newest.title = nil
         lock.withLock {
+            if var own = session,
+               let later = found.filter({ $0.bundleID == own.bundleID && $0.plannedStart == own.plannedStart && $0.lastSeen > own.lastSeen })
+                   .max(by: { $0.lastSeen < $1.lastSeen }) {
+                own.ended = later.ended
+                own.lastSeen = later.lastSeen
+                save(own, at: later.lastSeen)
+            }
+            guard var newest = found.filter({ !$0.ended }).max(by: { $0.lastSeen < $1.lastSeen }) else { return }
             if let own = session, !own.ended, own.lastSeen >= newest.lastSeen { return }
+            newest.title = nil
+            newest.key = ""
             session = newest
         }
     }

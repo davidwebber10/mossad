@@ -4,8 +4,11 @@ import Synchronization
 /// The settings of the Mac, not of a profile: the Off switch, the login item, the permission memory, the usage
 /// statistics, and Sparkle's own keys. They stay in the real standard domain, which a profile's swap would hide.
 public enum MacDefaults {
+    /// The quick panel's global hot key and its place on this Mac's screen, and the apps of this Mac that are not a
+    /// call, are the Mac's too.
     public static let keys = ["offUntil", "didSetLoginItem", "screenCaptureAsked", "usageStatsEnabled", "usageStatsInstallID",
-                              "usageStatsLastAttempt", "usageStatsEndpoint", "usageStatsInDebug"]
+                              "usageStatsLastAttempt", "usageStatsEndpoint", "usageStatsInDebug",
+                              "askShortcut", "askPanelOrigin", "notACall"]
     /// Sparkle's keys all start with `SU`.
     public static let prefixes = ["SU", "automationState."]
 
@@ -27,6 +30,9 @@ public enum MacDefaults {
     public static var store: UserDefaults { lock.withLock { held } ?? .standard }
 
     static func hold(_ real: UserDefaults) { lock.withLock { held = real } }
+
+    /// For tests: nothing held, so `store` is `.standard` again.
+    static func release() { lock.withLock { held = nil } }
 
     /// True while `handOver` runs, on any thread.
     static var handingOver: Bool { flag.load(ordering: .acquiring) }

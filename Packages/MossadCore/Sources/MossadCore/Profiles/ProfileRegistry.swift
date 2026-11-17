@@ -35,7 +35,9 @@ public struct ProfileRegistry: Codable, Equatable, Sendable {
 
     public var activeProfile: Profile { profile(active) ?? .default }
 
-    public enum State: Equatable, Sendable { case none, read, newer, unreadable }
+    /// `partial`: read, but an entry was left out (a bad id, a repeated id, or an unsafe root). A save would remove
+    /// that entry for good, so the file is read and never saved, as a newer one.
+    public enum State: Equatable, Sendable { case none, read, newer, unreadable, partial }
 
     public struct Loaded: Equatable, Sendable {
         public var registry: ProfileRegistry
@@ -50,8 +52,9 @@ public struct ProfileRegistry: Codable, Equatable, Sendable {
         public static let none = Loaded(registry: ProfileRegistry(), state: .none)
     }
 
-    /// Reads the file. It never writes and never moves it: unknown is not empty.
-    public static func load(from file: URL) -> Loaded {
+    /// Reads the file. It never writes and never moves it: unknown is not empty. `home` is given for the real file
+    /// only: its roots must then be a folder of their own under it (`safeRoot`); a made-up file may name any path.
+    public static func load(from file: URL, home: URL? = nil) -> Loaded {
         guard let data = try? Data(contentsOf: file) else {
             let missing = !FileManager.default.fileExists(atPath: file.path)
             return missing ? .none : Loaded(registry: ProfileRegistry(), state: .unreadable)
@@ -59,27 +62,52 @@ public struct ProfileRegistry: Codable, Equatable, Sendable {
         guard let decoded = try? JSONDecoder().decode(ProfileRegistry.self, from: data) else {
             return Loaded(registry: ProfileRegistry(), state: .unreadable)
         }
-        return Loaded(registry: decoded.cleaned(), state: decoded.version > currentVersion ? .newer : .read)
+        let (registry, leftOut) = decoded.cleaned(home: home)
+        let state: State = decoded.version > currentVersion ? .newer : leftOut ? .partial : .read
+        return Loaded(registry: registry, state: state)
     }
 
-    /// `default` first and always there; an entry with a bad or repeated id left out.
-    func cleaned() -> ProfileRegistry {
+    /// `default` first, always there, always on `~/Mossad`; an entry with a bad or repeated id, or with a root that is
+    /// not safe in the real file, left out. True when an entry was left out.
+    func cleaned(home: URL?) -> (ProfileRegistry, Bool) {
         var copy = self
         var seen = Set<String>()
+        var roots = Set<String>()
         var others: [Profile] = []
         var first: Profile?
+        var leftOut = false
         for profile in profiles {
             if profile.isDefault {
-                if first == nil { first = profile }
+                if first == nil { first = profile } else { leftOut = true }
                 continue
             }
-            guard Self.isID(profile.id), seen.insert(profile.id).inserted else { continue }
+            guard Self.isID(profile.id), !seen.contains(profile.id),
+                  home.map({ Self.safeRoot(profile.root, home: $0, taken: roots) }) ?? true else {
+                leftOut = true
+                continue
+            }
+            seen.insert(profile.id)
+            roots.insert(profile.root.lowercased())
             others.append(profile)
         }
         var head = first ?? .default
         head.removing = nil
+        head.root = Profile.default.root
         copy.profiles = [head] + others
-        return copy
+        return (copy, leftOut)
+    }
+
+    /// A root of the real registry: `~/` and one folder name, not the first profile's or Rehearsal's, not another
+    /// entry's (letter case ignored), with no `..`, and not a symbolic link when it exists. Anything else could put
+    /// a profile on another one's meetings.
+    static func safeRoot(_ root: String, home: URL, taken: Set<String>) -> Bool {
+        guard root.hasPrefix("~/") else { return false }
+        let name = String(root.dropFirst(2))
+        guard !name.isEmpty, !name.contains("/"), !name.contains(".."), name != ".",
+              !ProfileRules.reservedFolders.contains(name.lowercased()), !taken.contains(root.lowercased()) else { return false }
+        let url = home.appendingPathComponent(name)
+        let link = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType == .typeSymbolicLink
+        return !link
     }
 
     /// 8 characters of 0-9a-f.

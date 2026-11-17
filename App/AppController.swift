@@ -241,11 +241,16 @@ final class AppController: ObservableObject {
     @Published private(set) var noRecord = NoRecordBook()
     private let noRecordGate = NoRecordGate()
     /// The other profiles' do-not-record lists, read once at launch for the gate only: never shown, never logged.
-    var otherNoRecord: [NoRecordBook] = []
-    /// Every other live profile's NoRecord folder; none for a copy that takes no profiles or runs on a made-up registry.
-    var otherNoRecordFolders: [URL] {
-        AppIdentity.current.otherProfileRoots(home: FileManager.default.homeDirectoryForCurrentUser).map { Paths(root: $0).noRecord }
+    var otherNoRecord: [(name: String, book: NoRecordBook)] = []
+    /// Every other live profile with its NoRecord folder; none for a copy that takes no profiles or runs on a made-up
+    /// registry.
+    var otherNoRecordFolders: [(name: String, folder: URL)] {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return AppIdentity.current.otherProfiles.map { ($0.name, Paths(root: $0.rootURL(home: home)).noRecord) }
     }
+    /// Why calls with an invite are kept off the record with no choice of the owner: an unknown list, the active
+    /// profile's or another's.
+    var noRecordProblem: NoRecordListProblem? { NoRecordListProblem.find(own: noRecord, others: otherNoRecord) }
     /// Calls still to come, without the ones being recorded or already recorded.
     /// Views ask for this each time they draw. The list changes with the events, the meetings, and the clock, so it
     /// is computed once for each of those and for each minute.
@@ -610,10 +615,10 @@ final class AppController: ObservableObject {
         noRecord = NoRecordBook.load(from: paths.noRecord)
         // Not recording is Mac-wide: another profile's refusal blocks here too, and its blocked call goes on.
         let otherFolders = otherNoRecordFolders
-        otherNoRecord = otherFolders.map(NoRecordBook.peek)
-        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord))
+        otherNoRecord = otherFolders.map { ($0.name, NoRecordBook.peek(from: $0.folder)) }
+        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord.map(\.book)))
         noRecordGate.persistSession(in: paths.noRecord)
-        noRecordGate.adopt(sessionsIn: otherFolders)
+        noRecordGate.adopt(sessionsIn: otherFolders.map(\.folder))
         // The chosen calendars apply before anything matches a call to an invite.
         macCalendar.choose(UserDefaults.standard.stringArray(forKey: "calendarIDs").map(Set.init))
         loadGoogleNames()
@@ -666,7 +671,7 @@ final class AppController: ObservableObject {
                 }
             }
             notifier.onNotACall = { [weak self] call in self?.quietUnconfirmed(call) }
-            for answer in UnconfirmedDismissals(data: UserDefaults.standard.data(forKey: "notACall")).active(at: Date()) {
+            for answer in UnconfirmedDismissals(data: MacDefaults.store.data(forKey: "notACall")).active(at: Date()) {
                 detection.dismissUnconfirmed(answer.call, until: answer.until)
             }
 
@@ -688,7 +693,10 @@ final class AppController: ObservableObject {
                         if let block = self.noRecordGate.currentBlock, block.listUnreadable {
                             // Not the owner's choice, so never silent: say it at each call, with a way to record.
                             Log.error("Not recording \(block.title): the do-not-record list could not be read")
-                            Task { @MainActor in self.notifier.postNotRecorded(title: block.title, bundleID: bundleID, platform: platform) }
+                            Task { @MainActor in
+                                self.notifier.postNotRecorded(title: block.title, bundleID: bundleID, platform: platform,
+                                                              problem: self.noRecordProblem ?? .own)
+                            }
                         } else {
                             Log.info("Not recording \(platform.displayName): the owner chose not to record this meeting")
                         }
@@ -1501,7 +1509,7 @@ final class AppController: ObservableObject {
     /// Settings › Recording: an empty do-not-record list. Also ends the block that a damaged list causes, at once.
     func resetNoRecordList() {
         noRecord.reset()
-        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord))
+        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord.map(\.book)))
         do { try noRecord.save(to: paths.noRecord) } catch { Log.error("Saving the do-not-record list failed: \(error)") }
         Log.info("The do-not-record list was reset")
     }
@@ -1519,7 +1527,7 @@ final class AppController: ObservableObject {
     func setRecording(_ choice: RecordingChoice, for meeting: UpcomingMeeting) {
         noRecord.set(choice, for: meeting)
         noRecord.removeExpired(now: Date())
-        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord))
+        noRecordGate.update(book: NoRecordBook.forGate(own: noRecord, others: otherNoRecord.map(\.book)))
         do { try noRecord.save(to: paths.noRecord) } catch { Log.error("Saving the recording choice failed: \(error)") }
     }
 
@@ -1951,9 +1959,9 @@ final class AppController: ObservableObject {
     private func quietUnconfirmed(_ call: UnconfirmedCall) {
         let now = Date()
         let until = UnconfirmedDismissals.endOfDay(after: now)
-        var answers = UnconfirmedDismissals(data: UserDefaults.standard.data(forKey: "notACall"))
+        var answers = UnconfirmedDismissals(data: MacDefaults.store.data(forKey: "notACall"))
         answers.add(call, until: until, now: now)
-        UserDefaults.standard.set(answers.data, forKey: "notACall")
+        MacDefaults.store.set(answers.data, forKey: "notACall")
         detection.dismissUnconfirmed(call, until: until)
     }
 
@@ -2078,6 +2086,9 @@ final class AppController: ObservableObject {
         guard identity.takesProfiles, !identity.profile.isDefault, let suite = identity.defaultsSuite else { return }
         let strays = MacDefaults.strays(in: UserDefaults.standard.persistentDomain(forName: suite) ?? [:])
         if !strays.isEmpty { Log.error("Settings: Mac-wide keys in this profile's settings: \(strays.joined(separator: ", "))") }
+        // The rule that no test of the app target can reach: every Mac-wide key (`offUntil` and `usageStatsEnabled`
+        // through `@AppStorage(store: MacDefaults.store)` among them) is read and written past the profile's swap.
+        assert(strays.isEmpty, "Mac-wide keys in this profile's settings: \(strays)")
     }
 
     private func enableLaunchAtLoginOnce() {

@@ -38,7 +38,9 @@ enum DevHooks {
         let looks = preview || debug
         // `MOSSAD_PROOF_DAYS=<n>` on a made-up registry: a setting written through `@AppStorage` into the profile's
         // suite, and what Sparkle reads, for the proof that a profile's swap holds.
-        if AppIdentity.current.madeUpRegistry, !preview, let days = env["MOSSAD_PROOF_DAYS"].flatMap(Int.init) {
+        // Never as `default`, which on a made-up registry is the owner's real install (it does not start as one anyway).
+        if AppIdentity.current.madeUpRegistry, !AppIdentity.current.profile.isDefault, !preview,
+           let days = env["MOSSAD_PROOF_DAYS"].flatMap(Int.init) {
             c.recordingDays = days
             Log.info("Proof: updates check automatically: \(c.updater.automaticallyChecks)")
         }

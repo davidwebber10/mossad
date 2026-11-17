@@ -133,7 +133,7 @@ final class ProfileProofTests: XCTestCase {
         let oddFile = dir.appendingPathComponent("odd.json")
         try write(#"{"version":1,"active":"ffffffff","profiles":[{"id":"WORK","name":"Bad","color":"blue","root":"~/Mossad Bad"},{"id":"1a2b3c4d","name":"Work","color":"teal","root":"~/Mossad Work"},{"id":"1a2b3c4d","name":"Twice","color":"blue","root":"~/Mossad Twice"},{"id":"default","name":"Mossad","color":"orange","root":"~/Mossad"}]}"#, to: oddFile)
         let odd = ProfileRegistry.load(from: oddFile)
-        XCTAssertEqual(odd.state, .read)
+        XCTAssertEqual(odd.state, .partial)
         XCTAssertEqual(odd.registry.live.map(\.id), ["default", "1a2b3c4d"])
         XCTAssertEqual(odd.registry.profile("1a2b3c4d")?.name, "Work")
         XCTAssertEqual(odd.registry.profile("1a2b3c4d")?.color, .graphite)
@@ -153,11 +153,18 @@ final class ProfileProofTests: XCTestCase {
         XCTAssertTrue(Profile.default.isDefault); XCTAssertFalse(work.isDefault)
     }
 
+    /// A profile id that no real profile can have (not 8 hex characters), so no real profile's settings are touched.
+    private func testProfile() -> AppIdentity {
+        var r = ProfileRegistry()
+        r.profiles.append(Profile(id: "zzzzzzzz", name: "Test", color: .blue, root: "~/Mossad Test"))
+        return AppIdentity(bundleID: main, arguments: ["Mossad", "--profile", "zzzzzzzz"], registry: .init(registry: r, state: .read))
+    }
+
     func testAProfilesSettingsAreNeverEmptied() throws {
-        let suite = "com.dwebber.mossad.profile.1a2b3c4d"
+        let suite = "com.dwebber.mossad.profile.zzzzzzzz"
         UserDefaults(suiteName: suite)?.set("Sam Carter", forKey: "ownerName")
         defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
-        let s = try XCTUnwrap(id(["--profile", "1a2b3c4d"]).profileSettings())
+        let s = try XCTUnwrap(testProfile().profileSettings())
         XCTAssertEqual(s.persistentDomain(forName: suite)?["ownerName"] as? String, "Sam Carter")
         XCTAssertEqual(s.string(forKey: "ownerName"), "Sam Carter")
     }
@@ -165,8 +172,8 @@ final class ProfileProofTests: XCTestCase {
     func testAProfileSuiteNeverReadsTheStandardDomain() throws {
         let key = "profileProof.\(UUID().uuidString)"
         UserDefaults.standard.set("real", forKey: key); defer { UserDefaults.standard.removeObject(forKey: key) }
-        let s = try XCTUnwrap(id(["--profile", "1a2b3c4d"]).profileSettings())
-        defer { s.removePersistentDomain(forName: "com.dwebber.mossad.profile.1a2b3c4d") }
+        let s = try XCTUnwrap(testProfile().profileSettings())
+        defer { s.removePersistentDomain(forName: "com.dwebber.mossad.profile.zzzzzzzz") }
         XCTAssertNil(s.object(forKey: key))
         s.set("profile", forKey: key)
         XCTAssertEqual(UserDefaults.standard.string(forKey: key), "real")
@@ -188,7 +195,8 @@ final class ProfileProofTests: XCTestCase {
 
     func testTheMacWideKeysAreThisList() {
         XCTAssertEqual(MacDefaults.keys, ["offUntil", "didSetLoginItem", "screenCaptureAsked", "usageStatsEnabled", "usageStatsInstallID",
-                                          "usageStatsLastAttempt", "usageStatsEndpoint", "usageStatsInDebug"])
+                                          "usageStatsLastAttempt", "usageStatsEndpoint", "usageStatsInDebug",
+                                          "askShortcut", "askPanelOrigin", "notACall"])
         XCTAssertEqual(MacDefaults.prefixes, ["SU", "automationState."])
     }
 

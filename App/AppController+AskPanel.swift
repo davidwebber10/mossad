@@ -15,7 +15,8 @@ extension AppController {
 
     /// The owner's shortcut for the quick panel: Option-Command-M until they change it; nil once they clear it.
     var askShortcut: HotKeyShortcut? {
-        guard let saved = UserDefaults.standard.string(forKey: Self.askShortcutKey) else { return .askDefault }
+        // Mac-wide: one global hot key for the Mac, whichever profile runs.
+        guard let saved = MacDefaults.store.string(forKey: Self.askShortcutKey) else { return .askDefault }
         return HotKeyShortcut(saved: saved)
     }
 
@@ -42,7 +43,7 @@ extension AppController {
             }
         }
         // A preview shares the app's settings: it changes nothing there.
-        if !isInert { UserDefaults.standard.set(shortcut?.saved ?? "", forKey: Self.askShortcutKey) }
+        if !isInert { MacDefaults.store.set(shortcut?.saved ?? "", forKey: Self.askShortcutKey) }
         if shortcut == nil { hotKeys.unregister(.ask) }
         askShortcutFailed = false
         objectWillChange.send()
