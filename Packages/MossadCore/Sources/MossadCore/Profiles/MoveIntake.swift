@@ -14,13 +14,18 @@ public struct MoveIntake: Sendable {
     private let stop: @Sendable (String) throws -> Void
     private let rename: @Sendable (String, String) -> Int32
     private let sync: @Sendable (URL) throws -> Void
+    private let now: @Sendable () -> Date
     public static let maxTries = 5
+
+    /// A part after the file check that failed, with where it waits.
+    struct PartFailed: Error { let kind: MoveMarker.TakeInWait; let error: Error }
 
     public init(paths: Paths, me: String, library: VoiceLibrary, ownerName: @escaping @Sendable () -> String,
                 voiceFingerprints: @escaping @Sendable () -> Bool, stop: @escaping @Sendable (String) throws -> Void = { _ in },
                 rename: @escaping @Sendable (String, String) -> Int32 = MoveFiles.exclusive,
-                sync: @escaping @Sendable (URL) throws -> Void = MoveFiles.fullSync) {
+                sync: @escaping @Sendable (URL) throws -> Void = MoveFiles.fullSync, now: @escaping @Sendable () -> Date = Date.init) {
         self.sync = sync
+        self.now = now
         self.paths = paths
         self.me = me
         self.library = library
@@ -95,6 +100,9 @@ public struct MoveIntake: Sendable {
         // The people store follows the voices: without it a learned voice would make no person.
         if voiceFingerprints(), library.identity == nil { return .wait }
         let look = MoveMarker.look(folder(callID))
+        // A part that failed waits longer after each try.
+        if case .claimed(let m) = look, m.intake == .takingIn, m.waits != nil,
+           !MoveRetry.due(tries: m.tries ?? 0, last: m.lastTry, now: now()) { return .wait }
         let hasCall = FileManager.default.fileExists(atPath: callFolder(callID).path)
         // A listing that fails is not an empty `Audio`: the step waits.
         guard let names = Self.audioNames(paths.audio, missingIsEmpty: true) else { return .wait }
@@ -125,9 +133,29 @@ public struct MoveIntake: Sendable {
         } catch is MoveStop {
             throw MoveStop()
         } catch {
-            Log.error("Move: the take-in of a meeting stopped at a step; the next look goes on: \(error)")
+            failed(callID, (error as? PartFailed)?.kind ?? .failed, error)
         }
         return step
+    }
+
+    /// A step that failed: the marker counts the tries and says where it waits; one log line for each change of where.
+    private func failed(_ callID: String, _ kind: MoveMarker.TakeInWait, _ error: Error) {
+        guard case .claimed(var m) = MoveMarker.look(folder(callID)), m.intake == .takingIn else {
+            return Log.error("Move: a step of the take-in of \(callID) failed; the next look goes on")
+        }
+        if m.waits != kind {
+            Log.error("Move: the take-in of \(callID) waits (\(kind.rawValue)); the next looks try again, each later")
+            m.tries = 0
+        }
+        m.tries = (m.tries ?? 0) + 1
+        m.lastTry = now()
+        m.waits = kind
+        try? m.save(in: folder(callID), claimed: true)
+    }
+
+    /// Runs one part after the file check; a failure says where the take-in waits.
+    private func part(_ kind: MoveMarker.TakeInWait, _ body: () throws -> Void) throws {
+        do { try body() } catch is MoveStop { throw MoveStop() } catch { throw PartFailed(kind: kind, error: error) }
     }
 
     /// Each waiting folder to its end. Returns the ids the meetings have here. `held` is asked before each step: while
@@ -141,7 +169,7 @@ public struct MoveIntake: Sendable {
                 // A stop ends the run, as the end of the process would.
                 guard let s = try? stepOrStop(callID) else { return done }
                 if s == .wait || s == .nothing { break }
-                if case .claimed(let m) = MoveMarker.look(folder(callID)), m.intake == .refused || m.intake == .taken { break }
+                if case .claimed(let m) = MoveMarker.look(folder(callID)), m.intake == .refused || m.intake == .taken || m.waits != nil { break }
                 if case .takeIn = s, case .claimed(let m) = MoveMarker.look(folder(callID)), (m.tries ?? 0) > 0 { break }
             }
             if case .claimed(let m) = MoveMarker.look(folder(callID)), m.intake == .taken, let f = m.finalID { done.append(f) }
@@ -174,6 +202,8 @@ public struct MoveIntake: Sendable {
         m.finalID = d.finalID
         m.refusal = d.refusal
         m.tries = nil
+        m.waits = nil
+        m.lastTry = nil
         if d.intake == .takingIn, m.chatIDs == nil {
             var ids: [String: String] = [:]
             for f in m.files where f.path.hasPrefix(MoveMarker.chatsFolder + "/") {
@@ -271,19 +301,23 @@ public struct MoveIntake: Sendable {
         if let data = try? Data(contentsOf: saved), let naming = try? JSONDecoder().decode(MovedVoices.Naming.self, from: data),
            let r = try? CallRecord.load(from: dir) {
             try stop("learn the voices")
-            try MovedVoices.learn(naming, from: r, callID: f, library: library)
+            try part(.voices) { try MovedVoices.learn(naming, from: r, callID: f, library: library) }
         }
         try stop("sync the meeting")
-        try sync(dir)
+        try part(.record) { try sync(dir) }
         // The mark goes before the chats: they are new chats of this meeting here.
         if var r = try? CallRecord.load(from: dir), r.moveTo != nil {
             try stop("take the mark off")
             r.moveTo = nil
-            try r.save(to: dir)
-            try sync(dir.appendingPathComponent(CallRecord.fileName))
+            try part(.record) {
+                try r.save(to: dir)
+                try sync(dir.appendingPathComponent(CallRecord.fileName))
+            }
         }
-        try writeChats(m, callID, as: f)
-        if FileManager.default.fileExists(atPath: paths.chats.path) { try sync(paths.chats) }
+        try part(.chats) {
+            try writeChats(m, callID, as: f)
+            if FileManager.default.fileExists(atPath: paths.chats.path) { try sync(paths.chats) }
+        }
         try stop("remove the copies of the chats")
         try? FileManager.default.removeItem(at: folder(callID).appendingPathComponent(MoveMarker.chatsFolder))
         try? FileManager.default.removeItem(at: saved)
@@ -291,6 +325,8 @@ public struct MoveIntake: Sendable {
         m.intake = .taken
         m.count = m.files.count
         m.tries = nil
+        m.waits = nil
+        m.lastTry = nil
         try m.save(in: folder(callID), claimed: true)
         try sync(folder(callID).appendingPathComponent(MoveMarker.claimedName))
     }

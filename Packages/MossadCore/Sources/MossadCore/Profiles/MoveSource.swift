@@ -230,6 +230,15 @@ public struct MoveSource: Sendable {
         let look: MoveMarker.Look = targetPaths.map { MoveMarker.look(MoveMarker.folder(callID, in: $0)) } ?? (place == .gone ? .missing : .unknown)
         let part = targetPaths.map { MoveCopy.hasPart(callID, token: out.token, incoming: $0.incoming) } ?? false
         let step = MovePlan.source(out, marker: look, part: part, target: place.plan)
+        // The target took the meeting and has not finished after its last wait: the row says where it waits.
+        if out.state == .waiting {
+            var waits: MoveMarker.TakeInWait?
+            if case .claimed(let m) = look, m.isMine(of: out), m.intake == .takingIn, let w = m.waits, MoveRetry.gaveUp(tries: m.tries ?? 0) { waits = w }
+            if waits != out.targetWaits, let now = MoveOut.load(callID, paths: s.paths), now.state == begun, now.token == out.token {
+                out.targetWaits = waits
+                try out.save(s.paths)
+            }
+        }
         func save(_ state: MoveOut.State, cancel: MovePlan.Cancel? = nil) throws {
             try s.stop("save \(state.rawValue)")
             // Read again: a ledger that changed since this step read it is never written over.
@@ -351,6 +360,8 @@ public struct MoveSource: Sendable {
             }
             return targetPaths == nil ? .waiting : .working
         case .finishCancel(let removeIncoming):
+            // A mark that could not come off waits longer after each try.
+            guard MoveRetry.due(tries: out.tries ?? 0, last: out.lastTry, now: s.now()) else { return .waiting }
             try s.stop("remove the download")
             try? FileManager.default.removeItem(at: s.paths.moves.appendingPathComponent("\(callID).download"))
             if let b = targetPaths {
@@ -367,7 +378,11 @@ public struct MoveSource: Sendable {
             if !MoveSource.keepsMark(afterCall: out.afterCall, why: why) {
                 try s.stop("take the mark off")
                 guard await s.pipeline.setMoveTarget(callID: callID, nil) else {
-                    Log.error("Move: the mark of a cancelled move could not be taken off; the next look tries again")
+                    if (out.tries ?? 0) == 0 { Log.error("Move: the mark of a cancelled move could not be taken off; the next looks try again, each later") }
+                    guard let now = MoveOut.load(callID, paths: s.paths), now.state == begun, now.token == out.token else { throw Overtaken() }
+                    out.tries = (out.tries ?? 0) + 1
+                    out.lastTry = s.now()
+                    try out.save(s.paths)
                     return .waiting
                 }
             }

@@ -146,7 +146,7 @@ enum DevHooks {
     private static let launch = Date()
 
     /// The move's states, shown from made-up values; nothing moves in a preview.
-    /// `MOSSAD_MOVE="<call id>=moving|copying|slow|slow:notSetUp|slow:unreachable|cancelling|removing"` (more with `;`):
+    /// `MOSSAD_MOVE="<call id>=moving|copying|slow|slow:notSetUp|slow:unreachable|cancelling|removing|notFinished:<kind>"` (more with `;`):
     /// a made-up ledger of a move to the first other profile of `MOSSAD_PROFILES` (started 0 s ago, or 120 s for `slow`;
     /// `copying` at 42%; `removing` waits at the backup step).
     /// `MOSSAD_MOVE_ENDED="<call id>=<reason>"`: a move of a call marked during its recording that ended (its row is held).
@@ -165,6 +165,10 @@ enum DevHooks {
             switch parts[0] {
             case "copying": m.state = .copying; c.moveProgress[id] = 0.42
             case "cancelling": m.state = .cancelling
+            case "notFinished":
+                // The target took the meeting and a part after its file check keeps failing (`:voices|record|chats|failed`).
+                m.state = .waiting
+                m.targetWaits = parts.count > 1 ? MoveMarker.TakeInWait(rawValue: parts[1]) ?? .failed : .record
             case "removing":
                 m.state = .removing
                 m.removed = ["voices", "people", "coach", "books", "shares"]
@@ -172,7 +176,7 @@ enum DevHooks {
                 m.waitsAt = MoveOut.Step.backup.rawValue
             default: m.state = .waiting
             }
-            if parts.count > 1 { c.moveReach[to.id] = parts[1] == "notSetUp" ? .notSetUp : parts[1] == "unreachable" ? .unreachable : .notRunning }
+            if parts.count > 1, parts[0] != "notFinished" { c.moveReach[to.id] = parts[1] == "notSetUp" ? .notSetUp : parts[1] == "unreachable" ? .unreachable : .notRunning }
             c.moves[id] = m
         }
         for (id, why) in pairs("MOSSAD_MOVE_ENDED") {

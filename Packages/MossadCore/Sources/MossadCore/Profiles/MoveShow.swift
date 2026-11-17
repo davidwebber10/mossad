@@ -35,6 +35,8 @@ public enum MoveShow {
         if let move, move.state != .done {
             let target = name ?? MoveWords.otherProfile
             switch move.state {
+            case .waiting where move.targetWaits != nil:
+                return Row(text: MoveWords.notFinished(target, move.targetWaits!), cancels: false, held: false)
             case .copying, .copied, .waiting:
                 let waited = now.timeIntervalSince(move.started)
                 if copied == nil, waited >= MoveRules.slowAfter, reach != .open {
@@ -161,6 +163,9 @@ public enum MoveRetry {
     public static func wait(afterTries n: Int) -> TimeInterval { n <= 0 ? 0 : waits[min(n, waits.count) - 1] }
 
     /// True when the step may run now. No time of a last try ("Try again") is always due.
+    /// The tries reached the last wait step: from there it is said, not only logged.
+    public static func gaveUp(tries: Int) -> Bool { tries >= waits.count }
+
     public static func due(tries: Int, last: Date?, now: Date) -> Bool {
         guard tries > 0, let last else { return true }
         return now.timeIntervalSince(last) >= wait(afterTries: tries)
@@ -181,4 +186,15 @@ extension MoveWords {
     }
 
     public static let tryAgain = "Try again"
+
+    /// The other profile took the meeting in and a part after its file check fails again and again.
+    public static func notFinished(_ target: String, _ waits: MoveMarker.TakeInWait) -> String {
+        let why = switch waits {
+        case .voices: "it cannot save the voices it learned from it yet."
+        case .record: "it cannot save the meeting here yet."
+        case .chats: "it cannot save the meeting's chats yet."
+        case .failed: "one step does not work yet."
+        }
+        return "“\(target)” took the meeting but has not finished: \(why) It tries again."
+    }
 }

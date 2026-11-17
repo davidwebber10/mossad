@@ -12,7 +12,7 @@ public struct MoveMarker: Codable, Equatable, Sendable {
     public static let currentVersion = 1
     public static let allowedKeys: Set<String> = ["version", "callID", "from", "to", "made", "token", "files", "path", "size", "sha256",
                                                   "ownerKeys", "intake", "finalID", "refusal", "count", "chatIDs",
-                                                  "arrived", "tries"]
+                                                  "arrived", "tries", "waits", "lastTry"]
 
     public struct File: Codable, Equatable, Sendable {
         public var path: String
@@ -28,6 +28,8 @@ public struct MoveMarker: Codable, Equatable, Sendable {
 
     public enum Intake: String, Codable, Sendable { case takingIn, taken, refused }
     public enum Refusal: String, Codable, Sendable { case idTaken, unreadable, notWhole }
+    /// Where a take-in that failed after the file check waits: a kind from this list, never a title or a name.
+    public enum TakeInWait: String, Codable, CaseIterable, Sendable { case voices, record, chats, failed }
 
     public var version: Int
     public var callID: String
@@ -51,8 +53,12 @@ public struct MoveMarker: Codable, Equatable, Sendable {
     /// The target's first half ended: `call/call.json` is the record as it arrives (or `call/arrival.json` is, until
     /// its rename).
     public var arrived: Bool?
-    /// The failed tries of the rename into `Audio`: after `MoveIntake.maxTries` the target refuses.
+    /// The failed tries of the rename into `Audio`: after `MoveIntake.maxTries` the target refuses. Also the failed
+    /// tries of the part after the file check (`waits`), which never refuses: it waits longer after each (`MoveRetry`).
     public var tries: Int?
+    /// Review N2: where the part after the file check waits, and its last try.
+    public var waits: TakeInWait?
+    public var lastTry: Date?
 
     public init(callID: String, from: String, to: String, made: Date, token: String, files: [File], ownerKeys: [String]) {
         version = Self.currentVersion
@@ -165,6 +171,8 @@ public struct MoveOut: Codable, Equatable, Sendable {
     public var waitsAt: String?
     public var because: Wait?
     public var waitsSince: Date?
+    /// The target took the meeting and has not finished after the last wait step: where it waits.
+    public var targetWaits: MoveMarker.TakeInWait?
 
     /// Why a removal step waits, as far as this profile can tell.
     public enum Wait: String, Codable, CaseIterable, Sendable { case peopleNotReady, shareNotSaved, backupNotDone, folderNotRemoved, failed }
