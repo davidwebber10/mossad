@@ -80,6 +80,16 @@ public enum ProcessFacts {
         return Date(timeIntervalSince1970: Double(t.tv_sec) + Double(t.tv_usec) / 1_000_000)
     }
 
+    /// The parent of that pid, or nil when no such process lives.
+    public static func parent(of pid: Int32) -> Int32? {
+        guard pid > 0 else { return nil }
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var name: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&name, 4, &info, &size, nil, 0) == 0, size > 0, info.kp_proc.p_pid == pid else { return nil }
+        return info.kp_eproc.e_ppid
+    }
+
     /// The pid lives, and its start time is within 1 s of `started` when one is given.
     public static func isAlive(pid: Int32, started: Date?) -> Bool {
         guard let now = startTime(of: pid) else { return false }

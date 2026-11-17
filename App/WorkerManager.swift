@@ -10,7 +10,12 @@ final class WorkerManager {
         let process: Process
         let started: Date
         let failures: Int
+        /// The kernel's start time of the pid, so a kill never reaches a process that took the pid over.
+        let kernelStart: Date?
     }
+
+    /// How long a quit waits for its workers before it kills the ones that did not end.
+    static let quitWait: TimeInterval = 2
 
     private let identity: AppIdentity
     private var profiles: [Profile]
@@ -69,15 +74,45 @@ final class WorkerManager {
         stopping = true
         write()
         for (id, _) in children { terminate(id) }
-        return await waitForFolder(of: id, seconds: seconds)
+        return await stopWorker(id, seconds: seconds)
     }
 
     /// SIGTERM to one profile's worker, then waits until its folder lock is free.
     func stop(_ id: String, seconds: TimeInterval) async -> Bool {
         guard started else { return true }
         stopped.insert(id)
-        terminate(id)
-        return await waitForFolder(of: id, seconds: seconds)
+        return await stopWorker(id, seconds: seconds)
+    }
+
+    /// `WorkerLaunch.nextStop`: tell, wait for the folder, kill the worker that did not end, wait once more. A kill
+    /// is safe at any line: each step of a worker saves before the next one, and the next run takes up the rest.
+    private func stopWorker(_ id: String, seconds: TimeInterval) async -> Bool {
+        var step = WorkerLaunch.StopStep.tell
+        while true {
+            switch step {
+            case .tell:
+                terminate(id)
+                step = WorkerLaunch.nextStop(after: step, folderFree: false)
+            case .wait, .waitAgain:
+                step = WorkerLaunch.nextStop(after: step, folderFree: await waitForFolder(of: id, seconds: seconds))
+            case .kill:
+                kill(id)
+                step = WorkerLaunch.nextStop(after: step, folderFree: false)
+            case .done(let outcome):
+                if outcome == .refused { Log.error("Workers: \(id) did not end, also after a kill") }
+                return outcome.letsGo
+            }
+        }
+    }
+
+    /// SIGKILL to this app's own child, only while it is still the process it started.
+    private func kill(_ id: String) {
+        guard let child = children[id], child.process.isRunning else { return }
+        let pid = child.process.processIdentifier
+        guard WorkerLaunch.mayKill(started: child.kernelStart, now: ProcessFacts.startTime(of: pid), parent: ProcessFacts.parent(of: pid),
+                                   me: ProcessInfo.processInfo.processIdentifier) else { return }
+        Log.error("Workers: \(id) did not stop; killed (pid \(pid))")
+        Darwin.kill(pid, SIGKILL)
     }
 
     /// A deleted profile: its worker never starts again, also not by `resume`.
@@ -113,6 +148,10 @@ final class WorkerManager {
         fileQueue.sync { [file] in Self.save(state, to: file, takeOver: ForegroundState.Write.quit.takesOver) }
         for (id, _) in children { terminate(id) }
         Log.info("Workers: told to stop at quit")
+        // No worker outlives Mossad: a short wait, then a kill for one that did not end (safe, as in `stopWorker`).
+        let deadline = Date().addingTimeInterval(Self.quitWait)
+        while children.values.contains(where: { $0.process.isRunning }), Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
+        for (id, _) in children { kill(id) }
     }
 
     // MARK: - Children
@@ -128,7 +167,8 @@ final class WorkerManager {
         }
         do {
             try process.run()
-            children[id] = Child(process: process, started: Date(), failures: failures)
+            children[id] = Child(process: process, started: Date(), failures: failures,
+                                 kernelStart: ProcessFacts.startTime(of: process.processIdentifier))
             gaveUp.remove(id)
             Log.info("Workers: \(id) started (pid \(process.processIdentifier))")
         } catch {

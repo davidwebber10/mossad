@@ -39,11 +39,14 @@ enum WorkerEntry {
         let env = ProcessInfo.processInfo.environment
         // 1. The app in front: nothing of the data folder is touched before it is known.
         // `signals: true`: the worker's own SIGTERM and SIGINT handling, set by itself (the app's are not inherited).
-        let watcher = ForegroundWatcher(file: ForegroundState.url(home: home, environment: env), signals: true) { why in
+        let stuck = proofStuck(identity, env)
+        let watcher = ForegroundWatcher(file: ForegroundState.url(home: home, environment: env), signals: !stuck) { why in
+            if stuck { return Log.info("Worker: ignores the stop (\(why.rawValue)) for a proof") }
             Log.info("Worker: stops (\(why.rawValue))")
             Log.flush()
             exit(WorkerLaunch.Exit.stopped.rawValue)
         }
+        if stuck { signal(SIGTERM, SIG_IGN) }
         if case .stop = watcher.first() {
             say("Mossad: no foreground app; the worker does not start.")
             exit(WorkerLaunch.Exit.noForeground.rawValue)
@@ -87,6 +90,16 @@ enum WorkerEntry {
             await worker.run()
         }
         dispatchMain()
+    }
+
+    /// `MOSSAD_PROOF_STUCK_WORKER=1` on a made-up registry, in a debug build: the worker ignores SIGTERM and the
+    /// stop in the file, for the proof that the app kills a worker that does not end.
+    private static func proofStuck(_ identity: AppIdentity, _ env: [String: String]) -> Bool {
+        #if DEBUG
+        identity.madeUpRegistry && env["MOSSAD_PROOF_STUCK_WORKER"] == "1"
+        #else
+        false
+        #endif
     }
 
     private static func say(_ line: String) {

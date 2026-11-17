@@ -157,4 +157,26 @@ final class WorkerLaunchTests: XCTestCase {
             XCTAssertEqual(WorkerLaunch.resumesAfter(event, stoppedForInstall: stopped), resumes, "\(stopped) \(event)")
         }
     }
+
+    func testAWorkerThatDoesNotStopIsKilledAndOnlyThenRefused() {
+        typealias S = WorkerLaunch.StopStep
+        let table: [(S, Bool, S)] = [
+            (.tell, false, .wait), (.tell, true, .wait),
+            (.wait, true, .done(.stopped)), (.wait, false, .kill),
+            (.kill, false, .waitAgain), (.kill, true, .waitAgain),
+            (.waitAgain, true, .done(.killed)), (.waitAgain, false, .done(.refused)),
+        ]
+        for (step, free, next) in table { XCTAssertEqual(WorkerLaunch.nextStop(after: step, folderFree: free), next, "\(step) \(free)") }
+        XCTAssertTrue(WorkerLaunch.StopOutcome.killed.letsGo); XCTAssertTrue(WorkerLaunch.StopOutcome.stopped.letsGo)
+        XCTAssertFalse(WorkerLaunch.StopOutcome.refused.letsGo)
+    }
+
+    func testAKillGoesOnlyToOurOwnChildThatIsStillTheSameProcess() {
+        let t = Date(timeIntervalSince1970: 1_900_000_000)
+        XCTAssertTrue(WorkerLaunch.mayKill(started: t, now: t.addingTimeInterval(0.4), parent: 500, me: 500))
+        XCTAssertFalse(WorkerLaunch.mayKill(started: t, now: nil, parent: 500, me: 500), "gone")
+        XCTAssertFalse(WorkerLaunch.mayKill(started: t, now: t.addingTimeInterval(30), parent: 500, me: 500), "a reused pid")
+        XCTAssertFalse(WorkerLaunch.mayKill(started: t, now: t, parent: 1, me: 500), "not our child")
+        XCTAssertFalse(WorkerLaunch.mayKill(started: nil, now: t, parent: 500, me: 500), "a start not known")
+    }
 }

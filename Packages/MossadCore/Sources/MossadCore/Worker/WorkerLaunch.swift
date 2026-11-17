@@ -60,6 +60,32 @@ public enum WorkerLaunch {
     /// The `failures` of an exit: the count so far, or 0 when the worker ran `longRun` or more.
     public static func failures(after count: Int, ranSeconds: TimeInterval) -> Int { ranSeconds >= longRun ? 0 : count }
 
+    /// How the app stops a worker for a switch, a delete, or a quit: it tells it (`stopping`, SIGTERM), waits for
+    /// its folder lock, and when the worker did not end, kills it and waits once more. A kill is safe at any line:
+    /// each step of a worker saves before the next one, and the next run takes up what was left.
+    public enum StopOutcome: Equatable, Sendable {
+        case stopped, killed, refused
+        /// The folder is free: the switch or the delete goes on.
+        public var letsGo: Bool { self != .refused }
+    }
+    public enum StopStep: Equatable, Sendable { case tell, wait, kill, waitAgain, done(StopOutcome) }
+
+    public static func nextStop(after step: StopStep, folderFree: Bool) -> StopStep {
+        switch step {
+        case .tell: .wait
+        case .wait: folderFree ? .done(.stopped) : .kill
+        case .kill: .waitAgain
+        case .waitAgain: .done(folderFree ? .killed : .refused)
+        case .done: step
+        }
+    }
+
+    /// A kill goes only to this app's own child, still the process it started (the start time within 1 s).
+    public static func mayKill(started: Date?, now: Date?, parent: Int32?, me: Int32) -> Bool {
+        guard let started, let now, parent == me else { return false }
+        return abs(now.timeIntervalSince(started)) <= 1
+    }
+
     /// What Sparkle says after the app stopped its workers for an install: it aborted (an error, or the owner
     /// cancelled the authorization), its cycle ended with the app still running, or it relaunches now.
     public enum UpdateEvent: Sendable { case aborted, cycleEnded, willRelaunch }

@@ -206,4 +206,14 @@ final class ForegroundWatchTests: XCTestCase {
         for (write, takes) in table { XCTAssertEqual(write.takesOver, takes, "\(write)") }
         XCTAssertEqual(Set(table.map { $0.0 }), Set(ForegroundState.Write.allCases))
     }
+
+    func testTheParentOfAChildIsThisProcess() throws {
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        child.arguments = ["5"]
+        try child.run()
+        defer { child.terminate() }
+        XCTAssertEqual(ProcessFacts.parent(of: child.processIdentifier), ProcessInfo.processInfo.processIdentifier)
+        XCTAssertNil(ProcessFacts.parent(of: -1))
+    }
 }
