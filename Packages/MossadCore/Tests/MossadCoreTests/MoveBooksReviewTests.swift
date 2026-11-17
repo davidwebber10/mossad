@@ -46,6 +46,23 @@ final class MoveBooksReviewTests: XCTestCase {
         }
     }
 
+    /// A newer copy from a device that changed a point after the forget, still with `done`, `carried`, and `reopened`
+    /// in the moved call: the merge cleans each of them.
+    func testTheMergeCleansANewerCopyOfAPoint() throws {
+        let before = MoveBooksFixtures.points()
+        var after = before
+        after.forget(callID: x, at: d)
+        var newer = before
+        for p in newer.points { newer.update(p.id, at: d + 3600) { $0.rank += 10 } }
+        for merged in [after.merged(with: newer), newer.merged(with: after)] {
+            XCTAssertNil(merged.points[0].done, "done in the moved call")
+            XCTAssertEqual(merged.points[1].carried, [MoveBooksFixtures.w])
+            XCTAssertEqual(merged.points[2].mentions?.map(\.callID), [y])
+            XCTAssertNil(merged.points[3].reopened)
+            XCTAssertEqual(merged.points.map(\.rank), newer.points.map(\.rank), "the newer copy's own change stays")
+        }
+    }
+
     // MARK: C3b: the coach
 
     private let reason = "I never discuss the giraffe enclosure"

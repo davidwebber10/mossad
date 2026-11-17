@@ -654,6 +654,14 @@ func testAMarkIsRefusedForACallInWork() async throws {
 - [ ] **Step 3: Write the code.** `setMoveTarget` goes through the pipeline's `edit` and `store`. Run the filter, then `swift test`. Expected: PASS, then 0 failures.
 - [ ] **Step 4: Commit.** `git commit -m "A meeting is copied into the target's Incoming folder under a part name, checked file by file, and a marked call is never processed here"`
 
+**From the review (group R4).** What the code of this task must do that the pure rules cannot:
+- Publish with `rename(2)`, not `FileManager.moveItem` (it tests the target first and replaces an empty folder). On `EXDEV` (`Incoming` on another volume) refuse the move: nothing changes.
+- The part has the move's token in its name, `Incoming/<id>.<token>.part`, so two moves of one id never share a part. `MovePlan.source` gets `part: true` only for this move's own part, whole, with its marker.
+- The copy is three steps: every file, then `move.json` last (with `MoveOut.token`), then the ledger `copied`. `F_FULLFSYNC` each copied file, `move.json`, and the part folder before the publish. Read each copy's hash back from the disk after the sync, not from memory.
+- `MovedFiles.list` throws on a folder or a file that does not read: the move is refused. `MovedFiles.unknown` names refuse it with `MoveWords.unknownFile`.
+- The chats: `MovedChats.split`. Only `moved` go. `deleted` are counted in the confirmation (`MoveWords.chatsDeleted`) and are deleted in this profile at the `books` step.
+- One advance for each id at a time in a process (the timer, the launch, the housekeeping).
+
 ---
 
 ### Task 5: The names of the voices in the target
@@ -820,6 +828,13 @@ func testAPartOrAFolderWithNoMarkerIsNeverTakenIn() throws
 - [ ] **Step 3: Write the code.** Run the filter, then `swift test`. Expected: PASS, then 0 failures.
 - [ ] **Step 4: Commit.** `git commit -m "The target claims a moved meeting with one rename, names its voices, and moves the folder into its Audio in steps that a stop cannot break"`
 
+**From the review (group R4).** What the code of this task must do that the pure rules cannot:
+- Claim only a marker addressed to this profile for the folder's id (`MovePlan.target(_:folder:me:...)`), and wait while `MovePlan.ownRemoval` of this profile's own ledger of that id is true.
+- The take-in is two halves: first `arrival.json`, the voices (`MovedVoices.decide(..., fingerprints:, callID: <final id>)`), the people, and the chats; then one `rename(2)` of the call folder into `Audio/<final id>`. On `EXDEV` refuse. A refusal after the first half first undoes this profile's own half (the samples learned with the final id, the people it made, the chats it wrote), then writes `refused`.
+- `(true, true)` gives `.decide`: decide the id again and write `arrival.json` again with the new id.
+- Before `taken`: read every file of `Audio/<final id>` and the chats back from the disk, compare them with `marker.files` (`MovePlan.held`), `F_FULLFSYNC` the files and the folder, and write `taken` with `count` (the files checked). `claimed.json` keeps the first profile's `token`. With `held` nil the target waits; with false it refuses `notWhole`.
+- With "voice fingerprints" off, `MovedVoices.apply` clears them from the record.
+
 ---
 
 ### Task 7: The books forget a call for good
@@ -972,6 +987,13 @@ func testAStepOfAFolderThatIsGoneIsDone() async throws      // with no call fold
 - [ ] **Step 3: Write the code.** `removeMoved` removes the note (`markdownPath`), `ReferenceBackup.forget(callID:)`, `ReferenceBackup.forget(note:)`, the folder, and calls `heavy.forget`. Run the filter, then `swift test`. Expected: PASS, then 0 failures.
 - [ ] **Step 4: Commit.** `git commit -m "A meeting that moved away is removed in eight steps that each can run twice, with its voices, the person it made, and every word the books kept"`
 
+**From the review (group R4).** What the code of this task must do that the pure rules cannot:
+- The `folder` step renames the call folder out of `Audio` first (into `Moves/`), then deletes it. A half folder with no `call.json` counts as done.
+- The `coach` step uses `CoachProfile.forgetMoved(callID:)`, which also drops what the call's answers and questions made; the person who goes uses `CoachProfile.forget(person:name:)`, which writes the id into `movedPeople` and no words into `forgotten`.
+- The `books` step also deletes the chats that `MovedChats.split` did not move.
+- A damaged local book (set aside, empty) loses the forget: at each launch, run the books' forget again for each `done` ledger (each forget can run twice). See `testADamagedLocalBookHasNoListToCleanWith`.
+- One advance for each id at a time.
+
 ---
 
 ### Task 9: The first profile's half, and both halves end to end
@@ -1073,6 +1095,12 @@ func testAMoveOfACallMarkedDuringItsRecording() async throws
 - [ ] **Step 2: Run to verify they fail.** Run: `swift test --filter MoveEndToEndTests`. Expected: the build fails with "cannot find 'MoveSource' in scope".
 - [ ] **Step 3: Write `MoveSource.swift`.** Run the filter, then `swift test`. Expected: PASS, then 0 failures.
 - [ ] **Step 4: Commit.** `git commit -m "A move is whole in the first profile or in both at every stop, and ends with the meeting in exactly one"`
+
+**From the review (group R4).** What the real-folder runs must hold:
+- The four rules of `MoveModelTests` (never in neither; a removal starts only from a live target that holds this move's meeting whole; no removal of an `Incoming/<id>` that the target may take in; no take-in of an id while this profile's own move of it is not done), with the same cases: a third profile that moves a meeting with the same id, a move back, a target that goes and comes back, a registry that cannot be read, a marker with no ledger, a ledger with no marker.
+- `MoveRules.target` gives three answers; `unknown` waits and never cancels.
+- `finishCancel` deletes the ledger last and removes `Incoming/<id>` only when the rule says `removeIncoming` (this move's taken-back or refused marker).
+- `F_FULLFSYNC` before the publish and before `taken`; one advance for each id at a time.
 
 ---
 
