@@ -228,6 +228,10 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     /// The owner's answers to the cards of the findings deck: see `CoachTraining`.
     public var answers: [FindingAnswer] = []
 
+    /// Calls that left this profile: nothing of them is kept, and a merge with an older copy does not bring it back.
+    /// Nil when there are none, and then the file is written as before.
+    public var movedCalls: [String]?
+
     /// The version of `CoachSkill` that the advice log was last read against. 0 for a memory from before the
     /// log: the runner then fills the log one time from the review files.
     public var adviceVersion = 0
@@ -249,6 +253,7 @@ public struct CoachProfile: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case summary, focus, patterns, people, history, guidance, rated, facts, forgotten, foci, voice, questions, advice, observations, adviceVersion
         case answers
+        case movedCalls
     }
 
     /// Profiles from before feedback existed have no guidance or ratings.
@@ -272,6 +277,7 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         observations = try c.decodeIfPresent(LossyArray<CoachObservation>.self, forKey: .observations)?.values ?? []
         adviceVersion = try c.decodeIfPresent(Int.self, forKey: .adviceVersion) ?? 0
         answers = try c.decodeIfPresent(LossyArray<FindingAnswer>.self, forKey: .answers)?.values ?? []
+        movedCalls = try c.decodeIfPresent([String].self, forKey: .movedCalls)
     }
 
     public func facts(_ kind: CoachFact.Kind) -> [CoachFact] { facts.filter { $0.kind == kind } }
@@ -330,6 +336,9 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         out.questions = Self.mergedQuestions(questions, other.questions)
         // The owner answers cards on either device.
         out.answers = Self.mergedAnswers(answers, other.answers)
+        let moved = Set((movedCalls ?? []) + (other.movedCalls ?? []))
+        out.movedCalls = moved.isEmpty ? nil : moved.sorted()
+        out.drop(moved)
         out.settleAnswers()
         out.trimGuidance()
         out.focus = out.activeFocus?.plan ?? (out.foci.isEmpty ? out.focus : "")
@@ -444,6 +453,37 @@ public struct CoachProfile: Codable, Equatable, Sendable {
         questions.removeAll { $0.callID == callID && $0.status == .open }
         // The owner's answers to the cards stay: each is a signal about the coaching, not about the meeting, and
         // the other device keeps them too.
+    }
+
+    /// A meeting that left this profile: what `forget(callID:)` removes, and also the rated points, the questions in
+    /// any state, and the answers to its cards (a "never again" on one of them too). The id goes into `movedCalls`.
+    public mutating func forgetMoved(callID: String, at date: Date = Date()) {
+        forget(callID: callID)
+        drop([callID])
+        movedCalls = Array(Set((movedCalls ?? []) + [callID])).sorted()
+    }
+
+    /// Everything of these calls.
+    mutating func drop(_ calls: Set<String>) {
+        guard !calls.isEmpty else { return }
+        rated.removeAll { calls.contains($0.callID) }
+        questions.removeAll { $0.callID.map(calls.contains) ?? false }
+        answers.removeAll { calls.contains($0.callID) }
+        observations.removeAll { calls.contains($0.callID) }
+        history.removeAll { calls.contains($0.callID) }
+        advice.removeAll { calls.contains($0.callID) }
+        for i in foci.indices { foci[i].results.removeAll { calls.contains($0.callID) } }
+    }
+
+    /// A person whom a moved meeting alone made: the notes on them, under any name, and each fact and guidance about
+    /// them. The words of each fact and guidance are kept as forgotten, with the date, so a merge does not bring them back.
+    public mutating func forget(person id: String, name: String, at date: Date = Date()) {
+        people[name] = nil
+        people = people.filter { $0.value.person != id }
+        for f in facts where f.person == id { forgotten[f.text.lowercased()] = date }
+        facts.removeAll { $0.person == id }
+        for g in guidance where g.person == id { forgotten[g.text.lowercased()] = date }
+        guidance.removeAll { $0.person == id }
     }
 
     /// What the log holds of one pattern, the newest first.

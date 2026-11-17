@@ -122,10 +122,13 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
     public var answers: [SuggestionAnswer] = []
     /// Calls already checked for the points, so each call is read once.
     public var checked: Set<String> = []
+    /// Calls that left this profile: no point names one, and a merge with an older copy does not bring one back. Nil
+    /// when there are none, and then the file is written as before.
+    public var movedCalls: [String]?
 
     public init() {}
 
-    enum CodingKeys: String, CodingKey { case version, points, answers, checked }
+    enum CodingKeys: String, CodingKey { case version, points, answers, checked, movedCalls }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -133,6 +136,7 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         points = try c.decodeIfPresent([NextTimePoint].self, forKey: .points) ?? []
         answers = try c.decodeIfPresent([SuggestionAnswer].self, forKey: .answers) ?? []
         checked = Set(try c.decodeIfPresent([String].self, forKey: .checked) ?? [])
+        movedCalls = try c.decodeIfPresent([String].self, forKey: .movedCalls)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -141,6 +145,7 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         try c.encode(points, forKey: .points)
         try c.encode(answers, forKey: .answers)
         try c.encode(checked.sorted(), forKey: .checked)
+        try c.encodeIfPresent(movedCalls, forKey: .movedCalls)
     }
 
     public var visible: [NextTimePoint] { points.filter { !$0.deleted } }
@@ -249,6 +254,34 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         return !ids.isEmpty
     }
 
+    /// A meeting that left this profile: a point it closed is open again, and no point names it (carried, reopened,
+    /// mentioned, or checked). The id is kept in `movedCalls`, so a merge with a copy that still names it cleans that
+    /// copy too.
+    @discardableResult
+    public mutating func forget(callID: String, at date: Date = Date()) -> Bool {
+        var changed = reopen(doneIn: callID, at: date)
+        for i in points.indices where Self.clean(&points[i], of: [callID]) {
+            points[i].updated = date
+            changed = true
+        }
+        if checked.remove(callID) != nil { changed = true }
+        if movedCalls?.contains(callID) != true {
+            movedCalls = ((movedCalls ?? []) + [callID]).sorted()
+            changed = true
+        }
+        return changed
+    }
+
+    /// Takes the calls out of a point. True when it changed.
+    static func clean(_ p: inout NextTimePoint, of calls: Set<String>) -> Bool {
+        let before = p
+        if let call = p.done?.callID, calls.contains(call) { p.done = nil }
+        p.carried = p.carried.map { $0.filter { !calls.contains($0) } }.flatMap { $0.isEmpty ? nil : $0 }
+        p.reopened = p.reopened.map { $0.filter { !calls.contains($0) } }.flatMap { $0.isEmpty ? nil : $0 }
+        p.mentions = p.mentions.map { $0.filter { !calls.contains($0.callID) } }.flatMap { $0.isEmpty ? nil : $0 }
+        return p != before
+    }
+
     /// The owner marks a point done by hand, or takes a done back. A "discussed" that the check found and the
     /// owner took back is never found again in that meeting.
     public mutating func toggleDone(_ id: UUID, at date: Date = Date()) {
@@ -301,6 +334,14 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         out.answers = answers.values.sorted { ($0.date, $0.key) < ($1.date, $1.key) }
         out.version = max(version, other.version)
         out.checked = checked.union(other.checked)
+        // A call that left this profile on either copy is cleaned out of the joined points, without a new time: no
+        // device changed them.
+        let moved = Set((movedCalls ?? []) + (other.movedCalls ?? []))
+        if !moved.isEmpty {
+            out.movedCalls = moved.sorted()
+            for i in out.points.indices { _ = Self.clean(&out.points[i], of: moved) }
+            out.checked.subtract(moved)
+        }
         return out
     }
 

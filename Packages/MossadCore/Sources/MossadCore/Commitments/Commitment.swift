@@ -99,6 +99,26 @@ public struct CommitmentBook: Codable, Equatable, Sendable {
         update(id, at: date) { $0.deleted = true }
     }
 
+    /// The tasks of a meeting that left this profile: each becomes a deleted marker with no word of the meeting. Its
+    /// place in `checked` stays: the id never comes back here. Returns how many.
+    @discardableResult
+    public mutating func forget(callID: String, at date: Date = Date()) -> Int {
+        var n = 0
+        for i in items.indices where items[i].callID == callID {
+            items[i].deleted = true
+            items[i].text = ""
+            items[i].to = nil
+            items[i].toID = nil
+            items[i].callTitle = nil
+            items[i].quote = nil
+            items[i].at = nil
+            items[i].due = nil
+            items[i].updated = date
+            n += 1
+        }
+        return n
+    }
+
     /// Marks deleted the commitments found in calls whose quote is not the owner's own line; hand-added ones stay.
     ///
     /// A call in which no speaker is the owner says nothing: whose line it was is unknown there, and unknown is
@@ -119,6 +139,10 @@ public struct CommitmentBook: Codable, Equatable, Sendable {
         var order: [UUID] = []
         for c in items + other.items {
             if let old = byID[c.id] {
+                // A task of a meeting that left this profile is an empty marker: it wins over any copy, also a newer
+                // one from a device that changed it before it heard of the move.
+                if Self.forgotten(old) { continue }
+                if Self.forgotten(c) { byID[c.id] = c; continue }
                 // At the same time, the copy with the person's id wins: the Mac adds ids and names of now without a
                 // change of the time, so both new devices agree, and an older device keeps its copy.
                 if c.updated > old.updated || (c.updated == old.updated && old.toID == nil && c.toID != nil) { byID[c.id] = c }
@@ -131,6 +155,9 @@ public struct CommitmentBook: Codable, Equatable, Sendable {
         out.checked = checked.union(other.checked)
         return out
     }
+
+    /// A marker that `forget(callID:)` made: deleted, with no word left. A delete by hand keeps its words.
+    static func forgotten(_ c: Commitment) -> Bool { c.deleted && c.text.isEmpty && c.callTitle == nil && c.quote == nil }
 
     /// The book for a page that only shows it: a missing file is an empty book, and a file that cannot be read is
     /// nil, not empty. So is a book that was set aside and still waits for the other device's copy. Unlike
