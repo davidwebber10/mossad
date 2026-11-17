@@ -144,4 +144,96 @@ extension AppController {
         do { try next.save(to: Self.registryFile) } catch { Log.error("Profiles: the server could not be noted: \(error)") }
         profiles = readProfiles()
     }
+
+    // MARK: Delete
+
+    /// The sheet's Delete: the rule, the profile's folder lock, then the entry is marked and the steps run.
+    func deleteProfile(_ id: String, typed: String) {
+        guard changesProfiles else { return }
+        profileProblem = nil
+        let read = readProfiles()
+        guard read.canSave else { profileProblem = Self.unreadableProfiles; return }
+        switch ProfileRemoval.start(id, in: read.registry, active: activeProfile.id, typed: typed, home: Self.home) {
+        case .refused(let why):
+            profileProblem = why
+        case .go(let lock):
+            var next = read
+            next.registry.markRemoving(id)
+            do { try next.save(to: Self.registryFile) } catch {
+                Log.error("Profiles: the delete could not be saved: \(error)")
+                profileProblem = Self.unreadableProfiles
+                return
+            }
+            profiles = readProfiles()
+            Log.info("Profiles: deleting one")
+            finishRemovals(holding: [id: lock])
+        }
+    }
+
+    /// The deletes that have not ended: after the sheet, and at each launch of a copy that is not inert. Never while
+    /// a call records. Each ended step is saved with the entry, so a stop goes on at the next launch.
+    func finishRemovals(holding locks: [String: InstanceLock?] = [:]) {
+        guard changesProfiles, !isRecording else { return }
+        let read = readProfiles()
+        guard read.canSave else { return }
+        let active = activeProfile.id
+        let others = read.registry.live
+        let iCloud = Self.hasICloud
+        let file = Self.registryFile, home = Self.home
+        for profile in read.registry.removing {
+            var lock: InstanceLock? = locks[profile.id] ?? nil
+            if lock == nil {
+                switch InstanceLock.acquire(root: profile.rootURL(home: home)) {
+                case .held(let held): lock = held
+                case .taken:
+                    Log.error("Profiles: a copy of Mossad has the deleted profile open; Mossad tries again at the next launch")
+                    continue
+                case .failed: break
+                }
+            }
+            let done = Set(read.registry.removedSteps(of: profile.id))
+            let actions = ProfileRemoval.Actions(
+                sharedItems: { id in
+                    guard iCloud else { return }
+                    SharedAIKey.delete(profile: id)
+                    ServerPairing.unshare(profile: id)
+                },
+                keys: { service in
+                    let keychain = Keychain(service: service)
+                    APIKey.allCases.forEach(keychain.delete)
+                },
+                settings: { suite in MacDefaults.store.removePersistentDomain(forName: suite) },
+                trash: { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) },
+                zone: { name in if iCloud { try await CloudKitStore.deleteZone(named: name) } })
+            let id = profile.id
+            // The controller lives as long as the app; the steps run off the main thread, the saves on it.
+            let controller = self
+            Task.detached(priority: .utility) {
+                let outcome = await ProfileRemoval.run(profile, home: home, others: others, done: done, active: active, actions: actions,
+                                                       record: { step in await controller.noteRemoved(step, of: id, in: file) })
+                withExtendedLifetime(lock) {}
+                await controller.endRemoval(id, outcome: outcome, in: file)
+            }
+        }
+    }
+
+    private func noteRemoved(_ step: ProfileRemoval.Step, of id: String, in file: URL) {
+        var read = readProfiles()
+        guard read.canSave else { return }
+        read.registry.noteRemoved(step, for: id)
+        do { try read.save(to: file) } catch { Log.error("Profiles: the progress of a delete could not be saved: \(error)") }
+    }
+
+    private func endRemoval(_ id: String, outcome: ProfileRemoval.Outcome, in file: URL) {
+        guard outcome.complete else {
+            Log.error("Removing the profile stopped at \(outcome.failed?.rawValue ?? "its start"); Mossad tries again at the next launch")
+            return
+        }
+        var read = readProfiles()
+        guard read.canSave else { return }
+        read.registry.remove(id)
+        do { try read.save(to: file) } catch { Log.error("Profiles: the end of a delete could not be saved: \(error)") }
+        profiles = readProfiles()
+        Log.info("Profiles: a profile was deleted")
+    }
 }

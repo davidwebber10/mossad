@@ -862,6 +862,8 @@ final class AppController: ObservableObject {
             waiting.forEach { $0() }
         }
         if !inert {
+            // A delete of a profile that stopped goes on.
+            finishRemovals()
             // A recovered call whose muted parts are still in its track is held back; the pipeline tries again.
             if !held.isEmpty { notifier.postCaptureProblem(.mutedNotSilenced) }
             if isOn || (offUntilDate.map { $0 <= Date() } ?? false) {

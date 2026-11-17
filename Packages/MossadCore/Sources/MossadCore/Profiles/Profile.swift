@@ -25,6 +25,8 @@ public struct Profile: Codable, Equatable, Sendable, Identifiable {
     public var server: String?
     /// Set while a delete runs: the profile cannot start and does not show.
     public var removing: Bool?
+    /// The steps of that delete that ended (`ProfileRemoval.Step`), so a later run does nothing twice.
+    public var removed: [String]?
 
     public init(id: String, name: String, color: ProfileColor, root: String) {
         self.id = id
