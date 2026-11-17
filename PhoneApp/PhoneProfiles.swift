@@ -23,8 +23,11 @@ final class PhoneProfiles {
     var problem: String?
 
     @ObservationIgnored private let uploaders: ProfileUploaders
-    /// A switch the recorder held back: tried again at the next refresh.
     @ObservationIgnored private var switching = false
+    /// The profile to show once nothing holds the switch: the active one left while a recording or an import ran.
+    @ObservationIgnored private var heldSwitch: String?
+    @ObservationIgnored private var refreshing: Task<Void, Never>?
+    @ObservationIgnored private var cleaning: Task<Void, Never>?
 
     /// `MOSSAD_ROOT` points the simulator at a sample folder: nothing syncs and the Keychain item is not read.
     private static var offline: Bool { ProcessInfo.processInfo.environment["MOSSAD_ROOT"] != nil }
@@ -92,9 +95,17 @@ final class PhoneProfiles {
     }
 
     /// Reads the Mac's item off the main actor and takes it: renames, new profiles, gone ones. A folder of a gone
-    /// profile goes only by `PhoneProfileBook.cleanup`.
+    /// profile goes only by `PhoneProfileBook.cleanup`. One at a time: a second call waits for the one that runs.
     func refresh() async {
         guard !Self.offline else { return }
+        if let refreshing { return await refreshing.value }
+        let task = Task { await readItem() }
+        refreshing = task
+        await task.value
+        refreshing = nil
+    }
+
+    private func readItem() async {
         let read = await Task.detached(priority: .utility) { ProfilesItem.read() }.value
         book.take(read, now: Date())
         book.save(to: .standard)
@@ -106,20 +117,32 @@ final class PhoneProfiles {
         for profile in book.leaving { uploaders.uploader(for: profile)?.sends = false }
         for u in uploaders.all { await u.ready() }
         store.inProfiles = book.showsProfiles
-        if book.activeProfile.id != store.context.id { await switchTo(book.activeProfile.id) }
+        if book.activeProfile.id != store.context.id { await switchTo(book.activeProfile.id, byOwner: false) }
         await cleanUp()
     }
 
     /// Removes the folder of a profile that left, only by the rule: a week gone, nothing waiting, nothing running.
+    /// One at a time; the counts and the book are read again after each wait, just before the folder goes.
     func cleanUp() async {
-        let now = Date(), environment = ProcessInfo.processInfo.environment, documents = URL.documentsDirectory
+        if let cleaning { return await cleaning.value }
+        let task = Task { await removeLeftFolders() }
+        cleaning = task
+        await task.value
+        cleaning = nil
+    }
+
+    private func removeLeftFolders() async {
+        let environment = ProcessInfo.processInfo.environment, documents = URL.documentsDirectory
         for profile in book.leaving {
             guard let context = PhoneProfileContext(id: profile.id) else { continue }
             let u = uploaders.uploader(for: profile)
+            // An outbox not read yet has no count: never 0 by mistake.
+            await u?.ready()
             let dir = context.paths(documents: documents, environment: environment).root.appendingPathComponent("Recordings")
             let audio = await Task.detached(priority: .utility) { RoomAudio.ids(in: dir)?.count }.value
+            // After the waits: the profile may be listed again, or a recording may have come in.
             let busy = u.map { $0.isImporting || !$0.uploading.isEmpty || !$0.joining.isEmpty } ?? false
-            guard PhoneProfileBook.cleanup(profile, outbox: u?.outbox.entries.count, audio: audio, busy: busy, now: now) == .remove else { continue }
+            guard book.removesFolder(of: profile.id, outbox: u?.outboxCount, audio: audio, busy: busy, now: Date()) else { continue }
             let root = context.root(documents: documents, environment: environment)
             guard context.mayRemove(root, documents: documents, environment: environment), context.id != store.context.id else { continue }
             let removed = await Task.detached(priority: .utility) { () -> Bool in
@@ -135,19 +158,28 @@ final class PhoneProfiles {
         }
     }
 
+    /// What holds a switch back: the recorder or its screen, an import that is added, or the import sheet with its
+    /// file and the title typed in it.
+    var switchHeld: Bool { recorder.busy || store.recorderScreenOpen || importing }
+    private var importing: Bool { incomingAudio != nil || uploaders.all.contains(where: \.isImporting) }
+
     /// The switch: refused while the recorder runs or an import is added; else the old store closes, the choice is
-    /// saved, and the new store is built on that profile's own uploader.
-    func switchTo(_ id: String) async {
+    /// saved, and the new store is built on that profile's own uploader. A switch the app makes (the active profile
+    /// left) shows no refusal and is tried again when nothing holds it.
+    func switchTo(_ id: String, byOwner: Bool = true) async {
         guard !switching else { return }
         switching = true
         defer { switching = false }
         let decision = PhoneProfileSwitch.decide(to: id, book: book, active: store.context.id,
-                                                 recording: recorder.busy || store.recorderScreenOpen,
-                                                 importing: uploaders.all.contains(where: \.isImporting))
+                                                 recording: recorder.busy || store.recorderScreenOpen, importing: importing)
         switch decision {
-        case .stay: return
-        case .refused(let why): problem = why
+        case .stay:
+            heldSwitch = nil
+            return
+        case .refused(let why):
+            if byOwner { problem = why } else { heldSwitch = id }
         case .go(let next):
+            heldSwitch = nil
             guard let profile = book.listed.first(where: { $0.id == next }), let uploader = uploaders.uploader(for: profile) else {
                 problem = PhoneProfileWords.cannotOpen
                 return
@@ -162,10 +194,19 @@ final class PhoneProfiles {
         }
     }
 
+    /// The held switch, once nothing holds it: to the active profile of the book as it is now.
+    func switchIfHeld() async {
+        guard heldSwitch != nil, !switchHeld else { return }
+        let id = book.activeProfile.id
+        guard id != store.context.id else { return heldSwitch = nil }
+        await switchTo(id, byOwner: false)
+    }
+
     /// The store's sync, then a pass of every other profile that has something to send.
     func pass() async {
         await store.sync()
-        for u in uploaders.all where u !== store.uploader { await u.pass() }
+        let recorder = recorder
+        for u in uploaders.all where u !== store.uploader { await u.pass(active: { recorder.id }) }
     }
 
     /// The recordings that wait in profiles the Mac no longer has, by profile, for Meetings and Settings.

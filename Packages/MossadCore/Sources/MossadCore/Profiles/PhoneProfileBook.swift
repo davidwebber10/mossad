@@ -167,6 +167,13 @@ public struct PhoneProfileBook: Codable, Equatable, Sendable {
     /// A profile's folder on the phone: it stays while the profile is listed; a gone one holds while a recording
     /// waits, is not known while its outbox or its audio cannot be read, waits while an import or an upload of it
     /// runs and for a week from its saved `gone` date, and goes only then, with both empty.
+    /// The last look before a folder goes: the profile is still gone in the book as it is now (it may be listed again
+    /// while the counts were read), and the rule still says remove.
+    public func removesFolder(of id: String, outbox: Int?, audio: Int?, busy: Bool, now: Date) -> Bool {
+        guard let profile = leaving.first(where: { $0.id == id }) else { return false }
+        return Self.cleanup(profile, outbox: outbox, audio: audio, busy: busy, now: now) == .remove
+    }
+
     public static func cleanup(_ profile: PhoneProfile, outbox: Int?, audio: Int?, busy: Bool, now: Date) -> Cleanup {
         guard !profile.isDefault, let gone = profile.gone else { return .stays }
         guard let outbox, let audio else { return .unknown }
@@ -224,7 +231,7 @@ public enum PhoneProfileWords {
         count == 1 ? "1 recording of “\(name)” was not sent" : "\(count) recordings of “\(name)” were not sent"
     }
 
-    public static let leavingFooter = "Your Mac no longer has this profile, so Mossad does not send these recordings. Share a recording to keep it, or delete it."
+    public static let leavingFooter = "Your Mac no longer has this profile, so Mossad does not send these recordings. Share a recording to keep it, or delete it. When none are left, Mossad removes the profile from this iPhone after 7 days."
 
     /// The one line under a profile that cannot sync as it is, or nil.
     public static func note(for profile: PhoneProfile, hasServer: Bool) -> String? {

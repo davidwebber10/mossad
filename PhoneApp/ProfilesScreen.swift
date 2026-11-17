@@ -73,7 +73,7 @@ struct ProfilesScreen: View {
                             titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 if let deleting {
-                    deleting.uploader.remove(deleting.id, active: nil)
+                    deleting.uploader.remove(deleting.id, active: active(of: deleting.uploader))
                     Task { await profiles.cleanUp() }
                 }
                 deleting = nil
@@ -139,12 +139,17 @@ struct ProfilesScreen: View {
                 }
                 Button("Delete", role: .destructive) { deleting = (uploader, entry.id) }
                     .foregroundStyle(Palette.recording)
-                    .disabled(!uploader.canRemove(entry.id, active: nil))
+                    .disabled(!uploader.canRemove(entry.id, active: active(of: uploader)))
             }
             .buttonStyle(.borderless)
             .textRole(.secondary)
         }
         .padding(.vertical, 4)
+    }
+
+    /// The recording that runs now, for the profile that shows: a profile that left can still show while it records.
+    private func active(of uploader: ProfileUploader) -> String? {
+        uploader === profiles.store.uploader ? profiles.store.recorder.id : nil
     }
 
     private func take(_ code: String) {

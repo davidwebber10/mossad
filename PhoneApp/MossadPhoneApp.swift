@@ -24,8 +24,14 @@ struct MossadPhoneApp: App {
                 .environment(profiles)
                 .preferredColorScheme(PhoneStore.previewScheme)
                 .task {
-                    await profiles.refresh()
+                    // The first sync does not wait for the Keychain read.
+                    async let read: Void = profiles.refresh()
                     await profiles.pass()
+                    await read
+                }
+                // The active profile left while a recording or an import ran: the switch goes once they end.
+                .onChange(of: profiles.switchHeld) { _, held in
+                    if !held { Task { await profiles.switchIfHeld() } }
                 }
                 // A shared audio file comes as a file URL, the app's own links as `mossad://`.
                 .onOpenURL { url in

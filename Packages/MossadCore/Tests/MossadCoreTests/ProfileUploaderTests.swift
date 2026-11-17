@@ -360,7 +360,7 @@ final class ProfileUploaderCharacterizationTests: UploaderTestCase {
 
         let launch = uploader(root: root, settings: settings, world: world)
         await launch.ready()
-        await launch.recover(active: active)
+        await launch.recover(active: { active })
         XCTAssertEqual(launch.outbox[unfinished]?.state, .waiting)
         XCTAssertEqual(launch.outbox[unfinished]?.recording.title, "Kept")
         XCTAssertTrue(FileManager.default.fileExists(atPath: RoomAudio.finished(unfinished, in: launch.recordingsFolder).path))

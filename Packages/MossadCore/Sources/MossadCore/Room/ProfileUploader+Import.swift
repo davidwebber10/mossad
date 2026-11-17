@@ -13,6 +13,11 @@ extension ProfileUploader {
         people = await Task.detached(priority: .utility) { PeopleStore.peek(in: dir) ?? [] }.value
     }
 
+    /// The people the store that shows has read: at once, so a choice made before the next read finds them.
+    public func take(people: [Person]) {
+        self.people = people
+    }
+
     /// The people the owner can pick for a call: this profile's saved people, else the names given.
     public func importChoices(_ query: String, heard: [String], owner: String) -> [CallImport.Choice] {
         CallImport.choices(query: query, people: people, heard: heard, owner: owner)
@@ -71,12 +76,14 @@ extension ProfileUploader {
         if let hash {
             // Read again just before the write, one write at a time: an import that overlapped keeps its hash.
             let file = importMemoryFile
-            let ids = Set(outbox.entries.map(\.id) + (await meetings()).map(\.id))
+            // Cut only against a list of meetings that was read: an empty list from a folder not read would drop
+            // every hash, and the same file could then be added twice.
+            let ids = await meetings().map { Set(outbox.entries.map(\.id) + $0.map(\.id)) }
             do {
                 try await writes.run {
                     var memory = ImportMemory.load(from: file)
                     memory.remember(hash: hash, id: id)
-                    memory.keep(only: ids)
+                    if let ids { memory.keep(only: ids) }
                     try memory.save(to: file)
                 }
             } catch {
@@ -99,12 +106,13 @@ extension ProfileUploader {
         return outbox[id]?.isSent == true
     }
 
-    /// The meetings of the store that shows, else this profile's folder, read off the main actor.
-    private func meetings() async -> [CallImport.Known] {
+    /// The meetings of the store that shows, else this profile's folder, read off the main actor. Nil when they
+    /// were not read.
+    private func meetings() async -> [CallImport.Known]? {
         if let known { return known() }
         let paths = paths
         return await Task.detached(priority: .utility) {
-            MeetingIndex(paths: paths).all().map { CallImport.Known(id: $0.id, start: $0.start, end: $0.end) }
+            (try? ProcessingQueue(paths: paths).scan().records)?.map { CallImport.Known(id: $0.id, start: $0.start, end: $0.end) }
         }.value
     }
 
@@ -116,7 +124,7 @@ extension ProfileUploader {
             ((try? ImportMemory.hash(of: url)), ImportMemory.load(from: file))
         }.value
         let outbox = self.outbox.entries.map { CallImport.Known(id: $0.id, start: $0.recording.start, end: $0.recording.end) }
-        let meetings = await meetings()
+        let meetings = await meetings() ?? []
         return (CallImport.plan(draft, hash: hash, outbox: outbox, meetings: meetings, memory: memory, now: Date()), hash, memory)
     }
 }

@@ -93,11 +93,7 @@ public struct ProfileCode: Codable, Equatable, Sendable, CustomStringConvertible
         guard versioned.version <= currentVersion else { return .newer }
         guard var code = try? JSONDecoder().decode(ProfileCode.self, from: data),
               code.id == Profile.defaultID || ProfileRegistry.isID(code.id) else { return .damaged }
-        // No control characters; cut to the limit, then trimmed, so a cut never ends in a space.
-        let plain = String(String.UnicodeScalarView(code.name.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }))
-        let name = String(plain.trimmingCharacters(in: .whitespacesAndNewlines).prefix(ProfileRules.nameLimit))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return .damaged }
+        guard let name = ProfileRules.cleanName(code.name) else { return .damaged }
         code.name = name
         switch code.sync {
         case SyncChoice.icloud.rawValue:

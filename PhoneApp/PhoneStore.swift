@@ -162,7 +162,11 @@ final class PhoneStore {
         }
         // The profile that shows: its store pulls and settles, and an import reads the meetings in memory.
         uploader.shown = true
-        uploader.known = { [weak self] in self?.meetings.map { CallImport.Known(id: $0.id, start: $0.start, end: $0.end) } ?? [] }
+        // Nil until the meetings were read: the import memory is cut only against a list that was read.
+        uploader.known = { [weak self] in
+            guard let self, loaded else { return nil }
+            return meetings.map { CallImport.Known(id: $0.id, start: $0.start, end: $0.end) }
+        }
         uploader.onStoreChange = { [weak self] in self?.storeChanged() }
         // The first frame does not wait for the disk.
         launch = Task { [weak self] in
@@ -172,10 +176,14 @@ final class PhoneStore {
             // Joining a long recording takes a while; a sync does not wait for it.
             Task { [weak self] in
                 guard let self, life.allows(.read) else { return }
-                await uploader.recover(active: recorder.id)
+                await uploader.recover(active: { [recorder] in recorder.id })
                 await uploader.sendOutbox()
             }
         }
+        #if DEBUG
+        // `MOSSAD_ROOM_START=1` starts the room recorder at launch, while the recovery reads the folder.
+        if Self.hook("MOSSAD_ROOM_START") != nil { Task { [weak self] in await self?.startRecording() } }
+        #endif
     }
 
     /// After a switch: nothing of this store starts again. A running sync or read ends first; an edit already made
@@ -283,8 +291,8 @@ final class PhoneStore {
         if readsChanged { personas = s.personas }
         if people != s.people {
             people = s.people
-            // The import's person choices read this profile's saved people.
-            Task { await uploader.loadPeople() }
+            // The import's person choices read this profile's saved people, at once.
+            uploader.take(people: s.people)
         }
         if chats != s.chats { chats = s.chats }
         if commitments != s.commitments { commitments = s.commitments }
@@ -416,7 +424,7 @@ final class PhoneStore {
             // Also after a failed pull, so each waiting recording gets its own reason. Upload problems stay on
             // their recordings; a good pull does not clear them.
             await sendOutbox()
-            uploader.retryUnfinished(active: recorder.id)
+            uploader.retryUnfinished(active: { [recorder] in recorder.id })
         } else {
             if syncWith == .server, !offline { syncStatus.show(FriendlyError(kind: .notConnected, context: .syncing)) }
             await load(meetings: true)

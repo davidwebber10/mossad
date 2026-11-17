@@ -85,10 +85,12 @@ public struct ProfilesItem: Codable, Equatable, Sendable {
         var unread: [String?] = []
         var entries: [Entry] = []
         for field in lossy.profiles ?? [] {
-            guard let entry = field.value else {
+            // A name is cleaned by the code's rule; an entry with no name left is not read, so it is never gone.
+            guard var entry = field.value, let name = ProfileRules.cleanName(entry.name) else {
                 unread.append(field.id)
                 continue
             }
+            entry.name = name
             guard entry.id == Profile.defaultID || ProfileRegistry.isID(entry.id), seen.insert(entry.id).inserted else { continue }
             entries.append(entry)
         }
@@ -151,6 +153,8 @@ public struct ProfilesItem: Codable, Equatable, Sendable {
         return .found(item)
     }
 
+    #if os(macOS)
+    /// Only the Mac writes the item; the iPhone reads it.
     public func save() throws {
         let data = try encoded()
         try SharedItemsGate.perform {
@@ -170,6 +174,7 @@ public struct ProfilesItem: Codable, Equatable, Sendable {
     public static func delete() {
         SharedItemsGate.perform { SecItemDelete(query() as CFDictionary) }
     }
+    #endif
 }
 
 /// The Mac's writes of the item, one at a time. Each request reads the registry when its turn comes, so two requests

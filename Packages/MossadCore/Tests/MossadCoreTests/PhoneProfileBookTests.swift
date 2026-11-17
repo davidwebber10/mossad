@@ -223,7 +223,7 @@ final class PhoneProfileBookTests: XCTestCase {
         XCTAssertEqual(PhoneProfileWords.leavingRow(name: "Work", count: 1), "1 recording of “Work” was not sent")
         XCTAssertEqual(PhoneProfileWords.leavingRow(name: "Work", count: 2), "2 recordings of “Work” were not sent")
         XCTAssertEqual(PhoneProfileWords.leavingFooter,
-                       "Your Mac no longer has this profile, so Mossad does not send these recordings. Share a recording to keep it, or delete it.")
+                       "Your Mac no longer has this profile, so Mossad does not send these recordings. Share a recording to keep it, or delete it. When none are left, Mossad removes the profile from this iPhone after 7 days.")
         XCTAssertEqual(PhoneProfileWords.noProfileNamed("Home"), "Mossad has no profile named “Home” on this iPhone.")
         XCTAssertEqual(PhoneProfileWords.connected(name: "Mossad", host: "notes.example.com"), "Connected “Mossad” to notes.example.com.")
         XCTAssertEqual(PhoneProfileWords.added("Work"), "Added “Work”.")

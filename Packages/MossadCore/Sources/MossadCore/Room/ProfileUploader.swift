@@ -74,16 +74,26 @@ public final class ProfileUploader {
     public var shown = false
     /// The store-only part of a change of store (the store that shows starts its own sync).
     @ObservationIgnored public var onStoreChange: (@MainActor () -> Void)?
-    /// The meetings of the store that shows, for an import's duplicates; nil reads this profile's folder.
-    @ObservationIgnored public var known: (@MainActor () -> [CallImport.Known])?
+    /// The meetings of the store that shows, for an import's duplicates; nil reads this profile's folder. The list is
+    /// nil while the store has not read its meetings: then the import memory is not cut.
+    @ObservationIgnored public var known: (@MainActor () -> [CallImport.Known]?)?
+    /// Lists the recordings folder; nil when it cannot be listed. A test holds it to start a recording during the wait.
+    @ObservationIgnored public var listAudio: @Sendable (URL) async -> Set<String>? = { dir in
+        await Task.detached { RoomAudio.ids(in: dir) }.value
+    }
     /// This profile's saved people, for an import's person choices.
     public internal(set) var people: [Person] = []
     /// Nil: not known, so nothing is sent.
     public private(set) var syncWith: SyncChoice?
+    /// The number of entries in the outbox; nil until the outbox on disk was read, so a count is never 0 by mistake.
+    public var outboxCount: Int? { outboxReadDone ? outbox.entries.count : nil }
 
     @ObservationIgnored private var engine: (key: String, sync: CloudSync)?
     @ObservationIgnored private var outboxRead: Task<Void, Never>?
     @ObservationIgnored private var recovering = false
+    @ObservationIgnored private var outboxReadDone = false
+    /// A profile that does not show is recovered once, at its first pass.
+    @ObservationIgnored private var recovered = false
 
     public init(context: PhoneProfileContext, paths: Paths, settings: UserDefaults, listed: SyncChoice?, offline: Bool, parts: Parts,
                 background: @escaping @MainActor (String) -> @MainActor () -> Void = { _ in {} }) {
@@ -166,10 +176,17 @@ public final class ProfileUploader {
         use(.server)
     }
 
+    /// The first profile goes back to iCloud, as before. Another profile has no choice of its own after this: it
+    /// syncs as the Mac lists it, so a disconnect never saves "icloud" for a profile whose Mac uses its server.
     public func disconnectServer() {
         parts.setSecret(nil)
         settings.removeObject(forKey: "serverAddress")
-        choose(.icloud)
+        guard !context.isDefault else { return choose(.icloud) }
+        settings.removeObject(forKey: "syncWith")
+        let next = context.sync(saved: nil, listed: listed)
+        guard next != syncWith else { return storeChanged() }
+        syncWith = next
+        storeChanged()
     }
 
     // MARK: The outbox
@@ -185,6 +202,7 @@ public final class ProfileUploader {
                 let (box, aside) = await Task.detached { Outbox.loadOrSetAside(from: file) }.value
                 if let aside { Log.error("The outbox could not be read; it is kept as \(aside.lastPathComponent)") }
                 outbox = box
+                outboxReadDone = true
             }
         }
         await outboxRead?.value
@@ -284,30 +302,37 @@ public final class ProfileUploader {
 
     /// Finishes each recording that the app never finished, and each audio file with no entry, as the Mac does for
     /// its own calls after a crash. It runs at launch, and again after a sync while a recording is not saved.
-    public func recover(active: String?) async {
+    /// `active` is asked at each use: a recording can start while this pass waits for the disk.
+    public func recover(active: @escaping @MainActor () -> String?) async {
         guard !recovering else { return }
         recovering = true
         defer { recovering = false }
         let dir = recordingsFolder
-        guard let audio = await Task.detached(operation: { RoomAudio.ids(in: dir) }).value else {
+        guard let audio = await listAudio(dir) else {
             // Unknown is not empty: no entry is removed because the folder would not list.
             Log.error("The recordings folder could not be listed; recovery waits")
             return
         }
-        for id in outbox.withoutAudio(audioIDs: audio, active: active) where !joining.contains(id) {
+        for id in outbox.withoutAudio(audioIDs: audio, active: active()) where !joining.contains(id) {
             Log.error("The room recording \(id) has no audio on this iPhone; its entry is removed")
             outbox.remove(id)
             saveOutbox()
         }
-        for id in outbox.needsRecovery(audioIDs: audio, active: active) {
-            // Looked at again: the Stop path may have finished it while this pass joined another one.
-            guard id != active, !joining.contains(id), outbox[id].map({ $0.state == .recording }) ?? true else { continue }
+        for id in outbox.needsRecovery(audioIDs: audio, active: active()) {
+            // Looked at again: the Stop path may have finished it while this pass joined another one, and a recording
+            // may have started since the list.
+            guard id != active(), !joining.contains(id), outbox[id].map({ $0.state == .recording }) ?? true else { continue }
             joining.insert(id)
             let found = await Task.detached { () -> (short: Bool, end: Date?) in
                 // Once the parts are joined, the file's date is the join's, not the meeting's end.
                 (RoomAudio.isSurelyShort(id, in: dir, minimum: ProcessingQueue.minimumCallDuration),
                  RoomAudio.parts(of: id, in: dir).isEmpty ? nil : RoomAudio.lastWrite(of: id, in: dir))
             }.value
+            // The owner may have started this very recording while the files were read.
+            guard id != active() else {
+                joining.remove(id)
+                continue
+            }
             if found.short {
                 // Short by every measure: each part opened, and its bytes agree.
                 RoomAudio.delete(id, in: dir)
@@ -325,8 +350,9 @@ public final class ProfileUploader {
     }
 
     /// Tries again for recordings that could not be saved, without waiting for the next launch.
-    public func retryUnfinished(active: String?) {
-        guard !recovering, outbox.entries.contains(where: { $0.state == .recording && $0.id != active && !joining.contains($0.id) })
+    public func retryUnfinished(active: @escaping @MainActor () -> String?) {
+        let now = active()
+        guard !recovering, outbox.entries.contains(where: { $0.state == .recording && $0.id != now && !joining.contains($0.id) })
         else { return }
         Task {
             await recover(active: active)
@@ -421,10 +447,15 @@ public final class ProfileUploader {
 
     /// For a profile that does not show: pulls its store only while a sent recording waits, settles by the meetings
     /// of its own folder, then sends. A profile that shows leaves this to its store.
-    public func pass() async {
+    public func pass(active: @escaping @MainActor () -> String? = { nil }) async {
         guard !shown else { return }
-        // A profile that does not show is read only here: its outbox on disk first.
+        // A profile that does not show is read only here: its outbox on disk first, then what a crash left.
         await ready()
+        guard !shown else { return }
+        if !recovered || outbox.entries.contains(where: { $0.state == .recording && !joining.contains($0.id) }) {
+            recovered = true
+            await recover(active: active)
+        }
         // With nothing to send no store is made.
         guard !shown, !outbox.entries.isEmpty, let engine = cloud else { return }
         if outbox.entries.contains(where: \.isSent) {
