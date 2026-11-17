@@ -208,4 +208,8 @@ final class CallImportTests: XCTestCase {
     func testAMetadataDateExactlyTwoMinutesOldIsTheShareTime() {
         XCTAssertEqual(CallImport.start(metadata: now - 120, file: nil, length: 30, now: now), .init(date: now - 150, sure: false))
     }
+
+    func testARecordingTheIPhoneCouldNotSaveIsRefusedInPlainWords() {
+        XCTAssertEqual(CallImport.Refusal.notSaved.message, "Mossad could not save this recording on the iPhone. Try again.")
+    }
 }

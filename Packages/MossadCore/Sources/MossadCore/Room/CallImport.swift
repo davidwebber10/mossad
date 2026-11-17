@@ -67,9 +67,12 @@ public enum CallImport {
 
     public enum Refusal: Error, Equatable, Sendable {
         case unreadable, tooShort, duplicate
+        /// The iPhone could not write the recording or its entry: nothing was added, and the file stays for a retry.
+        case notSaved
 
         public var message: String {
             switch self {
+            case .notSaved: "Mossad could not save this recording on the iPhone. Try again."
             case .unreadable: "Mossad cannot read this audio file."
             case .tooShort: "This recording is shorter than a minute. Mossad does not keep a recording that short."
             case .duplicate: "This recording is already in Mossad."

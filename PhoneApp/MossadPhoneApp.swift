@@ -6,7 +6,7 @@ import UserNotifications
 /// coach, and a recorder for meetings in a room.
 @main
 struct MossadPhoneApp: App {
-    @State private var store = PhoneStore()
+    @State private var store = PhoneStore.shared
     /// The Search tab's text, apart from the store: a keystroke redraws only what reads it.
     @State private var query = PhoneStore.searchHook
     @Environment(\.scenePhase) private var phase
