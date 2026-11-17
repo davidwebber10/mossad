@@ -88,7 +88,7 @@ enum DevHooks {
             DispatchQueue.main.async { c.open(section) }
         }
         // `MOSSAD_PROFILES=<file>` shows a made-up registry in the switcher and Settings (loaded by `AppIdentity`).
-        // `MOSSAD_PROFILE_SHEET=add|rename|delete` opens that sheet of Settings > General > Profiles; rename and
+        // `MOSSAD_PROFILE_SHEET=add|rename|delete|code` opens that sheet of Settings > General > Profiles; rename and
         // delete for the first profile that is not `default`.
         if preview, let sheet = env["MOSSAD_PROFILE_SHEET"] {
             let other = c.profiles.registry.live.first { !$0.isDefault }?.id
@@ -96,6 +96,7 @@ enum DevHooks {
             case "add": .add
             case "rename": other.map { .rename($0) }
             case "delete": other.map { .delete($0) }
+            case "code": .code
             default: nil
             }
             if let chosen { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { c.openProfileSettings(sheet: chosen) } }

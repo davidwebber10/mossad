@@ -81,6 +81,7 @@ extension AppController {
         mirrorEngine = nil
         updateSharedServer()
         noteServer(c.address)
+        noteSync()
         let owner = ownerName
         // Rehearsal never writes to a server: a setup walkthrough must not change the owner's real one.
         let personas = personasInServerMCP
@@ -103,6 +104,7 @@ extension AppController {
         mirrorEngine = nil
         if writesSharedItems { ServerPairing.unshare() }
         noteServer(nil)
+        noteSync()
         syncActivity = SyncActivity()
     }
 
@@ -112,6 +114,7 @@ extension AppController {
         syncEngine = nil
         syncActivity = SyncActivity()
         updateSharedServer()
+        noteSync()
         syncNow()
     }
 
@@ -122,6 +125,25 @@ extension AppController {
             if ServerPairing.shared() != c { try? ServerPairing.share(c) }
         } else {
             ServerPairing.unshare()
+        }
+    }
+
+    /// The writes of the `profiles` item, one at a time, off the main actor. Each reads the registry when its turn
+    /// comes, so the last write is always the newest list.
+    nonisolated private static let profilesItemWriter = ProfilesItemWriter(read: ProfilesItem.read) { plan in
+        switch plan {
+        case .write(let item):
+            do { try item.save() } catch { Log.error("Profiles: the list for the iPhone could not be saved") }
+        case .delete: ProfilesItem.delete()
+        case .leave: break
+        }
+    }
+
+    /// The `profiles` item for the iPhone, by `ProfilesItem.plan`. With no registry file the Keychain is not touched.
+    func updateSharedProfiles() {
+        guard writesSharedItems, profiles.state != .none else { return }
+        Task.detached(priority: .utility) { [weak self] in
+            await Self.profilesItemWriter.request { await MainActor.run { self?.profilesForTheItem() ?? .none } }
         }
     }
 

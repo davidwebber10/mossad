@@ -5,6 +5,15 @@ import Foundation
 public enum ProfileRules {
     /// The longest name of a profile, in characters (an emoji is one).
     public static let nameLimit = 30
+
+    /// A name that came from another device: no control characters, cut to the limit, then trimmed, so a cut never
+    /// ends in a space. Nil when nothing is left.
+    public static func cleanName(_ raw: String) -> String? {
+        let plain = String(String.UnicodeScalarView(raw.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }))
+        let name = String(plain.trimmingCharacters(in: .whitespacesAndNewlines).prefix(nameLimit))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? nil : name
+    }
     /// The most characters of the name that a folder keeps.
     public static let folderLimit = 40
     /// Folders that are never a new profile's: the first profile's and Rehearsal's.

@@ -8,6 +8,9 @@ public struct ProfileRegistry: Codable, Equatable, Sendable {
     public var version: Int
     public var profiles: [Profile]
     public var active: String
+    /// A random id of this Mac's list, made once, for the iPhone's item: a Mac deletes only an item it wrote itself.
+    /// Never a hardware id. A build of before reads past it, and drops it at its next save.
+    public var writer: String?
 
     /// One profile, `default`, active: what a Mac with no file has.
     public init() {
@@ -150,6 +153,23 @@ extension ProfileRegistry {
         profiles[i].server = hash
     }
 
+    /// 16 characters of 0-9a-f, random.
+    public static func newWriter() -> String {
+        (0..<8).map { _ in String(format: "%02x", UInt8.random(in: 0...255)) }.joined()
+    }
+
+    /// Makes this Mac's writer id once. True when it was made now and the registry needs a save.
+    public mutating func ensureWriter(random: () -> String = ProfileRegistry.newWriter) -> Bool {
+        guard writer == nil else { return false }
+        writer = random()
+        return true
+    }
+
+    public mutating func setSync(_ sync: String?, for id: String) {
+        guard let i = profiles.firstIndex(where: { $0.id == id }) else { return }
+        profiles[i].sync = sync
+    }
+
     /// The first step of a delete: the profile cannot start and does not show. `default` is never removed.
     public mutating func markRemoving(_ id: String) {
         guard id != Profile.defaultID, let i = profiles.firstIndex(where: { $0.id == id }) else { return }
@@ -166,6 +186,15 @@ extension ProfileRegistry {
 }
 
 extension ProfileRegistry.Loaded {
+    /// The registry to save with this profile's sync word, or nil: only a file that read cleanly, and only when the
+    /// word changed. A Mac with no file gets none, so a Mac with one profile never makes one.
+    public func notingSync(_ word: String, for id: String) -> ProfileRegistry.Loaded? {
+        guard state == .read, registry.profile(id)?.sync != word else { return nil }
+        var next = self
+        next.registry.setSync(word, for: id)
+        return next
+    }
+
     public func save(to file: URL) throws {
         guard canSave else { throw ProfileRegistry.ReadOnly() }
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
