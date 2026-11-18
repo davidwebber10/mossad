@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "2.28.1",
+      "date": "2026-11-17",
+      "notes": [
+        "A person whom Mossad added from your Gemini notes now shows where they came from, and one switch in Settings turns that off: everyone already added stays. When you move a meeting to another profile, your points for that meeting go with it."
+      ]
+    },
+    {
       "version": "2.28.0",
       "date": "2026-11-17",
       "notes": [
