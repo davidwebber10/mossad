@@ -1510,6 +1510,43 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(samples.samples(of: jo).map(\.origin), [.ownerNamed])
     }
 
+    /// Call 2 of the morning of three wrong titles: a late call with no link. The next meeting overlaps it; the one that
+    /// ended 5 minutes before invites the voice that spoke. The voices take the invite to that meeting before the
+    /// summary, and its one invited person with no voice names the voice left.
+    func testTheVoicesTakeTheInviteToTheMeetingWhosePeopleSpoke() async throws {
+        try library.add([0, 1, 0, 0], to: "Alex Rivera")
+        let id = try makeRecord()
+        let late = CalendarEventInfo(title: "Quick check", start: start.addingTimeInterval(-2100), end: start.addingTimeInterval(-300),
+                                     attendees: ["Alex Rivera", "Amy Lee"], text: "https://meet.google.com/bbb-bbbb-bbb", isAllDay: false)
+        let next = CalendarEventInfo(title: "Team meetup", start: start.addingTimeInterval(-300), end: start.addingTimeInterval(1500),
+                                     attendees: ["Pat Quill", "Lee Morgan"], text: "https://meet.google.com/ccc-cccc-ccc", isAllDay: false)
+        await pipeline(calendar: FakeCalendar(events: [late, next])).process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.calendarTitle, "Quick check")
+        XCTAssertNil(r.inviteNotSure)
+        XCTAssertEqual(r.inviteChecked, true)
+        XCTAssertEqual(r.speakerNames["them:A"], "Alex Rivera")
+        XCTAssertEqual(r.speakerNames["them:B"], "Amy Lee", "named again with the proved invite")
+        XCTAssertEqual(r.title, "Quick check")
+    }
+
+    /// Call 3: an unplanned call whose voices Mossad does not know. The overlap's event stays a guess: its title is no
+    /// title of the meeting, and its people are not the meeting's.
+    func testAnUnsupportedGuessGivesNoTitleAndNoPeople() async throws {
+        let id = try makeRecord()
+        let meetup = CalendarEventInfo(title: "Team meetup", start: start.addingTimeInterval(-1440), end: start.addingTimeInterval(360),
+                                       attendees: ["Pat Quill", "Lee Morgan"], text: "https://meet.google.com/ccc-cccc-ccc", isAllDay: false)
+        summarizer.title = "Freight call"
+        await pipeline(calendar: FakeCalendar(events: [meetup])).process(id)
+        let r = try load(id)
+        XCTAssertEqual(r.inviteNotSure, true)
+        XCTAssertEqual(r.calendarTitle, "Team meetup", "kept as the guess")
+        XCTAssertEqual(r.attendees, [])
+        XCTAssertNil(r.plannedStart)
+        XCTAssertEqual(r.title, "Freight call")
+        XCTAssertTrue(try XCTUnwrap(r.markdownPath).hasSuffix("Freight call.md"))
+    }
+
     func testTheInviteIsMatchedAgainWithTheCallsRealTimes() async throws {
         try library.add([0, 1, 0, 0], to: "Alex Rivera")
         let id = try makeRecord()

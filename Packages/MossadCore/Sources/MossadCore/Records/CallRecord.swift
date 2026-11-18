@@ -381,6 +381,9 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// The Meet code that the call's own window title showed, when its tab gave no link at the start. Only the calendar
     /// match reads it: never the join of two recordings, the do-not-record gate, or the move of a call. Nil otherwise.
     public var titleLink: String?
+    /// True once the invite was matched with the voices of the recording (`InviteCheck`): the check of the meetings
+    /// written before it (`Pipeline.recheckInvites`) runs once for each. Nil before.
+    public var inviteChecked: Bool?
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
         self.id = id
@@ -413,6 +416,32 @@ public struct CallRecord: Codable, Equatable, Sendable {
         organizer = event.organizer ?? (same ? organizer : nil)
         plannedStart = event.isAllDay ? nil : event.start
         plannedEnd = event.isAllDay ? nil : event.end
+    }
+
+    /// The names of the voices named by their own score, without `owners`: a voice named from the invite is left out.
+    public func namedVoices(without owners: Set<String>) -> Set<String> {
+        let inferred = Set(fromInvite ?? [])
+        return Set(speakerNames.filter { !inferred.contains($0.key) && !$0.value.hasPrefix("Speaker ") }.values).subtracting(owners)
+    }
+
+    /// What the calendar gave: the event surely, the event as a guess (`setGuess`), or no invite.
+    public mutating func apply(_ answer: InviteAnswer) {
+        switch answer {
+        case .sure(let e):
+            setInvite(e)
+            inviteNotSure = nil
+        case .guess(let e): setGuess(e)
+        case .none: clearInvite()
+        }
+        inviteUnknown = nil
+    }
+
+    /// An event that only may be the call's: its title stays as the fallback of the shown title (`title`), marked
+    /// `inviteNotSure`. Its people, its series, and its planned times are not the meeting's: they are left out.
+    public mutating func setGuess(_ event: CalendarEventInfo) {
+        clearInvite()
+        calendarTitle = event.title
+        inviteNotSure = true
     }
 
     /// No invite: the title, the people, the series, and the planned times of one go, and the marks of a match with them.
@@ -534,6 +563,7 @@ extension CallRecord {
         cutFrom = try c.decodeIfPresent(String.self, forKey: .cutFrom)
         firstTitleKey = try c.decodeIfPresent(String.self, forKey: .firstTitleKey)
         titleLink = try c.decodeIfPresent(String.self, forKey: .titleLink)
+        inviteChecked = try c.decodeIfPresent(Bool.self, forKey: .inviteChecked)
         cutChecked = try c.decodeIfPresent(Bool.self, forKey: .cutChecked)
     }
 }

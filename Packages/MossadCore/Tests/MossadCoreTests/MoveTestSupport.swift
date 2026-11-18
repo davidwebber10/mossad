@@ -70,6 +70,7 @@ func fullRecord(id: String = "20261101-100000") -> CallRecord {
     r.firstTitleKey = "08786467415118f4"
     r.cutChecked = true
     r.titleLink = "abc-defg-hij"
+    r.inviteChecked = true
     return r
 }
 

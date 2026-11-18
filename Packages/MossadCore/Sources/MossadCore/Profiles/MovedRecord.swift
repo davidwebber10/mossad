@@ -15,7 +15,7 @@ public enum MovedRecord {
                   "themUtterances", "speakerNames", "unknownSpeakers", "speakerEmbeddings", "speakerSamples", "fromInvite", "summary",
                   "topics", "kind", "tags", "tagsSetByOwner", "summaryVersion", "hasOutcomes", "decisions", "decisionTimes", "headline",
                   "parts", "markers", "summaryMissing", "speakersExpected", "muteSpans", "mutedAudioPending", "screens", "screenGaps",
-                  "deletedScreens", "source", "inviteNotSure", "pauses", "callMarks", "cutFrom", "firstTitleKey", "cutChecked", "titleLink"] { f[k] = .kept }
+                  "deletedScreens", "source", "inviteNotSure", "pauses", "callMarks", "cutFrom", "firstTitleKey", "cutChecked", "titleLink", "inviteChecked"] { f[k] = .kept }
         // An id of the first profile's people goes; the name and the address stay. `moveTo` is the target's id.
         for k in ["invitees", "organizer", "actionItems", "personHint", "moveTo"] { f[k] = .changed }
         // Ids; a file of the first profile (an absolute path: the target would delete that note); its backup; a job in

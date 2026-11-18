@@ -48,7 +48,7 @@ public enum CutRecord {
                   // The owner's number of speakers was for the whole recording, not for one part of it.
                   "speakersExpected",
                   // A part is never cut again (`cutFrom`).
-                  "cutChecked"] { f[k] = .cleared }
+                  "cutChecked", "inviteChecked"] { f[k] = .cleared }
         return f
     }()
 
@@ -203,6 +203,7 @@ public enum CutRecord {
         p.failureReason = nil
         p.inviteUnknown = nil
         p.inviteNotSure = nil
+        p.inviteChecked = nil
         p.speakerNames = [:]
         p.speakerPeople = nil
         p.unknownSpeakers = []

@@ -99,7 +99,8 @@ extension PipelineTests {
     }
 
     func testTheNextActiveLaunchMatchesAMarkedMeeting() async throws {
-        let id = try makeRecord()
+        // The call's link proves the event (with no link the overlap alone is a guess, which keeps no people).
+        let id = try makeRecord(meetingID: "abc-defg-hij")
         await pipeline(source: ReadableCalendar(events: [], readable: false)).process(id)
         let before = try load(id)
         XCTAssertEqual(before.inviteUnknown, true)
