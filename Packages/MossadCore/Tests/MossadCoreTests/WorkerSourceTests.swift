@@ -45,6 +45,6 @@ final class WorkerSourceTests: XCTestCase {
         // The invite, and the cut by a recording's marks, which reads the calendar of the recording's own time.
         XCTAssertEqual(reads, ["cutIfNeeded", "invite"])
         // The answer of a read decides; `canRead()` only says whether the launch looks at all.
-        XCTAssertEqual(Set(checks), ["matchUnknownInvites"])
+        XCTAssertEqual(Set(checks), ["matchUnknownInvites", "recheckInvites"])
     }
 }

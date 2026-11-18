@@ -2312,10 +2312,25 @@ final class AppController: ObservableObject {
         Task { if await pipeline.matchUnknownInvites() > 0 { self.refresh() } }
     }
 
+    /// The meetings of the last 14 days written before the voices checked their invite are matched again, once each
+    /// (`Pipeline.recheckInvites`): never while a call records, and a call that starts ends the pass.
+    private func recheckInvites() {
+        guard mode.does(.upkeep), !isRecording, !recheckingInvites, let pipeline else { return }
+        recheckingInvites = true
+        Task(priority: .utility) { [weak self] in
+            let changed = await pipeline.recheckInvites(stop: { [weak self] in await MainActor.run { self?.isRecording ?? true } })
+            self?.recheckingInvites = false
+            if changed > 0 { self?.refresh() }
+        }
+    }
+
+    private var recheckingInvites = false
+
     private func runHousekeeping() async {
         checkMoves()
         consumeBackupMoveRequest()
         lookAgainForInvites()
+        recheckInvites()
         await track { await self.pipeline.runPending() }
         let audio = paths.audio, days = deleteRecordings ? max(1, recordingDays) : nil, tracks = max(1, rawTracksDays)
         // Only a backup that this Mac can read counts as "the recording exists": a mark for another server does not.

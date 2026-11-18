@@ -1058,6 +1058,44 @@ public actor Pipeline {
         return matched
     }
 
+    /// The meetings written before the voices checked their invite: each recording of the last `days` days with no link
+    /// from its tab and no check yet (`InviteRecheck.due`) is matched again by the link, the title, and the voices it
+    /// already has. A changed invite writes the note again, as a late invite does (the summary, the voices, and the
+    /// owner's title stay; no model request); every one is marked `inviteChecked`, so it runs once. One meeting at a time,
+    /// and `stop` (a call that records) ends the pass before the next one. Returns how many changed.
+    public func recheckInvites(newerThan days: Int = InviteRecheck.days, stop: @Sendable () async -> Bool) async -> Int {
+        guard await calendar.canRead() else { return 0 }
+        let since = now().addingTimeInterval(-Double(days) * 86_400)
+        var changed = 0, checked = 0
+        for r in ProcessingQueue(paths: paths).allRecords() where InviteRecheck.due(r, since: since) {
+            if await stop() { break }
+            guard !inFlight.contains(r.id) else { continue }
+            let read = await invite(readAround: r)
+            // A read that is not whole says nothing: the meeting waits for the next launch.
+            guard read.known, read.google != .failed else { continue }
+            let answer = inviteAnswer(r, events: read.events, withVoices: true)
+            var moved = false
+            guard var saved = edit(r.id, { record in
+                guard InviteRecheck.due(record, since: since) else { return false }
+                let before = InviteRecheck.Shown(record)
+                record.apply(answer)
+                record.inviteChecked = true
+                moved = InviteRecheck.Shown(record) != before
+                return true
+            }) else { continue }
+            let dir = paths.callDirectory(r.id)
+            if moved {
+                save(&saved, dir: dir)
+                changed += 1
+            } else {
+                do { try store(saved, dir: dir) } catch { Log.error("Saving \(r.id) failed: \(error)") }
+            }
+            checked += 1
+        }
+        if checked > 0 { Log.info("Calendar: checked the invites of \(checked) meetings again; \(changed) changed") }
+        return changed
+    }
+
     /// Adds calendar details and the summary. Returns false when the summary should be retried later.
     private func summarize(_ r: inout CallRecord) async -> Bool {
         // A notes-only meeting was made from its invite.

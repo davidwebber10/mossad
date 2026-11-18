@@ -122,6 +122,46 @@ extension PipelineTests {
         XCTAssertEqual(second, 0)
     }
 
+    /// Call 1 of the morning of three wrong titles, written by an older build with the overlap's event as its invite.
+    /// The check at launch gives it the event whose invited person spoke, writes the note again under that title, and
+    /// keeps the summary and the voices. It runs once; a call that records stops it.
+    func testTheCheckAtLaunchMovesAnOlderMeetingToTheEventWhosePeopleSpoke() async throws {
+        try library.add([0, 1, 0, 0], to: "Alex Rivera")
+        let right = CalendarEventInfo(title: "Leadership sync", start: start.addingTimeInterval(-60), end: start.addingTimeInterval(1740),
+                                      attendees: ["Alex Rivera", "Sam Carter"], text: "https://meet.google.com/aaa-aaaa-aaa", isAllDay: false)
+        let wrong = CalendarEventInfo(title: "Quick check", start: start.addingTimeInterval(1740), end: start.addingTimeInterval(3540),
+                                      attendees: ["Pat Quill"], text: "https://meet.google.com/bbb-bbbb-bbb", isAllDay: false)
+        let id = try makeRecord()
+        await pipeline(source: ReadableCalendar(events: [wrong], readable: true)).process(id)
+        var old = try load(id)
+        old.setInvite(wrong)
+        old.inviteNotSure = nil
+        old.inviteChecked = nil
+        old.end = start.addingTimeInterval(3840)
+        old.speakerNames["them:A"] = "Alex Rivera"
+        old.fromInvite = nil
+        try old.save(to: paths.callDirectory(id))
+
+        let next = pipeline(source: ReadableCalendar(events: [right, wrong], readable: true))
+        let stopped = await next.recheckInvites(stop: { true })
+        XCTAssertEqual(stopped, 0)
+        XCTAssertNil(try load(id).inviteChecked, "a call that records stops the pass")
+
+        let changed = await next.recheckInvites(stop: { false })
+        XCTAssertEqual(changed, 1)
+        let after = try load(id)
+        XCTAssertEqual(after.calendarTitle, "Leadership sync")
+        XCTAssertNil(after.inviteNotSure)
+        XCTAssertEqual(after.inviteChecked, true)
+        XCTAssertEqual(after.summary, old.summary)
+        XCTAssertEqual(after.speakerNames, old.speakerNames)
+        let notes = try FileManager.default.contentsOfDirectory(atPath: paths.meetings.path).filter { $0.hasSuffix(".md") }
+        XCTAssertEqual(notes.count, 1, "\(notes)")
+        XCTAssertTrue(notes[0].hasSuffix(" - Leadership sync.md"), "\(notes)")
+        let again = await next.recheckInvites(stop: { false })
+        XCTAssertEqual(again, 0, "once")
+    }
+
     func testAMarkedMeetingWithNoInviteLosesOnlyItsMark() async throws {
         let id = try makeRecord()
         await pipeline(source: ReadableCalendar(events: [], readable: false)).process(id)
