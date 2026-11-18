@@ -64,7 +64,10 @@ public struct CallTitleWatch: Equatable, Sendable {
     /// sign is not a new meeting. A meeting name that holds a separator is cut short; two such names can then look
     /// alike, which can only miss a mark, never make one.
     public static func meeting(inWindowTitle title: String) -> String? {
-        var parts = [title.replacingOccurrences(of: "\u{200B}", with: "").trimmingCharacters(in: .whitespaces)]
+        // One Unicode form and single spaces, so a window's title and an event's title of the same meeting have one key.
+        let plain = title.replacingOccurrences(of: "\u{200B}", with: "").precomposedStringWithCanonicalMapping
+            .replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
+        var parts = [plain.trimmingCharacters(in: .whitespaces)]
         for separator in separators { parts = parts.flatMap { $0.components(separatedBy: separator) } }
         parts = parts.map { $0.trimmingCharacters(in: .whitespaces) }
         if parts.count >= 2, browserNames.contains(parts[parts.count - 1]) {

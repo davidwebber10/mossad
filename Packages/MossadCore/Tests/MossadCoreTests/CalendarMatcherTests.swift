@@ -211,10 +211,18 @@ final class CalendarMatcherTests: XCTestCase {
         XCTAssertEqual(quick?.sure, true)
         // An event of that title more than 10 minutes away is not the call's.
         XCTAssertEqual(match(morning, key: CallTitleWatch.key("Quick check"), from: 4300, to: 4740)?.title, "Team meetup")
-        XCTAssertEqual(match(morning, key: CallTitleWatch.key("Quick check"), from: 4300, to: 4740)?.sure, false)
-        // Two events of that title in the window: the title says nothing.
+        XCTAssertEqual(match(morning, key: CallTitleWatch.key("Quick check"), from: 4300, to: 4740)?.sure, true, "main's one candidate")
+        // Two events of that title in the window: the one that overlaps the call; two that overlap say nothing.
+        let before = morning + [event("Leadership sync", -1200, -300, text: "https://meet.google.com/ddd-dddd-ddd")]
+        XCTAssertEqual(match(before, key: leadership, from: 60, to: 3840)?.title, "Leadership sync")
+        XCTAssertEqual(match(before, key: leadership, from: 60, to: 3840)?.sure, true)
         let twice = morning + [event("Leadership sync", 1800, 2400, text: "https://meet.google.com/ddd-dddd-ddd")]
         XCTAssertEqual(match(twice, key: leadership, from: 60, to: 3840)?.sure, false)
+        // Two spaces or another Unicode form of the same title is the same key.
+        let spaced = [event("Leadership  sync", 0, 1800, text: "https://meet.google.com/aaa-aaaa-aaa")]
+        XCTAssertEqual(match(spaced, key: leadership, from: 60, to: 3840)?.sure, true)
+        let accent = [event("Cafe\u{301} sync", 0, 1800, text: "https://meet.google.com/aaa-aaaa-aaa")]
+        XCTAssertEqual(CalendarMatcher.titleKey(of: accent[0]), CallTitleWatch.meeting(inWindowTitle: "Meet - Caf\u{e9} sync - Google Chrome").map(CallTitleWatch.key))
         // The window cuts a title at its first separator; the event's key is cut the same way.
         let cut = [event("Ops - weekly", 0, 1800, text: "https://meet.google.com/aaa-aaaa-aaa")]
         XCTAssertEqual(match(cut, key: CallTitleWatch.key("Ops"), from: 60, to: 1700)?.sure, true)
@@ -223,15 +231,20 @@ final class CalendarMatcherTests: XCTestCase {
         XCTAssertEqual(match(morning, key: CallTitleWatch.key("Something else"), from: 60, to: 3840)?.sure, false)
     }
 
-    func testWithNeitherALinkNorATitleTheOverlapIsNeverSure() {
-        // Call 1 with no title: "Quick check" overlaps it most, and that is a guess.
+    /// With neither a link nor a title, main's rule: the largest overlap, sure when it is the only overlapping event.
+    func testWithNeitherALinkNorATitleMainsRuleStays() {
+        // Call 1 with no title: "Quick check" overlaps it most, and "Leadership sync" overlaps it too: not sure.
         let one = match(morning, from: 60, to: 3840)
         XCTAssertEqual(one?.title, "Quick check")
         XCTAssertEqual(one?.sure, false)
-        // Call 3: 11:24 to 11:34, only "Team meetup" overlaps it: still a guess.
+        // Call 3: 11:24 to 11:34, only "Team meetup" overlaps it: sure, as on main.
         XCTAssertEqual(match(morning, from: 5040, to: 5640)?.title, "Team meetup")
-        XCTAssertEqual(match(morning, from: 5040, to: 5640)?.sure, false)
-        XCTAssertEqual(match([event("Vendor call", 0, 1800, text: "https://zoom.us/j/1")], on: .zoom, from: 60, to: 1700)?.sure, false)
+        XCTAssertEqual(match(morning, from: 5040, to: 5640)?.sure, true)
+        XCTAssertEqual(match([event("Vendor call", 0, 1800, text: "https://zoom.us/j/1")], on: .zoom, from: 60, to: 1700)?.sure, true)
+        // A call that runs one minute into the next event: two candidates, the larger overlap, not sure, as on main.
+        let into = match(morning, from: 0, to: 1860)
+        XCTAssertEqual(into?.title, "Leadership sync")
+        XCTAssertEqual(into?.sure, false)
         // A room has no link to match: the one overlapping event with no call link stays sure, as before.
         XCTAssertEqual(match([event("Planning", 0, 1800)], on: .inPerson, from: 60, to: 1700)?.sure, true)
     }
