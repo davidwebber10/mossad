@@ -113,6 +113,21 @@ struct MossadEntry {
             print(result.text)
             exit(result.status)
         }
+        // `--cut <call id> --at <seconds>[,<seconds>…] [--dry-run]` cuts one recording into meetings (`Pipeline.cut`), for
+        // support and the repair of a recording that held two calls. Refused while Mossad is open; no menu item.
+        if CommandLine.arguments.contains("--cut") {
+            if Rehearsal.isOn { print("Mossad Rehearsal has no recordings to cut."); exit(1) }
+            let typed = (UserDefaults.standard.string(forKey: "ownerName") ?? "").trimmingCharacters(in: .whitespaces)
+            let owner = typed.isEmpty ? NSFullUserName() : typed
+            let args = CommandLine.arguments
+            Task {
+                let result = await CutCommand.run(args, paths: .live, ownerName: owner)
+                print(result.text)
+                fflush(stdout)
+                exit(result.status)
+            }
+            dispatchMain()
+        }
         MossadApp.main()
     }
 }

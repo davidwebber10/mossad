@@ -10,7 +10,7 @@ public struct AppIdentity: Sendable, Equatable {
     public static let mainBundleID = "com.dwebber.mossad"
     public static let rehearsalBundleID = "com.dwebber.mossad.rehearsal"
     /// The commands that run without the window. They read the real settings, never a preview's.
-    public static let commands = ["--mcp", "--people-migration", "--persona-fill", "--persona-eval", "--import-keys"]
+    public static let commands = ["--mcp", "--people-migration", "--persona-fill", "--persona-eval", "--import-keys", "--cut"]
 
     public let bundleID: String?
     /// A `--ui-preview` run.

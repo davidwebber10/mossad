@@ -43,6 +43,21 @@ public enum DetectorEvent: Equatable, Sendable {
     case started(platform: Platform, bundleID: String, at: Date)
     /// `trimTo` is the last mic activity when the call ended by the mic-idle fallback.
     case ended(at: Date, trimTo: Date?)
+    /// The call may have changed to another meeting: a mark in the recording. The service sends it, the detector
+    /// never does, and it changes nothing of the call: the call goes on. `titleKey` is `CallTitleWatch.key` of the new
+    /// title for a title mark.
+    case marked(link: String?, platform: Platform, source: CallMark.Source, sure: Bool, at: Date, titleKey: String? = nil,
+                ownLinkInMeeting: Bool? = nil)
+}
+
+public extension DetectorEvent {
+    /// Whether the app hands this event to the do-not-record gate and to the recorder's start or end. A mark never
+    /// does, also a sure one to a meeting under a do-not-record rule: it goes to `CallRecorder.addCallMark` only, so
+    /// no mark ends a recording and none starts one.
+    var reachesTheGate: Bool {
+        if case .marked = self { return false }
+        return true
+    }
 }
 
 /// Decides when a call starts and ends from a stream of snapshots.

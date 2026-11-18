@@ -247,7 +247,7 @@ public final class MergedCalendarSource: CalendarSource, @unchecked Sendable {
         let page = await googlePage(from: from, to: to)
         let google: CalendarSnapshot.Access.Read = !on ? .no : page == nil ? .failed : .yes
         lock.withLock { googleRead = google }
-        return CalendarRead(events: CalendarMerge.merge(mac: local, google: page), known: true, google: google)
+        return CalendarRead(events: CalendarMerge.merge(mac: local, google: page), known: true, google: google, mac: await mac.canRead() ? .yes : .no)
     }
 
     /// How the last read of Google went: not connected, read, or failed (the Mac's calendar alone then).

@@ -807,6 +807,15 @@ final class AppController: ObservableObject {
                 let ids = detection.audioProcessIDs
                 let meetingID = detection.meetingID
                 let forced = detection.callIsForced
+                // A mark goes into the recording and nowhere else (`reachesTheGate` is false): it never ends a recording,
+                // never starts one, and never asks the do-not-record gate.
+                if case .marked(let link, let platform, let source, let sure, let at, let titleKey, let ownLinkInMeeting) = event {
+                    CaptureQueue.queue.async {
+                        recorder.addCallMark(link: link, platform: platform, source: source, sure: sure, at: at, titleKey: titleKey,
+                                             ownLinkInMeeting: ownLinkInMeeting)
+                    }
+                    return
+                }
                 guard let self else { return }
                 // Before anything records or streams: a meeting the owner marked stays off the record, for the whole
                 // call session (a late end, a mic gap, Off then On, a restart); the owner's Record wins. At launch the calendar comes a moment
@@ -829,6 +838,8 @@ final class AppController: ObservableObject {
                     }
                 case .ended(let at, _):
                     if self.noRecordGate.callEnded(at: at) { return }
+                case .marked:
+                    return
                 }
                 // Recorder commands go straight from the detection queue to the capture queue, so they keep
                 // the detector's order relative to the process updates below. The UI follows on the main actor.
@@ -843,6 +854,9 @@ final class AppController: ObservableObject {
                     // A missing permission is said one time a day, not on each use of the mic.
                     if call.reason == .noAutomation { self.quietUnconfirmed(call) }
                 }
+            }
+            detection.onFirstTitleKey = { @Sendable key in
+                CaptureQueue.queue.async { recorder.setFirstTitleKey(key) }
             }
             // The recorder ends a mute span where "muted" was last seen, not where the unmute was seen.
             detection.onMuteChangeAt = { @Sendable [weak self] muted, lastMutedSeen in
@@ -1036,6 +1050,9 @@ final class AppController: ObservableObject {
                 guard let self else { return }
                 // Only a changed list is assigned: each assignment draws every view that reads the controller again.
                 if records != self.meetings { self.meetings = records }
+                // A page of a recording that was cut shows its first part, as a merge shows the joined meeting.
+                if let shown = self.selectedMeetingID, !records.contains(where: { $0.id == shown }),
+                   let part = CutRecord.firstPart(of: shown, in: records) { self.selectedMeetingID = part }
                 self.refreshing = false
                 if self.refreshAgain {
                     self.refreshAgain = false
@@ -1201,6 +1218,7 @@ final class AppController: ObservableObject {
                             onFailure: { [weak self] step in
                                 Task { @MainActor in self?.countUsage(step) }
                             })
+        pipeline.setForgetActions(forgetActions())
     }
 
     /// A meeting that is gone (deleted, or merged into another) leaves nothing behind outside this Mac: its
@@ -1873,8 +1891,10 @@ final class AppController: ObservableObject {
             guard await cancelMoveBeforeDelete(callID) else { return }
             // The pipeline first: it refuses a call that is still processing, and then the cloud copy must stay.
             // It gives back the record from disk, which has the archive key even when the list here is older.
-            if let removed = await pipeline.remove(callID: callID) {
-                forget(removed)
+            // Everything Mossad made of it goes too (`CallForget`), step by step; a quit in the middle goes on at the
+            // next launch.
+            if await pipeline.deleteMeeting(callID: callID) != nil {
+                coachVersion += 1
                 if selectedMeetingID == callID { selectedMeetingID = nil }
                 refresh()
             }
@@ -2110,6 +2130,8 @@ final class AppController: ObservableObject {
             }
             Task { @MainActor in self.update(record); self.refresh() }
             Task { @MainActor in self.endOfCall(record) }
+        case .marked:
+            break
         }
     }
 
@@ -2133,10 +2155,23 @@ final class AppController: ObservableObject {
             // Utility: the next call may start in the same minute, and the call app comes first.
             Task(priority: .utility) { @MainActor in await self.track { await self.pipeline.process(record.id) } }
         case .move(let to):
-            moveAfterCall(record.id, to: to)
+            // A recording that held two calls is cut first, and each part is held for the owner: Mossad does not know
+            // for which call the choice was made.
+            guard CutPlan.waits(record) else { return moveAfterCall(record.id, to: to) }
+            Task(priority: .utility) { @MainActor in
+                let ids = await pipeline.cutIfNeeded(callID: record.id)
+                refresh()
+                if ids == [record.id] { moveAfterCall(record.id, to: to) } else { checkMoves() }
+            }
         case .hold:
-            // A guess is held with its reason saved (`MoveEnded`, `.notSure`): the row asks the owner.
-            checkMoves()
+            // A guess is held with its reason saved (`MoveEnded`, `.notSure`): the row asks the owner. Cut first, if it
+            // held two calls: each part is held the same way.
+            guard CutPlan.waits(record) else { return checkMoves() }
+            Task(priority: .utility) { @MainActor in
+                _ = await pipeline.cutIfNeeded(callID: record.id)
+                refresh()
+                checkMoves()
+            }
         case .nothing:
             break
         }
@@ -2192,6 +2227,8 @@ final class AppController: ObservableObject {
             isPaused = false
             shownMute = .none
             stopLive()
+        case .marked:
+            break
         }
     }
 

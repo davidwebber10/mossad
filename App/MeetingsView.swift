@@ -94,7 +94,7 @@ struct MeetingsView: View {
                 }
             }
         } message: {
-            Text("Mossad deletes the note, the transcript, and the audio. Voices it learned from this call stay.")
+            Text(DeleteWords.confirmation)
         }
         .moveConfirmation(controller)
         .sheet(item: $merging) { r in MergeSheet(record: r) }

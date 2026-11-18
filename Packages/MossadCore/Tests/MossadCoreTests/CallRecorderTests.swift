@@ -167,6 +167,106 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertTrue(try CallRecord.load(from: paths.callDirectory(id)).markers.isEmpty)
     }
 
+    // MARK: Call marks and pause spans
+
+    func testACallMarkIsSavedAtOnceAtTheRecordingsSecondOfItsTime() throws {
+        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], meetingID: "abc-defg-hij", at: t0)
+        speak(from: 0, to: 60)
+        recorder.addCallMark(link: "klm-nopq-rst", platform: .meet, source: .tabs, sure: true, at: t0.addingTimeInterval(55))
+        let marks = try XCTUnwrap(try CallRecord.load(from: paths.callDirectory(id)).callMarks)
+        XCTAssertEqual(marks.count, 1)
+        XCTAssertEqual(marks[0].at, 55, accuracy: 0.05)
+        XCTAssertEqual(marks[0].time, t0.addingTimeInterval(55))
+        XCTAssertEqual(marks[0].link, "klm-nopq-rst")
+        XCTAssertEqual(marks[0].platform, .meet)
+        XCTAssertEqual(marks[0].source, .tabs)
+        XCTAssertTrue(marks[0].sure)
+        recorder.addCallMark(link: nil, platform: .meet, source: .title, sure: false, at: now)
+        let r = try XCTUnwrap(recorder.end(at: now, trimTo: nil))
+        XCTAssertEqual(r.callMarks?.map(\.source), [.tabs, .title])
+        XCTAssertEqual(r.callMarks?.last?.at ?? 0, 60, accuracy: 0.05)
+    }
+
+    /// The paused time is not in the files: a mark after a pause sits at its file second.
+    func testACallMarkAfterAPauseIsInFileTime() throws {
+        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        speak(from: 0, to: 30)
+        recorder.pause()
+        now = t0.addingTimeInterval(630)
+        recorder.resume()
+        speak(from: 630, to: 650)
+        recorder.addCallMark(link: "klm-nopq-rst", platform: .meet, source: .ext, sure: true, at: t0.addingTimeInterval(640))
+        let marks = try XCTUnwrap(try CallRecord.load(from: paths.callDirectory(id)).callMarks)
+        XCTAssertEqual(marks.first?.at ?? 0, 40, accuracy: 0.05)
+    }
+
+    func testATitleMarkKeepsItsKeyAndTheFirstTitleKeyIsSavedOnce() throws {
+        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        speak(from: 0, to: 90)
+        recorder.setFirstTitleKey("08786467415118f4")
+        recorder.setFirstTitleKey("2be7ef95b4132e1d")
+        recorder.addCallMark(link: nil, platform: .meet, source: .title, sure: false, at: t0.addingTimeInterval(80), titleKey: "2be7ef95b4132e1d")
+        let r = try CallRecord.load(from: paths.callDirectory(id))
+        XCTAssertEqual(r.firstTitleKey, "08786467415118f4", "written once")
+        XCTAssertEqual(r.callMarks?.first?.titleKey, "2be7ef95b4132e1d")
+    }
+
+    /// A room recording owns the recorder: a mark or a title key on its way when it starts is not the room's.
+    func testARoomRecordingTakesNoMarkAndNoTitleKey() throws {
+        let id = try recorder.beginManual(at: t0)
+        speak(from: 0, to: 30)
+        recorder.addCallMark(link: "klm-nopq-rst", platform: .meet, source: .tabs, sure: true, at: t0.addingTimeInterval(20))
+        recorder.setFirstTitleKey("08786467415118f4")
+        let r = try CallRecord.load(from: paths.callDirectory(id))
+        XCTAssertNil(r.callMarks)
+        XCTAssertNil(r.firstTitleKey)
+    }
+
+    func testACallMarkWithNoCallDoesNothing() throws {
+        recorder.addCallMark(link: "klm-nopq-rst", platform: .meet, source: .tabs, sure: true, at: t0)
+        XCTAssertNil(recorder.currentCallID)
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: paths.audio.path).isEmpty)
+    }
+
+    /// A record of this build says it knows its pauses: none is an empty list, never a missing field.
+    func testANewRecordingKnowsItHasNoPause() throws {
+        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id)).pauses, [])
+    }
+
+    func testAPauseIsSavedAsASpanWithBothWallTimes() throws {
+        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        speak(from: 0, to: 30)
+        recorder.pause()
+        var pauses = try XCTUnwrap(try CallRecord.load(from: paths.callDirectory(id)).pauses)
+        XCTAssertEqual(pauses.count, 1)
+        XCTAssertEqual(pauses[0].at, 30, accuracy: 0.05)
+        XCTAssertEqual(pauses[0].from, t0.addingTimeInterval(30))
+        XCTAssertNil(pauses[0].to, "an open pause is saved at once, so a crash keeps it")
+        now = t0.addingTimeInterval(300)
+        recorder.resume()
+        pauses = try XCTUnwrap(try CallRecord.load(from: paths.callDirectory(id)).pauses)
+        XCTAssertEqual(pauses.map(\.to), [t0.addingTimeInterval(300)])
+        speak(from: 300, to: 340)
+        recorder.pause()
+        now = t0.addingTimeInterval(400)
+        let r = try XCTUnwrap(recorder.end(at: now, trimTo: nil))
+        let spans = try XCTUnwrap(r.pauses)
+        XCTAssertEqual(spans.count, 2)
+        XCTAssertEqual(spans[1].at, 70, accuracy: 0.05)
+        XCTAssertEqual(spans[1].from, t0.addingTimeInterval(340))
+        XCTAssertEqual(spans[1].to, t0.addingTimeInterval(400), "a call that ends while paused closes its pause at the end")
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id)).pauses, spans)
+    }
+
+    func testACallWithNoPauseHasNoSpans() throws {
+        _ = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        speak(from: 0, to: 120)
+        let r = try XCTUnwrap(recorder.end(at: now, trimTo: nil))
+        XCTAssertEqual(r.pauses, [], "known: no pause")
+        XCTAssertNil(r.callMarks)
+    }
+
     func testAnInPersonRecordingUsesTheMicOnlyAndIsManual() throws {
         let id = try recorder.beginManual(at: t0)
         XCTAssertTrue(recorder.isManual)

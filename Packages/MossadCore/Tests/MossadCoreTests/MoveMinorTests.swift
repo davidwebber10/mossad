@@ -22,6 +22,16 @@ final class MoveMinorTests: XCTestCase {
         XCTAssertEqual(MoveAfterCall.startsAtLook(rs, moving: [], held: [], recording: "a", targets: [work]).map(\.callID), ["b", "e"])
     }
 
+    /// A marked recording whose cut by its marks is still to be decided does not move at a look: each of its parts would
+    /// be held. Once decided with no cut, it moves as before.
+    func testAMarkedRecordingWaitsForItsCutDecision() {
+        var r = record("a")
+        r.callMarks = [CallMark(at: 600, time: t0 + 600, link: "bbb-bbbb-bbb", platform: .meet, source: .tabs, sure: true)]
+        XCTAssertEqual(MoveAfterCall.startsAtLook([r], moving: [], held: [], recording: nil, targets: [work]).map(\.callID), [])
+        r.cutChecked = true
+        XCTAssertEqual(MoveAfterCall.startsAtLook([r], moving: [], held: [], recording: nil, targets: [work]).map(\.callID), ["a"])
+    }
+
     /// m2: a call marked during its recording with no ledger and no reason waits for the owner, with a way out.
     func testAMarkedCallWithNoMoveIsHeld() {
         let row = MoveShow.row(record(id), move: nil, name: "Work", copied: nil, reach: .open, held: nil, now: t0)

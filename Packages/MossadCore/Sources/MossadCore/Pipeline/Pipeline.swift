@@ -30,7 +30,13 @@ public actor Pipeline {
         }
     }
 
-    private var inFlight: Set<String> = []
+    var inFlight: Set<String> = []
+    /// Recordings whose cut is being decided (`cutIfNeeded`), so two runs never decide one twice.
+    private var deciding: Set<String> = []
+    /// The window app's way to change the coach's memory, the share links, and the backup (`setForgetActions`).
+    nonisolated let forgetActionsBox = Mutex<CallForget.Actions?>(nil)
+    /// A test's stop inside the cut (`setCutStop`).
+    nonisolated let cutStopHookBox = Mutex<(@Sendable (String) throws -> Void)?>(nil)
     /// Edits made while a call is in flight, applied again to the run's own copy before each of its saves, so the
     /// run never writes the old values back. See `edit`.
     private var ownerEdits: [String: [(inout CallRecord) -> Bool]] = [:]
@@ -39,26 +45,26 @@ public actor Pipeline {
     /// The transcription job per call and track while it runs; copied into each save of the run.
     private var jobs: [String: [String: String]] = [:]
 
-    private let paths: Paths
+    let paths: Paths
     private let queue: ProcessingQueue
-    private let library: VoiceLibrary
+    let library: VoiceLibrary
     private let embeddings: EmbeddingProvider
     private let calendar: CalendarSource
     private let notify: @Sendable (CallRecord) -> Void
-    private let now: @Sendable () -> Date
-    private let heavy: HeavyWorkGate
+    let now: @Sendable () -> Date
+    let heavy: HeavyWorkGate
     private nonisolated let settings: Mutex<Configuration>
     /// Called for each meeting a merge removes, so its archived recording and share links go too.
     private let onDiscard: @Sendable (CallRecord) -> Void
     private var configuration: Configuration { settings.withLock { $0 } }
     private var transcriber: Transcribing { configuration.transcriber }
     private var summarizer: Summarizing? { configuration.summarizer }
-    private var ownerName: String { configuration.ownerName }
+    var ownerName: String { configuration.ownerName }
     private var voiceFingerprints: Bool { configuration.voiceFingerprints }
     private var identifier: SpeakerIdentifier { SpeakerIdentifier(library: library, provider: embeddings, ownerName: ownerName) }
     /// "Name, Title" lines for the names in a call; empty without an org chart.
     private let titles: @Sendable ([String]) -> [String]
-    private let onStep: @Sendable (CallRecord) -> Void
+    let onStep: @Sendable (CallRecord) -> Void
     /// A short text for the sub-step in progress (call ID, text; nil when processing stops). Shown, not saved.
     private let onDetail: @Sendable (String, String?) -> Void
     private var stages: [String: [Track: TranscriptionStage]] = [:]
@@ -110,8 +116,12 @@ public actor Pipeline {
 
     public func runPending() async {
         finishInterruptedMerges()
+        await finishInterruptedCuts()
+        await finishDeletes()
         // Calls held because their muted parts could not be silenced (a full disk): try that again.
         for r in queue.allRecords() where r.mutedAudioPending && r.status == .failed && r.failedStep == .recorded && r.moveTo == nil { await retry(r.id) }
+        // A recording marked for another profile is never in the queue: its cut is decided here, and each part is held.
+        for r in queue.allRecords() where r.moveTo != nil && CutPlan.waits(r) { _ = await cutIfNeeded(callID: r.id) }
         for r in queue.pending(now: now()) { await process(r.id) }
         await retryMissingSummaries()
     }
@@ -138,9 +148,57 @@ public actor Pipeline {
     }
 
     public func process(_ id: String) async {
-        await processSteps(id)
-        // Outside `processSteps`, so this call is no longer in flight when the merge processes the joined record.
-        await continueSplitMeeting(id)
+        // A recording that held two calls becomes two meetings first; each part is then processed as its own call.
+        for part in await cutIfNeeded(callID: id) {
+            await processSteps(part)
+            // Outside `processSteps`, so this call is no longer in flight when the merge processes the joined record.
+            await continueSplitMeeting(part)
+        }
+    }
+
+    /// The one path of the cut by a recording's marks, for the end of a call, the launch, and a worker: the plan from the
+    /// marks and the calendar of `start - 10 min` to `end + 10 min`, then the cut. Returns the ids to process: the parts,
+    /// or the recording's own id when nothing was cut. A plan with no cut, and a cut that is refused or fails, is saved
+    /// on the record (`cutChecked`), so it is processed as one meeting and never decided again. A recording marked for
+    /// another profile is cut too, and each part is held for the owner (`cut(callID:at:holdingMarked:)`).
+    public func cutIfNeeded(callID: String) async -> [String] {
+        let dir = paths.callDirectory(callID)
+        guard let r = try? CallRecord.load(from: dir), CutPlan.waits(r), !inFlight.contains(callID) else { return [callID] }
+        // Another run decides it now and processes what it gives.
+        guard deciding.insert(callID).inserted else { return [] }
+        defer { deciding.remove(callID) }
+        let read = await calendar.read(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
+        let length = Self.trackLengths(dir).values.max() ?? 0
+        // A read that failed in part (Google, or the Mac's calendars) is an unknown calendar, as in a worker.
+        let plan = CutPlan.decide(r, events: read.whole ? read.events : nil, length: length)
+        let marks = r.callMarks?.count ?? 0
+        if !plan.cuts.isEmpty {
+            do {
+                let ids = try await cut(callID: callID, at: plan.cuts, holdingMarked: true)
+                Log.info("Cut plan of \(callID): \(marks) marks, \(plan.cuts.count) cuts, \(ids.count) meetings (\(plan.reasons.joined(separator: "; ")))")
+                return ids
+            } catch {
+                // A cut that started and is not done goes on at the next run (`finishInterruptedCuts`): nothing is set, and
+                // neither the original nor a part is processed now.
+                if case CutError.unfinished = error { return [] }
+                if FileManager.default.fileExists(atPath: dir.appendingPathComponent(CutLedger.fileName).path) {
+                    Log.error("Cut plan of \(callID): the cut stopped after it began; it goes on at the next run")
+                    return []
+                }
+                let kind = if case CutError.refused = error { "refused" } else { "failed" }
+                Log.error("Cut plan of \(callID): \(marks) marks, \(plan.cuts.count) cuts, the cut was \(kind); processed as one meeting (\(plan.reasons.joined(separator: "; ")))")
+            }
+        } else {
+            Log.info("Cut plan of \(callID): \(marks) marks, no cut (\(plan.reasons.joined(separator: "; ")))")
+        }
+        if let checked = edit(callID, { r in
+            guard r.cutChecked != true else { return false }
+            r.cutChecked = true
+            return true
+        }) {
+            try? store(checked, dir: dir)
+        }
+        return [callID]
     }
 
     private func processSteps(_ id: String) async {
@@ -163,6 +221,8 @@ public actor Pipeline {
             try? FileManager.default.removeItem(at: dir.appendingPathComponent(Self.quietFileName))
         }
         guard var r = try? CallRecord.load(from: dir) else { return }
+        // A meeting whose Delete has begun is never processed again.
+        if DeleteLedger.ids(paths).contains(id) { return }
         // A meeting that leaves for another profile sends nothing to this profile's providers.
         if r.moveTo != nil {
             Log.info("\(id) is moving to another profile; it is not processed here")
@@ -364,7 +424,7 @@ public actor Pipeline {
     /// Starts a failed or waiting call again now.
     public func retry(_ id: String) async {
         let dir = paths.callDirectory(id)
-        guard var r = try? CallRecord.load(from: dir), r.moveTo == nil else { return }
+        guard var r = try? CallRecord.load(from: dir), r.moveTo == nil, !DeleteLedger.ids(paths).contains(id) else { return }
         if r.status == .failed, let step = r.failedStep {
             r.status = step
             r.failedStep = nil
@@ -1001,7 +1061,7 @@ public actor Pipeline {
 
     /// A heavy step waits here while a call records, when `HeavyWorkPlan` says so; "Process now" ends the wait.
     /// Returns how the step runs.
-    private func clearance(_ id: String, _ step: HeavyStep) async -> HeavyWorkPlan {
+    func clearance(_ id: String, _ step: HeavyStep) async -> HeavyWorkPlan {
         let plan = await heavy.plan(step, callID: id)
         guard plan == .wait else { return plan }
         // The two tracks can wait together: the first wait keeps the line from before, the last one puts it back.
@@ -1041,7 +1101,7 @@ public actor Pipeline {
     }
 
     /// Runs a heavy step off this actor at the plan's priority. A step that ran during a call logs its time.
-    private func runHeavy<T: Sendable>(_ id: String, _ step: HeavyStep, _ plan: HeavyWorkPlan,
+    func runHeavy<T: Sendable>(_ id: String, _ step: HeavyStep, _ plan: HeavyWorkPlan,
                                        _ body: @escaping @Sendable () async throws -> T) async throws -> T {
         guard plan.usesLane else { return try await HeavyWork.run(priority: plan.priority, body) }
         let heavy = heavy
@@ -1195,6 +1255,12 @@ public actor Pipeline {
     /// are deleted with their notes, and the joined meeting gets a new summary and note. Returns its ID.
     @discardableResult
     public func merge(callIDs: [String]) async -> String? {
+        // A meeting whose Delete has begun is never joined: its removal would take the joined audio with it.
+        let deleting = DeleteLedger.ids(paths)
+        if let gone = callIDs.first(where: deleting.contains) {
+            Log.info("Not joining \(gone): it is being deleted")
+            return nil
+        }
         let records = callIDs.compactMap { try? CallRecord.load(from: paths.callDirectory($0)) }.sorted { $0.start < $1.start }
         guard records.count >= 2, records.count == Set(callIDs).count,
               records.allSatisfy({ ($0.status == .written || $0.status == .failed) && $0.moveTo == nil }) else { return nil }
