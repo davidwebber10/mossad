@@ -124,11 +124,11 @@ struct MeetingsView: View {
                 controller.selectedMeetingID = id
             }
             // Development hook for screenshots: MOSSAD_OPEN_LATER=<call id> opens that meeting 3 s after the list
-            // shows, as a notification or a chat link would.
+            // shows, as a notification or a chat link would. `upcoming` opens the page of the first made-up invite.
             if preview, let id = ProcessInfo.processInfo.environment["MOSSAD_OPEN_LATER"] {
                 Task {
                     try? await Task.sleep(for: .seconds(3))
-                    controller.openMeeting(id)
+                    controller.openMeeting(id == "upcoming" ? controller.calendarUpcoming.first?.id ?? id : id)
                 }
             }
             // Development hook for screenshots: MOSSAD_TRANSCRIBE_AGAIN opens the sheet for the first meeting.
