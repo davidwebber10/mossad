@@ -415,6 +415,18 @@ public struct CallRecord: Codable, Equatable, Sendable {
         plannedEnd = event.isAllDay ? nil : event.end
     }
 
+    /// No invite: the title, the people, the series, and the planned times of one go, and the marks of a match with them.
+    public mutating func clearInvite() {
+        calendarTitle = nil
+        attendees = []
+        invitees = nil
+        calendarSeriesID = nil
+        organizer = nil
+        plannedStart = nil
+        plannedEnd = nil
+        inviteNotSure = nil
+    }
+
     /// Every marker line of the transcript in time order: pauses, stops, and where a merged part begins.
     public var transcriptMarkers: [TranscriptMarker] {
         (recordingMarkers + screenMarkers).sorted { $0.offset < $1.offset }

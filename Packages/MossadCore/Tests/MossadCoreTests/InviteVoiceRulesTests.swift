@@ -328,7 +328,7 @@ final class InviteVoiceRulesTests: XCTestCase {
         }
         let a = event("A", "https://zoom.us/j/111"), b = event("B", "https://zoom.us/j/222")
         let end = t0.addingTimeInterval(1500)
-        XCTAssertEqual(CalendarMatcher.match(for: .zoom, meetingID: nil, start: t0, end: end, in: [a])?.sure, true)
+        XCTAssertEqual(CalendarMatcher.match(for: .zoom, meetingID: nil, start: t0, end: end, in: [a])?.sure, false, "the overlap alone is a guess")
         XCTAssertEqual(CalendarMatcher.match(for: .zoom, meetingID: nil, start: t0, end: end, in: [a, b])?.sure, false)
         XCTAssertEqual(CalendarMatcher.match(for: .zoom, meetingID: "222", start: t0, end: end, in: [a, b])?.event.title, "B")
         XCTAssertEqual(CalendarMatcher.match(for: .zoom, meetingID: "222", start: t0, end: end, in: [a, b])?.sure, true)

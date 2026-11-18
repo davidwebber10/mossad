@@ -655,6 +655,12 @@ public final class CallRecorder: @unchecked Sendable {
         }
     }
 
+    /// The live call has no invite: its link is known and no event holds it. A guess made before goes.
+    public func clearCalendar(forCall id: String) {
+        guard record?.id == id else { return }
+        edit { $0.clearInvite() }
+    }
+
     /// A provisional title from the live transcript. Ignored when that call has ended or already has a generated one.
     public func setGeneratedTitle(_ title: String, forCall id: String) {
         guard let r = record, r.id == id, r.generatedTitle == nil else { return }

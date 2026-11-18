@@ -206,7 +206,7 @@ final class AppController: ObservableObject {
     private var liveNaming: Task<Void, Never>?
     /// The calendar around the call that records, read once when it started: the live namer matches the invite
     /// in it again with the call's times so far, as the pipeline will.
-    private var liveCalendar: (callID: String, platform: Platform, meetingID: String?, start: Date, events: [CalendarEventInfo])?
+    private var liveCalendar: (callID: String, platform: Platform, meetingID: String?, start: Date, events: [CalendarEventInfo], titleKey: String?)?
     /// One namer for the call, across its pauses and new connections, so it does not fingerprint every voice again.
     private var liveNamer: (callID: String, namer: LiveSpeakerNamer)?
     /// One voice model for the pipeline and the live names, loaded once.
@@ -855,12 +855,14 @@ final class AppController: ObservableObject {
                     if call.reason == .noAutomation { self.quietUnconfirmed(call) }
                 }
             }
-            detection.onFirstTitleKey = { @Sendable key in
+            detection.onFirstTitleKey = { @Sendable [weak self] key in
                 CaptureQueue.queue.async { recorder.setFirstTitleKey(key) }
+                Task { @MainActor in self?.liveTitleSeen(link: nil, key: key) }
             }
             // The code of the call's own Meet title, when its tab gave no link: the calendar match reads it, nothing else.
-            detection.onTitleLink = { @Sendable code in
+            detection.onTitleLink = { @Sendable [weak self] code in
                 CaptureQueue.queue.async { recorder.setTitleLink(code) }
+                Task { @MainActor in self?.liveTitleSeen(link: code, key: nil) }
             }
             // The recorder ends a mute span where "muted" was last seen, not where the unmute was seen.
             detection.onMuteChangeAt = { @Sendable [weak self] muted, lastMutedSeen in
@@ -1595,7 +1597,8 @@ final class AppController: ObservableObject {
     func liveInvite(callID: String) -> (title: String, people: [String])? {
         guard let c = liveCalendar, c.callID == callID, c.platform != .inPerson else { return nil }
         let end = max(Date(), c.start.addingTimeInterval(1800))
-        guard let match = CalendarMatcher.match(for: c.platform, meetingID: c.meetingID, start: c.start, end: end, in: c.events) else { return nil }
+        guard let match = CalendarMatcher.match(for: c.platform, meetingID: c.meetingID, titleKey: c.titleKey, start: c.start, end: end, in: c.events)
+        else { return nil }
         let people = CallInvite(event: match.event, sure: match.sure)?.guests.filter { !$0.declined && $0.person }.compactMap { $0.name ?? $0.email } ?? []
         return (match.event.title, people)
     }
@@ -1623,7 +1626,7 @@ final class AppController: ObservableObject {
                 if thermal == .serious || thermal == .critical { continue }
                 let calendar = self?.liveCalendar.flatMap { $0.callID == callID ? $0 : nil }
                 let names = await Task.detached(priority: .utility) {
-                    let invite = calendar.flatMap { CallInvite.live(platform: $0.platform, meetingID: $0.meetingID, start: $0.start, now: Date(), events: $0.events) }
+                    let invite = calendar.flatMap { CallInvite.live(platform: $0.platform, meetingID: $0.meetingID, titleKey: $0.titleKey, start: $0.start, now: Date(), events: $0.events) }
                     return await namer.names(for: snapshot, themURL: themURL, invite: invite)
                 }.value
                 guard !Task.isCancelled, names != snapshot.names else { continue }
@@ -2185,13 +2188,33 @@ final class AppController: ObservableObject {
     private func findInvite(callID: String, platform: Platform, meetingID: String?, start: Date, recorder: CallRecorder) async {
         let events = await calendar.events(from: start.addingTimeInterval(-900), to: start.addingTimeInterval(5400))
         // A slow read for a call that has ended must not replace the calendar of the call that records now.
-        if isRecording(callID) { liveCalendar = (callID, platform, meetingID, start, events) }
-        guard let found = CalendarMatcher.match(for: platform, meetingID: meetingID, start: start,
-                                                end: start.addingTimeInterval(1800), in: events) else { return }
+        guard isRecording(callID) else { return }
+        // A link or a title the windows showed while the calendar was read is kept.
+        let kept = liveCalendar.flatMap { $0.callID == callID ? $0 : nil }
+        liveCalendar = (callID, platform, kept?.meetingID ?? meetingID, start, events, kept?.titleKey)
+        applyLiveInvite(callID: callID, recorder: recorder)
+    }
+
+    /// The live call's invite by the matcher with what is known now. With a link that no event holds, the call has no
+    /// invite, and a guess made before goes.
+    private func applyLiveInvite(callID: String, recorder: CallRecorder) {
+        guard let c = liveCalendar, c.callID == callID else { return }
+        let found = CalendarMatcher.match(for: c.platform, meetingID: c.meetingID, titleKey: c.titleKey, start: c.start,
+                                          end: c.start.addingTimeInterval(1800), in: c.events)
+        guard found != nil || c.meetingID != nil else { return }
         CaptureQueue.queue.async {
-            recorder.setCalendar(found.event, sure: found.sure, forCall: callID)
+            if let found { recorder.setCalendar(found.event, sure: found.sure, forCall: callID) } else { recorder.clearCalendar(forCall: callID) }
             Task { @MainActor in self.refresh() }
         }
+    }
+
+    /// The code (`link`) or the key of the title the call's Meet window shows: the live invite is matched again with it.
+    private func liveTitleSeen(link: String?, key: String?) {
+        guard var c = liveCalendar, isRecording(c.callID), c.platform == .meet, c.meetingID == nil || link == nil else { return }
+        if let link { c.meetingID = link }
+        if let key { c.titleKey = key }
+        liveCalendar = c
+        applyLiveInvite(callID: c.callID, recorder: recorder)
     }
 
     /// "Not a call": no more warnings for this app and reason for the rest of the day, also after a restart.

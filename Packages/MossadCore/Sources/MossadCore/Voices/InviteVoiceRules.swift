@@ -69,10 +69,11 @@ public struct CallInvite: Sendable, Equatable {
     /// The invite of a call that still records, by the pipeline's match with the call's times so far. In its first
     /// half hour the call is taken to last that long, as when its title was found: a meeting that ends as the call
     /// starts is not its invite. A room has none, as in the pipeline.
-    public static func live(platform: Platform, meetingID: String?, start: Date, now: Date, events: [CalendarEventInfo]) -> CallInvite? {
+    public static func live(platform: Platform, meetingID: String?, titleKey: String? = nil, start: Date, now: Date,
+                            events: [CalendarEventInfo]) -> CallInvite? {
         guard !platform.isOneTrack else { return nil }
         let end = max(now, start.addingTimeInterval(1800))
-        return CalendarMatcher.match(for: platform, meetingID: meetingID, start: start, end: end, in: events)
+        return CalendarMatcher.match(for: platform, meetingID: meetingID, titleKey: titleKey, start: start, end: end, in: events)
             .flatMap { CallInvite(event: $0.event, sure: $0.sure) }
     }
 }
