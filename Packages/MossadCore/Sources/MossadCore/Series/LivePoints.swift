@@ -38,6 +38,8 @@ public enum LivePoints {
             for p in book.points.filter({ shown($0) && $0.seriesID == nil && $0.personID.map(canonical) == wanted }).sorted(by: order)
             where seen.insert(p.id).inserted { out.append(p) }
         }
+        // A point the owner ticked in this call stays, so the tick can be taken back, whatever the rule says now.
+        out += book.points.filter { shown($0) && $0.isForPerson && $0.done?.callID == callID && !seen.contains($0.id) }.sorted(by: order)
         return out
     }
 }

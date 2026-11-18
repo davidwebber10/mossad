@@ -437,7 +437,10 @@ public final class EventKitCalendarSource: CalendarSource, @unchecked Sendable {
                 title: e.title ?? "Untitled",
                 start: e.startDate,
                 end: e.endDate,
-                attendees: (e.attendees ?? []).compactMap { $0.name ?? $0.url.absoluteString.replacingOccurrences(of: "mailto:", with: "") },
+                // A booked room or a resource is no invited person, as in the Google read.
+                attendees: CalendarMatcher.invitedAttendees((e.attendees ?? []).map {
+                    (written: $0.name ?? $0.url.absoluteString.replacingOccurrences(of: "mailto:", with: ""), kind: Self.kind($0.participantType))
+                }),
                 text: [e.location, e.notes, e.url?.absoluteString].compactMap { $0 }.joined(separator: "\n"),
                 isAllDay: e.isAllDay,
                 participants: (e.attendees ?? []).compactMap {

@@ -114,17 +114,18 @@ public enum NextTimeRules {
 
     /// Marks the found points discussed in `r`, and carries the rest of `checked` to the next meeting. In a
     /// meeting the owner missed, nothing closes and nothing is carried: a found point gets a mention and stays open.
-    /// A person's point closes only in a 1:1 with that person (`onlyOther`, by the id of now through `canonical`); in
-    /// any other meeting it gets a mention too and stays open for the 1:1.
+    /// A person's point closes only in a 1:1 with that person (`person`, `OneOnOne.person(ofRecording:)`, else
+    /// `onlyOther`, by the id of now through `canonical`); in any other meeting it gets a mention and stays open for
+    /// the 1:1. `onlyOther` alone moves a meeting point to its person.
     /// `rejected` are the live marks the owner answered with "Not raised": their lines never close the point.
     /// A point added during the meeting is found only in a line said after it existed, and is never carried by it.
     /// A point of this one meeting that was not raised stays with it, and in a 1:1 (`onlyOther`) it moves to the
     /// next time the owner sees that person, remembering this meeting as the one that carried it.
     public static func apply(_ found: [NextTimeChecker.Found], checked: [NextTimePoint], call r: CallRecord, to book: inout NextTimeBook, at date: Date,
-                             rejected: [LivePointMarks.Mark] = [], onlyOther: (id: String, name: String)? = nil,
+                             rejected: [LivePointMarks.Mark] = [], onlyOther: (id: String, name: String)? = nil, person: String? = nil,
                              canonical: (String) -> String = { $0 }) {
         let missed = ownerMissed(r)
-        let oneOnOne = onlyOther.map { canonical($0.id) }
+        let oneOnOne = (person ?? onlyOther?.id).map(canonical)
         for p in checked {
             // A person's point closes only in a 1:1 with that person; in any other meeting it came up, and waits.
             let closes = !missed && (!p.isForPerson || (oneOnOne != nil && p.personID.map(canonical) == oneOnOne))
@@ -215,6 +216,9 @@ public actor NextTimeRunner {
             let points = NextTimeRules.points(for: r, in: book, series: SeriesCatalog.series(ofCall: r.id, in: series), people: people)
             // Nothing to check, or no words: no request, and the meeting is not marked as checked.
             guard !points.isEmpty, !r.utterances.isEmpty else { continue }
+            // A person's point waits while the invite is not known (a worker could not read the calendar): the window
+            // app looks for it again, and only then can the check tell a 1:1 from a group.
+            if r.inviteUnknown == true, points.contains(where: \.isForPerson) { continue }
             switch ledger.state(r.id, now: now()) {
             case .gaveUp: continue
             case .waiting: return checked
@@ -225,10 +229,11 @@ public actor NextTimeRunner {
                 // The marks made during the call: a line the owner rejected never closes its point.
                 let marks = LivePointMarks.load(from: paths.callDirectory(r.id))
                 let other = NextTimeRules.onlyOther(r, owner: owner, directory: directory, ownerEmails: ownerEmails, people: people)
+                let oneOnOne = OneOnOne.person(ofRecording: r, owner: owner, directory: directory, ownerEmails: ownerEmails, people: people)
                 // Read again: the owner may have changed a point while the request ran.
                 try NextTimeBook.change(in: paths.nextTime) {
                     NextTimeRules.apply(found, checked: points, call: r, to: &$0, at: now(), rejected: marks?.rejected ?? [], onlyOther: other,
-                                       canonical: people.canonical)
+                                       person: oneOnOne, canonical: people.canonical)
                 }
                 checked += 1
                 if ledger.entries[r.id] != nil { ledger.clear(r.id); ledger.save(to: paths.nextTime) }

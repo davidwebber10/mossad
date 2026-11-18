@@ -116,7 +116,8 @@ final class PersonPointsTests: XCTestCase {
         t.apply(turn(0, "A"), source: .them, at: 1)
         t.apply(turn(1, "A"), source: .them, at: 2)
         t.apply(turn(0, nil), source: .me, at: 3)
-        XCTAssertEqual(t.otherVoices(owner: owner), [nil])
+        // Two short lines with no name: a stray label, no voice yet (`PersonPointsReviewTests` has the 10 s rule).
+        XCTAssertEqual(t.otherVoices(owner: owner), [])
         t.names["0A"] = "Sam Carter"
         XCTAssertEqual(t.otherVoices(owner: owner), ["Sam Carter"])
         t.apply(turn(2, "B"), source: .them, at: 4)
@@ -124,7 +125,9 @@ final class PersonPointsTests: XCTestCase {
         // The owner heard on the call audio is not another voice.
         XCTAssertEqual(t.otherVoices(owner: owner), ["Sam Carter"])
         t.apply(turn(3, "C"), source: .them, at: 5)
-        XCTAssertEqual(t.otherVoices(owner: owner), ["Sam Carter", nil])
+        XCTAssertEqual(t.otherVoices(owner: owner), ["Sam Carter"])
+        t.names["0C"] = "Jo Park"
+        XCTAssertEqual(t.otherVoices(owner: owner), ["Sam Carter", "Jo Park"])
     }
 
     // MARK: Rule 1: a recording that ended
@@ -204,9 +207,14 @@ final class PersonPointsTests: XCTestCase {
         let r = written("g", attendees: group, voices: ["Sam Carter", "Jo Park"])
         let s = MeetingSeries(id: "cal:review", keys: ["cal:review"], title: "Product review", meetings: [], upcoming: [], cadence: nil, recurringInCalendar: true, usualPeople: [])
         let sp = book.add("Ship date for the next release", series: s, at: now.addingTimeInterval(-86_400))!
-        let found = [NextTimeChecker.Found(point: sp.id, at: 20, quote: "talk about the hiring plan for next quarter")]
-        NextTimeRules.apply(found, checked: [sp], call: r, to: &book, at: now, onlyOther: nil, canonical: refs.canonical)
+        let mp = book.add("Agenda for the review", meeting: NextTimeMeeting(MeetingDetail(title: "Product review", start: r.start, end: r.end)),
+                          at: now.addingTimeInterval(-86_400))!
+        XCTAssertEqual(Set(NextTimeRules.points(for: r, in: book, series: s, people: refs).map(\.id)), [sp.id, mp.id])
+        let found = [NextTimeChecker.Found(point: sp.id, at: 20, quote: "talk about the hiring plan for next quarter"),
+                     NextTimeChecker.Found(point: mp.id, at: 30, quote: "talk about the hiring plan for next quarter")]
+        NextTimeRules.apply(found, checked: [sp, mp], call: r, to: &book, at: now, onlyOther: nil, canonical: refs.canonical)
         XCTAssertEqual(book.points.first { $0.id == sp.id }?.done?.callID, "g")
+        XCTAssertEqual(book.points.first { $0.id == mp.id }?.done?.callID, "g")
     }
 
     // MARK: The words of a mention
