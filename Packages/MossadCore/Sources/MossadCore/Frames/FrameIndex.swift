@@ -203,6 +203,26 @@ public enum FrameStore {
         where !listed.contains(url.lastPathComponent) { try? FileManager.default.removeItem(at: url) }
     }
 
+    /// The frames of one range of a call, for a part of a cut recording: copied into `target` under the names of
+    /// their offsets moved back by `from`, with their own index. A frame exactly at `from` is this part's. The
+    /// source is not changed. Nothing is written for a call with no frames.
+    public static func cut(in source: URL, from: TimeInterval, to: TimeInterval?, into target: URL) throws {
+        guard let index = FrameIndex.load(from: source) else { return }
+        func inside(_ offset: TimeInterval) -> Bool { offset >= from && (to.map { offset < $0 } ?? true) }
+        let kept = FrameIndex(frames: index.frames.filter { inside($0.offset) },
+                              gaps: index.gaps.map { $0.filter { inside($0.offset) } })
+        let moved = kept.moved(by: -from)
+        let fm = FileManager.default
+        try fm.createDirectory(at: FrameIndex.folder(in: target), withIntermediateDirectories: true)
+        for (old, new) in zip(kept.frames, moved.frames) {
+            let at = index.url(of: old, in: source), copy = moved.url(of: new, in: target)
+            guard fm.fileExists(atPath: at.path) else { continue }
+            try? fm.removeItem(at: copy)
+            try fm.copyItem(at: at, to: copy)
+        }
+        try moved.save(to: target)
+    }
+
     static let mergedFileName = "frames.merged.json"
 
     /// First half of a merge: copies the later parts' pictures into the first part's folder under the names of
