@@ -42,7 +42,8 @@ final class WorkerSourceTests: XCTestCase {
             if line.contains("calendar.events(") || line.contains("calendar.read(") { reads.append(function) }
             if line.contains("calendar.canRead()") { checks.append(function) }
         }
-        XCTAssertEqual(reads, ["invite"])
+        // The invite, and the cut by a recording's marks, which reads the calendar of the recording's own time.
+        XCTAssertEqual(reads, ["cutIfNeeded", "invite"])
         // The answer of a read decides; `canRead()` only says whether the launch looks at all.
         XCTAssertEqual(Set(checks), ["matchUnknownInvites"])
     }

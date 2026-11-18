@@ -31,6 +31,8 @@ public actor Pipeline {
     }
 
     var inFlight: Set<String> = []
+    /// Recordings whose cut is being decided (`cutIfNeeded`), so two runs never decide one twice.
+    private var deciding: Set<String> = []
     /// The window app's way to change the coach's memory, the share links, and the backup (`setForgetActions`).
     nonisolated let forgetActionsBox = Mutex<CallForget.Actions?>(nil)
     /// A test's stop inside the cut (`setCutStop`).
@@ -118,6 +120,8 @@ public actor Pipeline {
         await finishDeletes()
         // Calls held because their muted parts could not be silenced (a full disk): try that again.
         for r in queue.allRecords() where r.mutedAudioPending && r.status == .failed && r.failedStep == .recorded && r.moveTo == nil { await retry(r.id) }
+        // A recording marked for another profile is never in the queue: its cut is decided here, and each part is held.
+        for r in queue.allRecords() where r.moveTo != nil && CutPlan.waits(r) { _ = await cutIfNeeded(callID: r.id) }
         for r in queue.pending(now: now()) { await process(r.id) }
         await retryMissingSummaries()
     }
@@ -144,9 +148,49 @@ public actor Pipeline {
     }
 
     public func process(_ id: String) async {
-        await processSteps(id)
-        // Outside `processSteps`, so this call is no longer in flight when the merge processes the joined record.
-        await continueSplitMeeting(id)
+        // A recording that held two calls becomes two meetings first; each part is then processed as its own call.
+        for part in await cutIfNeeded(callID: id) {
+            await processSteps(part)
+            // Outside `processSteps`, so this call is no longer in flight when the merge processes the joined record.
+            await continueSplitMeeting(part)
+        }
+    }
+
+    /// The one path of the cut by a recording's marks, for the end of a call, the launch, and a worker: the plan from the
+    /// marks and the calendar of `start - 10 min` to `end + 10 min`, then the cut. Returns the ids to process: the parts,
+    /// or the recording's own id when nothing was cut. A plan with no cut, and a cut that is refused or fails, is saved
+    /// on the record (`cutChecked`), so it is processed as one meeting and never decided again. A recording marked for
+    /// another profile is cut too, and each part is held for the owner (`cut(callID:at:holdingMarked:)`).
+    public func cutIfNeeded(callID: String) async -> [String] {
+        let dir = paths.callDirectory(callID)
+        guard let r = try? CallRecord.load(from: dir), CutPlan.waits(r), !inFlight.contains(callID) else { return [callID] }
+        // Another run decides it now and processes what it gives.
+        guard deciding.insert(callID).inserted else { return [] }
+        defer { deciding.remove(callID) }
+        let read = await calendar.read(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
+        let length = Self.trackLengths(dir).values.max() ?? 0
+        let plan = CutPlan.decide(r, events: read.known ? read.events : nil, length: length)
+        let marks = r.callMarks?.count ?? 0
+        if !plan.cuts.isEmpty {
+            do {
+                let ids = try await cut(callID: callID, at: plan.cuts, holdingMarked: true)
+                Log.info("Cut plan of \(callID): \(marks) marks, \(plan.cuts.count) cuts, \(ids.count) meetings (\(plan.reasons.joined(separator: "; ")))")
+                return ids
+            } catch {
+                let kind = if case CutError.refused = error { "refused" } else { "failed" }
+                Log.error("Cut plan of \(callID): \(marks) marks, \(plan.cuts.count) cuts, the cut was \(kind); processed as one meeting (\(plan.reasons.joined(separator: "; ")))")
+            }
+        } else {
+            Log.info("Cut plan of \(callID): \(marks) marks, no cut (\(plan.reasons.joined(separator: "; ")))")
+        }
+        if let checked = edit(callID, { r in
+            guard r.cutChecked != true else { return false }
+            r.cutChecked = true
+            return true
+        }) {
+            try? store(checked, dir: dir)
+        }
+        return [callID]
     }
 
     private func processSteps(_ id: String) async {

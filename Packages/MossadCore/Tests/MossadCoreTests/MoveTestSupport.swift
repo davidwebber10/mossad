@@ -68,6 +68,7 @@ func fullRecord(id: String = "20261101-100000") -> CallRecord {
     r.callMarks = [CallMark(at: 900, time: start + 960, link: "987654321", platform: .zoom, source: .tabs, sure: true)]
     r.cutFrom = "20261101-090000"
     r.firstTitleKey = "08786467415118f4"
+    r.cutChecked = true
     return r
 }
 

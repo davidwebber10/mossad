@@ -1049,6 +1049,9 @@ final class AppController: ObservableObject {
                 guard let self else { return }
                 // Only a changed list is assigned: each assignment draws every view that reads the controller again.
                 if records != self.meetings { self.meetings = records }
+                // A page of a recording that was cut shows its first part, as a merge shows the joined meeting.
+                if let shown = self.selectedMeetingID, !records.contains(where: { $0.id == shown }),
+                   let part = CutRecord.firstPart(of: shown, in: records) { self.selectedMeetingID = part }
                 self.refreshing = false
                 if self.refreshAgain {
                     self.refreshAgain = false
@@ -2151,10 +2154,23 @@ final class AppController: ObservableObject {
             // Utility: the next call may start in the same minute, and the call app comes first.
             Task(priority: .utility) { @MainActor in await self.track { await self.pipeline.process(record.id) } }
         case .move(let to):
-            moveAfterCall(record.id, to: to)
+            // A recording that held two calls is cut first, and each part is held for the owner: Mossad does not know
+            // for which call the choice was made.
+            guard CutPlan.waits(record) else { return moveAfterCall(record.id, to: to) }
+            Task(priority: .utility) { @MainActor in
+                let ids = await pipeline.cutIfNeeded(callID: record.id)
+                refresh()
+                if ids == [record.id] { moveAfterCall(record.id, to: to) } else { checkMoves() }
+            }
         case .hold:
-            // A guess is held with its reason saved (`MoveEnded`, `.notSure`): the row asks the owner.
-            checkMoves()
+            // A guess is held with its reason saved (`MoveEnded`, `.notSure`): the row asks the owner. Cut first, if it
+            // held two calls: each part is held the same way.
+            guard CutPlan.waits(record) else { return checkMoves() }
+            Task(priority: .utility) { @MainActor in
+                _ = await pipeline.cutIfNeeded(callID: record.id)
+                refresh()
+                checkMoves()
+            }
         case .nothing:
             break
         }

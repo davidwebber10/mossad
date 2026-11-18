@@ -64,11 +64,11 @@ extension Pipeline {
 
     /// What the cut of `callID` would be: the reason it is refused, or the parts it makes. Reads only.
     public func cutPlan(callID: String, at cuts: [Cut]) -> (refusal: String?, record: CallRecord?, length: TimeInterval, parts: [CallRecord]) {
-        cutPlan(callID: callID, at: cuts, ownRun: false)
+        cutPlan(callID: callID, at: cuts, ownRun: false, holdingMarked: false)
     }
 
-    /// `ownRun`: asked by the cut itself, which holds the call as in flight.
-    private func cutPlan(callID: String, at cuts: [Cut], ownRun: Bool) -> (refusal: String?, record: CallRecord?, length: TimeInterval, parts: [CallRecord]) {
+    /// `ownRun`: asked by the cut itself, which holds the call as in flight. `holdingMarked`: see `cut`.
+    private func cutPlan(callID: String, at cuts: [Cut], ownRun: Bool, holdingMarked: Bool) -> (refusal: String?, record: CallRecord?, length: TimeInterval, parts: [CallRecord]) {
         let dir = paths.callDirectory(callID)
         guard MovePaths.isID(callID), let r = try? CallRecord.load(from: dir) else {
             return ("There is no meeting \(callID) in this profile.", nil, 0, [])
@@ -76,7 +76,7 @@ extension Pipeline {
         let lengths = Self.trackLengths(dir)
         let length = lengths.values.max() ?? 0
         if let why = diskRefusal(r, dir: dir, ownRun: ownRun) { return (why, r, length, []) }
-        if let why = CutRecord.refusal(r, cuts: cuts, length: length, hasTracks: !lengths.isEmpty) { return (why, r, length, []) }
+        if let why = CutRecord.refusal(r, cuts: cuts, length: length, hasTracks: !lengths.isEmpty, holdingMarked: holdingMarked) { return (why, r, length, []) }
         let sorted = cuts.sorted { $0.at < $1.at }
         let parts = CutRecord.parts(of: r, at: sorted, ids: Array(repeating: "", count: sorted.count + 1), length: length)
         let ids = freeIDs(parts.map(\.start))
@@ -126,9 +126,13 @@ extension Pipeline {
     /// Cuts a recording into parts at `cuts` (seconds of its own timeline) and returns the parts' ids. Each part is a
     /// recording at `recorded`; the original is removed only after every part is on disk and checked, with
     /// everything Mossad made of it. Throws `CutError.refused` with plain words, and changes nothing then.
+    /// `holdingMarked`: a recording marked for another profile is cut too (only the cut by its marks asks this; the
+    /// command does not), and each part is held for the owner with "Process here" and "Move to" before it is published:
+    /// the mark stays on each part and a reason is saved for each (`MoveEnded`, `.notSure`), so no look starts a move of
+    /// a part and no step processes or sends one.
     @discardableResult
-    public func cut(callID: String, at cuts: [Cut]) async throws -> [String] {
-        let plan = cutPlan(callID: callID, at: cuts)
+    public func cut(callID: String, at cuts: [Cut], holdingMarked: Bool = false) async throws -> [String] {
+        let plan = cutPlan(callID: callID, at: cuts, ownRun: false, holdingMarked: holdingMarked)
         if let why = plan.refusal { throw CutError.refused(why) }
         guard inFlight.insert(callID).inserted else { throw CutError.refused("The meeting is being processed now. Try again when it is done.") }
         defer { inFlight.remove(callID) }
@@ -136,7 +140,7 @@ extension Pipeline {
         let clearance = await clearance(callID, .recordingCut)
         let dir = paths.callDirectory(callID)
         // Read again after the wait: the record or the tracks may have changed.
-        let fresh = cutPlan(callID: callID, at: cuts, ownRun: true)
+        let fresh = cutPlan(callID: callID, at: cuts, ownRun: true, holdingMarked: holdingMarked)
         if let why = fresh.refusal { throw CutError.refused(why) }
         guard fresh.record != nil else { throw CutError.refused("There is no meeting \(callID) in this profile.") }
         let sorted = cuts.sorted { $0.at < $1.at }
@@ -152,6 +156,11 @@ extension Pipeline {
                 try await HeavyWork.run(priority: .background, body)
             }
             try cutStop("copying done")
+            // Before `checked`: a cut that goes on after a stop finds each part already held.
+            if let to = fresh.record?.moveTo {
+                for id in ledger.ids { try MoveEnded(callID: id, to: to, why: .notSure, afterCall: true, at: now()).save(paths) }
+                try cutStop("held saved")
+            }
             ledger.phase = .checked
             try ledger.save(in: dir)
             try cutStop("checked saved")
@@ -248,7 +257,11 @@ extension Pipeline {
 
     /// Before `published`: the parts' folders go, and the original is as it was.
     private func rollBackCut(in dir: URL, _ ledger: CutLedger) {
-        for id in ledger.ids { try? FileManager.default.removeItem(at: paths.audio.appendingPathComponent(id + Self.cuttingSuffix)) }
+        for id in ledger.ids {
+            try? FileManager.default.removeItem(at: paths.audio.appendingPathComponent(id + Self.cuttingSuffix))
+            // A part's held reason, if one was saved: the part never was.
+            MoveEnded.shown(id, paths: paths)
+        }
         try? FileManager.default.removeItem(at: dir.appendingPathComponent(CutLedger.fileName))
     }
 
@@ -334,6 +347,7 @@ extension Pipeline {
         for id in ledger.ids {
             if isPart(id, of: ledger) { try? FileManager.default.removeItem(at: paths.callDirectory(id)) }
             try? FileManager.default.removeItem(at: paths.audio.appendingPathComponent(id + Self.cuttingSuffix))
+            MoveEnded.shown(id, paths: paths)
         }
         try? FileManager.default.removeItem(at: dir.appendingPathComponent(CutLedger.fileName))
         Log.error("The cut of \(ledger.original) was undone (\(why)); it is processed as one meeting")
@@ -348,6 +362,8 @@ extension Pipeline {
             return
         }
         heavy.forget(ledger.original)
+        // A held reason of the original (a recording marked for another profile): each part has its own now.
+        MoveEnded.shown(ledger.original, paths: paths)
         try cutStop("removed done")
         try? FileManager.default.removeItem(at: paths.callDirectory(ledger.ids[0]).appendingPathComponent(CutLedger.fileName))
         for id in ledger.ids { if let r = try? CallRecord.load(from: paths.callDirectory(id)) { onStep(r) } }

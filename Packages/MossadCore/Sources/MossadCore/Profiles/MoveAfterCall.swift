@@ -289,11 +289,12 @@ public enum MoveAfterCall {
     }
 
     /// The calls marked during their recording whose move starts at a look: not the call that records, not one with a
-    /// move, and not one held for the owner (its reason kept), also at the first look after a launch.
+    /// move, not one held for the owner (its reason kept), also at the first look after a launch, and not one whose cut
+    /// by its marks is still to be decided (`CutPlan.waits`): its parts would each be held.
     public static func startsAtLook(_ records: [CallRecord], moving: Set<String>, held: Set<String>, recording: String?,
                                     targets: [String]) -> [(callID: String, to: String)] {
         records.compactMap { r in
-            guard r.status == .recorded, r.moveTo != nil, r.id != recording, !moving.contains(r.id), !held.contains(r.id),
+            guard r.status == .recorded, r.moveTo != nil, r.id != recording, !moving.contains(r.id), !held.contains(r.id), !CutPlan.waits(r),
                   case .move(let to) = atEnd(r, targets: targets) else { return nil }
             return (r.id, to)
         }

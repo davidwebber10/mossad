@@ -34,7 +34,7 @@ public enum CutRecord {
         for k in ["customTitle", "tags", "tagsSetByOwner"] { f[k] = .first }
         // A notes-only meeting, a phone call, and a call whose mute silence is still to be written are refused, so
         // `source`, `personHint`, and `mutedAudioPending` hold their plain values. A recording marked for another profile is
-        // refused, so `moveTo` is nil too.
+        // cut only by its marks, and each part keeps the mark and is held for the owner.
         for k in ["platform", "bundleID", "source", "personHint", "mutedAudioPending", "moveTo"] { f[k] = .same }
         // The lines, the voices, the summary and all from it, the invite, the titles, the backup, the jobs, the failure.
         for k in ["attempts", "nextAttempt", "calendarTitle", "generatedTitle", "plannedStart", "plannedEnd", "attendees", "invitees",
@@ -44,7 +44,9 @@ public enum CutRecord {
                   "decisions", "decisionTimes", "headline", "markdownPath", "cloudKey", "cloudSize", "cloudBackend", "cloudServer",
                   "cloudHash", "cloudLeftovers", "transcriptionJobs", "summaryMissing", "gemini",
                   // The owner's number of speakers was for the whole recording, not for one part of it.
-                  "speakersExpected"] { f[k] = .cleared }
+                  "speakersExpected",
+                  // A part is never cut again (`cutFrom`).
+                  "cutChecked"] { f[k] = .cleared }
         return f
     }()
 
@@ -106,15 +108,21 @@ public enum CutRecord {
         }
     }
 
+    /// The meeting that a page of `id` shows once `id` was cut: its first part. Nil when `id` was not cut.
+    public static func firstPart(of id: String, in records: [CallRecord]) -> String? {
+        records.filter { $0.cutFrom == id }.min { ($0.start, $0.id) < ($1.start, $1.id) }?.id
+    }
+
     /// The reason the cut is refused, in plain words; nil when it may run. The checks that need the disk (a call in
     /// work, a move that started, a merge or a cut in progress) are the pipeline's.
-    public static func refusal(_ r: CallRecord, cuts: [Cut], length: TimeInterval, hasTracks: Bool) -> String? {
+    /// `holdingMarked`: the cut by the marks, which holds each part of a recording marked for another profile.
+    public static func refusal(_ r: CallRecord, cuts: [Cut], length: TimeInterval, hasTracks: Bool, holdingMarked: Bool = false) -> String? {
         if r.status == .recording { return "The call records now." }
         if r.source != nil { return "A meeting made from notes has no recording to cut." }
         if r.platform == .phoneCall { return "A phone call is not cut." }
         if r.mutedAudioPending { return "The silence of a mute is not written yet." }
-        // Until each part can be held for the owner, a recording marked for another profile is not cut.
-        if r.moveTo != nil { return "The meeting is marked for another profile." }
+        // Only the cut by the marks holds each part for the owner; the command never cuts a marked recording.
+        if r.moveTo != nil, !holdingMarked { return "The meeting is marked for another profile." }
         if !hasTracks { return "The two tracks of the recording are not on this Mac." }
         if cuts.isEmpty { return "No cut time was given." }
         let times = cuts.map(\.at).sorted()
@@ -217,5 +225,6 @@ public enum CutRecord {
         p.summaryMissing = nil
         p.gemini = nil
         p.speakersExpected = nil
+        p.cutChecked = nil
     }
 }

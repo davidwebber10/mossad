@@ -12,6 +12,11 @@ public enum CutPlan {
     /// ...or this long after it.
     public static let eventAfter: TimeInterval = 900
 
+    /// A recording whose cut is still to be decided: recorded, with marks, never cut, and not decided before.
+    public static func waits(_ r: CallRecord) -> Bool {
+        r.status == .recorded && r.cutFrom == nil && r.cutChecked != true && !(r.callMarks ?? []).isEmpty
+    }
+
     /// One change of the call, from the marks that said it.
     struct Change: Equatable {
         var at: TimeInterval

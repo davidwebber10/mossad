@@ -370,6 +370,9 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// `CallTitleWatch.key` of the Meet title the call showed at its first minute (a code can become a name before).
     /// Nil when no single Meet title showed.
     public var firstTitleKey: String?
+    /// True once the cut of this recording by its marks was decided and gave no cut (`CutPlan` found none, or the cut
+    /// was refused or failed): it is processed as one meeting and never decided again. Nil before the decision.
+    public var cutChecked: Bool?
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
         self.id = id
@@ -510,6 +513,7 @@ extension CallRecord {
         callMarks = try c.decodeIfPresent([CallMark].self, forKey: .callMarks)
         cutFrom = try c.decodeIfPresent(String.self, forKey: .cutFrom)
         firstTitleKey = try c.decodeIfPresent(String.self, forKey: .firstTitleKey)
+        cutChecked = try c.decodeIfPresent(Bool.self, forKey: .cutChecked)
     }
 }
 
