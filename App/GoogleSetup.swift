@@ -83,7 +83,8 @@ struct GoogleSettings: View {
                 GooglePartRows()
             }
             let notes = controller.googleConnected && connector.scopes.contains(.calendar) && connector.scopes.contains(.docs)
-            let people = controller.googleConnected && controller.googleDirectoryOn
+            // The switch does something only with notes to come, or with notes-only meetings already here.
+            let people = controller.googleConnected && controller.googleDirectoryOn && (notes || controller.meetings.contains(where: \.isNotesOnly))
             if notes || people {
                 SettingsGroup(label: "Gemini notes", footer: notes ? "Every 15 minutes Mossad looks at the meetings of the last 2 days. A meeting you did not record becomes a meeting with Gemini's transcript and Mossad's own summary, marked \"Gemini notes\". A recorded meeting keeps its own transcript and gets the link. Meetings you declined are left out. The coach does not review these meetings." : nil) {
                     if notes { GooglePastNotesRows() }

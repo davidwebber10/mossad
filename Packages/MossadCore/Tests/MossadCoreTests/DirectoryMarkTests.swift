@@ -109,7 +109,7 @@ final class DirectoryMarkTests: XCTestCase {
 
     private func marked(_ s: (paths: Paths, library: VoiceLibrary, people: PeopleStore)) -> Set<String> {
         DirectoryMark.names(profiles: s.library.profiles, people: s.people.people, samples: s.library.identity?.samples.samples ?? [],
-                            given: GeminiPeopleBook.load(s.paths)?.given)
+                            given: GeminiPeopleBook.knownGiven(s.paths))
     }
 
     private func linked() -> (paths: Paths, library: VoiceLibrary, people: PeopleStore) {
@@ -125,6 +125,14 @@ final class DirectoryMarkTests: XCTestCase {
 
     func testThePersonTheStepMakesShowsTheMark() {
         XCTAssertEqual(marked(linked()), ["Sam Carter"])
+    }
+
+    // A lost book is not "the step gave nothing": the origin is known, so the addresses are not read.
+    func testAMissingBookFileIsNotReadAsNoAddressGiven() throws {
+        let s = linked()
+        try FileManager.default.removeItem(at: GeminiPeopleBook.url(s.paths))
+        XCTAssertNil(GeminiPeopleBook.knownGiven(s.paths))
+        XCTAssertEqual(marked(s), ["Sam Carter"])
     }
 
     func testTheOwnersRenameInTheStoresTakesTheMarkAway() throws {

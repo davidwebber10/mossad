@@ -264,8 +264,9 @@ extension ChatTools {
         case .off: "off"
         }
         lines.append("Sync with the iPhone: \(sync); recording backup: \(s.backup == "local" ? "off, this Mac only" : "on"); recordings kept \(s.recordingDays) days")
+        // The step reads the directory: without that part the switch does nothing.
         lines.append("Google parts turned on: " + (s.googleParts.isEmpty ? "none" : s.googleParts.map(\.rawValue).joined(separator: ", "))
-                     + "; people added from Gemini notes: \(on(s.geminiPeople))")
+                     + (s.googleParts.contains(.directory) ? "; adds people from Gemini notes: \(on(s.geminiPeople))" : ""))
         lines.append("\(records.count) meetings written." + (live != nil ? " A call is recording now." : ""))
         return lines.joined(separator: "\n")
     }

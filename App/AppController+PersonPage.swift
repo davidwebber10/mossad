@@ -34,6 +34,6 @@ extension AppController {
     nonisolated static func directoryMarks(_ profiles: [VoiceProfile], library: VoiceLibrary, paths: Paths, inert: Bool) -> Set<String> {
         let people = library.identity?.people.people ?? (inert ? PeopleStore.peek(in: paths.people) ?? [] : [])
         let samples = library.identity?.samples.samples ?? (inert ? VoiceSampleStore.peek(in: paths.voices) ?? [] : [])
-        return DirectoryMark.names(profiles: profiles, people: people, samples: samples, given: GeminiPeopleBook.load(paths)?.given)
+        return DirectoryMark.names(profiles: profiles, people: people, samples: samples, given: GeminiPeopleBook.knownGiven(paths))
     }
 }

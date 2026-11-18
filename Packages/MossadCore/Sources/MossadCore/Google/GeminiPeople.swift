@@ -275,6 +275,12 @@ public struct GeminiPeopleBook: Codable, Equatable, Sendable {
 
     public static func url(_ paths: Paths) -> URL { paths.root.appendingPathComponent("Google").appendingPathComponent("gemini-people.json") }
 
+    /// The addresses the step gave, for `DirectoryMark`: nil when the book does not tell, with no file too. The step
+    /// saves the book before it makes a person, so a step person with no file means the book was lost.
+    public static func knownGiven(_ paths: Paths) -> Set<String>? {
+        FileManager.default.fileExists(atPath: url(paths).path) ? load(paths)?.given : nil
+    }
+
     /// Empty when there is no file; nil when the file cannot be read or is from a newer build, so nothing is given.
     public static func load(_ paths: Paths) -> GeminiPeopleBook? {
         guard let data = try? Data(contentsOf: url(paths)) else {

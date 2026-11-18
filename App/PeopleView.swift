@@ -460,9 +460,20 @@ private struct PersonRow: View {
             HStack(spacing: Space.m) {
                 PersonMark(name: profile.name, size: 28, isOwner: profile.isOwner)
                 VStack(alignment: .leading, spacing: Rhythm.pairGap) {
-                    Text(match?.title.boldMatches(size: Rhythm.bodySize) ?? AttributedString(profile.name))
-                        .font(.system(size: Rhythm.bodySize, weight: profile.isOwner || selected ? .semibold : .medium))
-                        .foregroundStyle(Palette.ink)
+                    HStack(alignment: .firstTextBaseline, spacing: Rhythm.pairGap) {
+                        Text(match?.title.boldMatches(size: Rhythm.bodySize) ?? AttributedString(profile.name))
+                            .font(.system(size: Rhythm.bodySize, weight: profile.isOwner || selected ? .semibold : .medium))
+                            .foregroundStyle(Palette.ink)
+                        // A glyph, not the words: the row keeps its height and the address its width. The band has the words.
+                        if fromDirectory {
+                            Image(systemName: "building.2")
+                                .font(.system(size: Rhythm.noteSize))
+                                .foregroundStyle(Palette.secondary)
+                                .help(DirectoryMark.text)
+                                .accessibilityLabel(DirectoryMark.text)
+                                .layoutPriority(1)
+                        }
+                    }
                     if let match, match.context != nil {
                         ListMatchLine(match: match, lines: 1)
                     } else if let sub {
@@ -476,8 +487,6 @@ private struct PersonRow: View {
                 VStack(alignment: .trailing, spacing: Rhythm.pairGap) {
                     if !profile.isOwner { Text(meetingsText(stats?.meetings.count ?? 0)) }
                     if let last = stats?.lastHeard { Text(shortDay(last)) }
-                    // Under the count: the name and the address keep the row's width.
-                    if fromDirectory { SourceMark.directory }
                 }
                 .font(.system(size: Rhythm.secondarySize)).monospacedDigit()
                 .foregroundStyle(Palette.secondary)
