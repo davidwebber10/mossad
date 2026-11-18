@@ -206,7 +206,10 @@ final class AppController: ObservableObject {
     private var liveNaming: Task<Void, Never>?
     /// The calendar around the call that records, read once when it started: the live namer matches the invite
     /// in it again with the call's times so far, as the pipeline will.
-    private var liveCalendar: (callID: String, platform: Platform, meetingID: String?, start: Date, events: [CalendarEventInfo], titleKey: String?)?
+    private var liveCalendar: (callID: String, platform: Platform, meetingID: String?, start: Date, events: [CalendarEventInfo], titleKey: String?,
+                               whole: Bool)?
+    /// A code or a title key the call's window showed before its calendar read answered.
+    private var liveTitleWaiting: (link: String?, key: String?) = (nil, nil)
     /// One namer for the call, across its pauses and new connections, so it does not fingerprint every voice again.
     private var liveNamer: (callID: String, namer: LiveSpeakerNamer)?
     /// One voice model for the pipeline and the live names, loaded once.
@@ -1589,6 +1592,7 @@ final class AppController: ObservableObject {
         callChoice = nil
         liveNamer = nil
         liveCalendar = nil
+        liveTitleWaiting = (nil, nil)
         liveChatSessions = [:]
     }
 
@@ -2186,22 +2190,23 @@ final class AppController: ObservableObject {
 
     /// The live call's invite, so it shows its real title while it runs instead of "Google Meet call".
     private func findInvite(callID: String, platform: Platform, meetingID: String?, start: Date, recorder: CallRecorder) async {
-        let events = await calendar.events(from: start.addingTimeInterval(-900), to: start.addingTimeInterval(5400))
+        let read = await calendar.read(from: start.addingTimeInterval(-900), to: start.addingTimeInterval(5400))
         // A slow read for a call that has ended must not replace the calendar of the call that records now.
         guard isRecording(callID) else { return }
-        // A link or a title the windows showed while the calendar was read is kept.
-        let kept = liveCalendar.flatMap { $0.callID == callID ? $0 : nil }
-        liveCalendar = (callID, platform, kept?.meetingID ?? meetingID, start, events, kept?.titleKey)
+        // A code or a title key the windows showed while the calendar was read is kept.
+        let waiting = liveTitleWaiting
+        liveTitleWaiting = (nil, nil)
+        liveCalendar = (callID, platform, meetingID ?? waiting.link, start, read.events, waiting.key, read.whole)
         applyLiveInvite(callID: callID, recorder: recorder)
     }
 
-    /// The live call's invite by the matcher with what is known now. With a link that no event holds, the call has no
-    /// invite, and a guess made before goes.
+    /// The live call's invite by the matcher with what is known now, as main showed it. Only a link that a whole read holds
+    /// no event of takes an invite away (an unplanned call).
     private func applyLiveInvite(callID: String, recorder: CallRecorder) {
         guard let c = liveCalendar, c.callID == callID else { return }
         let found = CalendarMatcher.match(for: c.platform, meetingID: c.meetingID, titleKey: c.titleKey, start: c.start,
                                           end: c.start.addingTimeInterval(1800), in: c.events)
-        guard found != nil || c.meetingID != nil else { return }
+        guard found != nil || (c.meetingID != nil && c.whole) else { return }
         CaptureQueue.queue.async {
             if let found { recorder.setCalendar(found.event, sure: found.sure, forCall: callID) } else { recorder.clearCalendar(forCall: callID) }
             Task { @MainActor in self.refresh() }
@@ -2210,7 +2215,12 @@ final class AppController: ObservableObject {
 
     /// The code (`link`) or the key of the title the call's Meet window shows: the live invite is matched again with it.
     private func liveTitleSeen(link: String?, key: String?) {
-        guard var c = liveCalendar, isRecording(c.callID), c.platform == .meet, c.meetingID == nil || link == nil else { return }
+        guard var c = liveCalendar else {
+            // The calendar read has not answered yet: it takes these when it does.
+            liveTitleWaiting = (liveTitleWaiting.link ?? link, liveTitleWaiting.key ?? key)
+            return
+        }
+        guard isRecording(c.callID), c.platform == .meet, c.meetingID == nil || link == nil else { return }
         if let link { c.meetingID = link }
         if let key { c.titleKey = key }
         liveCalendar = c
