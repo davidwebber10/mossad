@@ -497,6 +497,21 @@ extension AppController {
         return (MoveSource(setup), intake, setup)
     }
 
+    /// The removal of a call (`CallForget`) for a Delete and a cut, through this app's own paths: the coach's memory,
+    /// the share links, and the backup. The folder step is the pipeline's own.
+    func forgetActions() -> CallForget.Actions {
+        let paths = paths, backs = mode.does(.backup)
+        return CallForget.Actions(
+            coach: { change in try Self.onMain { _ = try self.changeCoachProfile(change) } },
+            stopShares: { callID in Self.onMain { self.stopSharing(callID: callID) } },
+            backup: { r in
+                // A copy that cannot be removed now is remembered by the archive, and tried again at each pass.
+                if backs, let archive = await MainActor.run(body: { self.cloudArchive }) { return await archive.deleteForMove(r) }
+                return CloudArchive.rememberDeletes(of: r, paths: paths)
+            },
+            removeFolder: { _ in false })
+    }
+
     /// A change of what the app holds, from the look's thread: on the main actor, and at once when already there.
     nonisolated private static func onMain<T: Sendable>(_ body: @MainActor () throws -> T) rethrows -> T {
         if Thread.isMainThread { return try MainActor.assumeIsolated(body) }

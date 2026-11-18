@@ -30,7 +30,11 @@ public actor Pipeline {
         }
     }
 
-    private var inFlight: Set<String> = []
+    var inFlight: Set<String> = []
+    /// The window app's way to change the coach's memory, the share links, and the backup (`setForgetActions`).
+    nonisolated let forgetActionsBox = Mutex<CallForget.Actions?>(nil)
+    /// A test's stop inside the cut (`setCutStop`).
+    nonisolated let cutStopHookBox = Mutex<(@Sendable (String) throws -> Void)?>(nil)
     /// Edits made while a call is in flight, applied again to the run's own copy before each of its saves, so the
     /// run never writes the old values back. See `edit`.
     private var ownerEdits: [String: [(inout CallRecord) -> Bool]] = [:]
@@ -39,26 +43,26 @@ public actor Pipeline {
     /// The transcription job per call and track while it runs; copied into each save of the run.
     private var jobs: [String: [String: String]] = [:]
 
-    private let paths: Paths
+    let paths: Paths
     private let queue: ProcessingQueue
-    private let library: VoiceLibrary
+    let library: VoiceLibrary
     private let embeddings: EmbeddingProvider
     private let calendar: CalendarSource
     private let notify: @Sendable (CallRecord) -> Void
-    private let now: @Sendable () -> Date
-    private let heavy: HeavyWorkGate
+    let now: @Sendable () -> Date
+    let heavy: HeavyWorkGate
     private nonisolated let settings: Mutex<Configuration>
     /// Called for each meeting a merge removes, so its archived recording and share links go too.
     private let onDiscard: @Sendable (CallRecord) -> Void
     private var configuration: Configuration { settings.withLock { $0 } }
     private var transcriber: Transcribing { configuration.transcriber }
     private var summarizer: Summarizing? { configuration.summarizer }
-    private var ownerName: String { configuration.ownerName }
+    var ownerName: String { configuration.ownerName }
     private var voiceFingerprints: Bool { configuration.voiceFingerprints }
     private var identifier: SpeakerIdentifier { SpeakerIdentifier(library: library, provider: embeddings, ownerName: ownerName) }
     /// "Name, Title" lines for the names in a call; empty without an org chart.
     private let titles: @Sendable ([String]) -> [String]
-    private let onStep: @Sendable (CallRecord) -> Void
+    let onStep: @Sendable (CallRecord) -> Void
     /// A short text for the sub-step in progress (call ID, text; nil when processing stops). Shown, not saved.
     private let onDetail: @Sendable (String, String?) -> Void
     private var stages: [String: [Track: TranscriptionStage]] = [:]
@@ -110,6 +114,8 @@ public actor Pipeline {
 
     public func runPending() async {
         finishInterruptedMerges()
+        await finishInterruptedCuts()
+        await finishDeletes()
         // Calls held because their muted parts could not be silenced (a full disk): try that again.
         for r in queue.allRecords() where r.mutedAudioPending && r.status == .failed && r.failedStep == .recorded && r.moveTo == nil { await retry(r.id) }
         for r in queue.pending(now: now()) { await process(r.id) }
@@ -1001,7 +1007,7 @@ public actor Pipeline {
 
     /// A heavy step waits here while a call records, when `HeavyWorkPlan` says so; "Process now" ends the wait.
     /// Returns how the step runs.
-    private func clearance(_ id: String, _ step: HeavyStep) async -> HeavyWorkPlan {
+    func clearance(_ id: String, _ step: HeavyStep) async -> HeavyWorkPlan {
         let plan = await heavy.plan(step, callID: id)
         guard plan == .wait else { return plan }
         // The two tracks can wait together: the first wait keeps the line from before, the last one puts it back.
@@ -1041,7 +1047,7 @@ public actor Pipeline {
     }
 
     /// Runs a heavy step off this actor at the plan's priority. A step that ran during a call logs its time.
-    private func runHeavy<T: Sendable>(_ id: String, _ step: HeavyStep, _ plan: HeavyWorkPlan,
+    func runHeavy<T: Sendable>(_ id: String, _ step: HeavyStep, _ plan: HeavyWorkPlan,
                                        _ body: @escaping @Sendable () async throws -> T) async throws -> T {
         guard plan.usesLane else { return try await HeavyWork.run(priority: plan.priority, body) }
         let heavy = heavy

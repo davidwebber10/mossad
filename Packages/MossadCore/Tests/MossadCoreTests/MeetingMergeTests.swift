@@ -128,3 +128,18 @@ private extension CallRecord {
         return copy
     }
 }
+
+final class MeetingMergeCutTests: XCTestCase {
+    private let t0 = Date(timeIntervalSince1970: 1_793_520_000)
+
+    func testTwoPartsOfOneCutWithOneLinkAreNotJoined() {
+        let a = MeetingMerge.Span(meetingID: "abc", start: t0, end: t0 + 600, cutFrom: "20261101-100000")
+        let b = MeetingMerge.Span(meetingID: "abc", start: t0 + 600, end: t0 + 900, cutFrom: "20261101-100000")
+        XCTAssertFalse(MeetingMerge.continues(a, b))
+        XCTAssertFalse(MeetingMerge.continues(b, a))
+        // Another cut, or a recording that was never cut: the rule of before.
+        XCTAssertTrue(MeetingMerge.continues(a, .init(meetingID: "abc", start: t0 + 600, end: t0 + 900, cutFrom: "20261101-090000")))
+        XCTAssertTrue(MeetingMerge.continues(a, .init(meetingID: "abc", start: t0 + 600, end: t0 + 900)))
+        XCTAssertTrue(MeetingMerge.continues(.init(meetingID: "abc", start: t0, end: t0 + 600), .init(meetingID: "abc", start: t0 + 600, end: t0 + 900)))
+    }
+}

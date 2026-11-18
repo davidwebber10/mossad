@@ -2,7 +2,7 @@ import Foundation
 
 /// One place where a recording is cut: a second of the recording's own timeline (paused time left out), and the
 /// link of the call that starts there, when known.
-public struct Cut: Equatable, Sendable {
+public struct Cut: Codable, Equatable, Sendable {
     public var at: TimeInterval
     public var link: String?
 

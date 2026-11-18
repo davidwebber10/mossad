@@ -1201,6 +1201,7 @@ final class AppController: ObservableObject {
                             onFailure: { [weak self] step in
                                 Task { @MainActor in self?.countUsage(step) }
                             })
+        pipeline.setForgetActions(forgetActions())
     }
 
     /// A meeting that is gone (deleted, or merged into another) leaves nothing behind outside this Mac: its
@@ -1873,8 +1874,10 @@ final class AppController: ObservableObject {
             guard await cancelMoveBeforeDelete(callID) else { return }
             // The pipeline first: it refuses a call that is still processing, and then the cloud copy must stay.
             // It gives back the record from disk, which has the archive key even when the list here is older.
-            if let removed = await pipeline.remove(callID: callID) {
-                forget(removed)
+            // Everything Mossad made of it goes too (`CallForget`), step by step; a quit in the middle goes on at the
+            // next launch.
+            if await pipeline.deleteMeeting(callID: callID) != nil {
+                coachVersion += 1
                 if selectedMeetingID == callID { selectedMeetingID = nil }
                 refresh()
             }

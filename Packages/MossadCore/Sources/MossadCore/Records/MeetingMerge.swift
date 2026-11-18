@@ -10,20 +10,25 @@ public enum MeetingMerge {
         public var meetingID: String?
         public var start: Date
         public var end: Date
+        /// The recording this one was cut from: two parts of one cut are two calls, never one meeting again.
+        public var cutFrom: String?
 
-        public init(meetingID: String?, start: Date, end: Date) {
+        public init(meetingID: String?, start: Date, end: Date, cutFrom: String? = nil) {
             self.meetingID = meetingID
             self.start = start
             self.end = end
+            self.cutFrom = cutFrom
         }
 
-        public init(_ r: CallRecord) { self.init(meetingID: r.meetingID, start: r.start, end: r.end) }
+        public init(_ r: CallRecord) { self.init(meetingID: r.meetingID, start: r.start, end: r.end, cutFrom: r.cutFrom) }
     }
 
     /// Two recordings of the same meeting link that ended or started within `continuationGap` of each other are one
-    /// meeting, split by a restart or a crash. A recording with no link is never a part of another.
+    /// meeting, split by a restart or a crash. A recording with no link is never a part of another, and two parts of
+    /// one cut recording are never joined again.
     public static func continues(_ a: Span, _ b: Span) -> Bool {
         guard let id = a.meetingID, id == b.meetingID else { return false }
+        if let cut = a.cutFrom, cut == b.cutFrom { return false }
         return abs(a.start.timeIntervalSince(b.end)) <= continuationGap || abs(b.start.timeIntervalSince(a.end)) <= continuationGap
     }
 
