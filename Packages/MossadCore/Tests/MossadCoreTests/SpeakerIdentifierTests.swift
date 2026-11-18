@@ -32,6 +32,23 @@ final class SpeakerIdentifierTests: XCTestCase {
         XCTAssertEqual(result.unknown, ["me:B"])
     }
 
+    /// The first naming before the check of the invite changes nothing in the library; the naming after it takes its
+    /// fingerprints and learns.
+    func testADryRunNamesAndLearnsNothingAndItsFingerprintsAreTakenAgain() async throws {
+        try writeSegments(meURL, total: 30, [(0, 10, 200), (20, 23, 600)])
+        try writeSegments(themURL, total: 30, [])
+        let identifier = SpeakerIdentifier(library: library, provider: provider, ownerName: "Avery Lane")
+        let utterances = [u(.me, "A", 0, 10), u(.me, "B", 20, 23)]
+        let dry = try await identifier.identify(utterances: utterances, meURL: meURL, themURL: themURL, dryRun: true)
+        XCTAssertEqual(dry.names["me:A"], "Avery Lane")
+        XCTAssertNil(library.owner, "nothing learned")
+        XCTAssertTrue(library.profiles.isEmpty)
+        try writeSegments(meURL, total: 30, [])
+        let real = try await identifier.identify(utterances: utterances, meURL: meURL, themURL: themURL, reuse: dry)
+        XCTAssertEqual(real.embeddings, dry.embeddings, "the fingerprints of the dry run, not of the files")
+        XCTAssertEqual(library.owner?.name, "Avery Lane")
+    }
+
     func testOwnerIsNotEnrolledFromEchoOfTheOtherSide() async throws {
         // me:A is the other side leaking into the mic: it talks most, but only while them:A talks.
         try writeSegments(meURL, total: 60, [(0, 30, 600), (40, 50, 200)])

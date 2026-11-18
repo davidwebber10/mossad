@@ -13,17 +13,17 @@ public enum InviteRecheck {
             && !r.isNotesOnly && Platform.callApps.contains(r.platform)
     }
 
-    /// What a change of the invite changes in the note and the lists.
-    public struct Shown: Equatable {
-        var title: String?, notSure: Bool?, attendees: [String], planned: Date?, plannedEnd: Date?, series: String?
-
-        public init(_ r: CallRecord) {
-            title = r.calendarTitle
-            notSure = r.inviteNotSure
-            attendees = r.attendees
-            planned = r.plannedStart
-            plannedEnd = r.plannedEnd
-            series = r.calendarSeriesID
+    /// What the check changes on a meeting, only on proof: another event than the record has, proved by a link, a title,
+    /// or the voices; or "no invite" for a link (a whole read holds no event of it) when the record has an invite. Nil
+    /// changes nothing: a pick of the overlap is main's answer, and missing evidence never takes an invite away.
+    public static func change(_ r: CallRecord, _ answer: InviteAnswer) -> InviteAnswer? {
+        switch answer {
+        case .proved(let e):
+            return r.calendarTitle == e.title && r.plannedStart == (e.isAllDay ? nil : e.start) ? nil : answer
+        case .noInvite:
+            return r.calendarTitle != nil || !r.attendees.isEmpty ? answer : nil
+        case .picked, .nothing:
+            return nil
         }
     }
 }

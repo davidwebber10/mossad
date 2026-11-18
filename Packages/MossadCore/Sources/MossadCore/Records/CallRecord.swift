@@ -418,30 +418,20 @@ public struct CallRecord: Codable, Equatable, Sendable {
         plannedEnd = event.isAllDay ? nil : event.end
     }
 
-    /// The names of the voices named by their own score, without `owners`: a voice named from the invite is left out.
-    public func namedVoices(without owners: Set<String>) -> Set<String> {
-        let inferred = Set(fromInvite ?? [])
-        return Set(speakerNames.filter { !inferred.contains($0.key) && !$0.value.hasPrefix("Speaker ") }.values).subtracting(owners)
-    }
-
-    /// What the calendar gave: the event surely, the event as a guess (`setGuess`), or no invite.
+    /// What the calendar gave (`InviteAnswer`): a proved event is sure; a pick is saved as main saved it, with
+    /// `inviteNotSure` when it is not sure; "no invite" clears the invite; nothing changes nothing.
     public mutating func apply(_ answer: InviteAnswer) {
         switch answer {
-        case .sure(let e):
+        case .proved(let e):
             setInvite(e)
             inviteNotSure = nil
-        case .guess(let e): setGuess(e)
-        case .none: clearInvite()
+        case .picked(let e, let sure):
+            setInvite(e)
+            inviteNotSure = sure ? nil : true
+        case .noInvite: clearInvite()
+        case .nothing: return
         }
         inviteUnknown = nil
-    }
-
-    /// An event that only may be the call's: its title stays as the fallback of the shown title (`title`), marked
-    /// `inviteNotSure`. Its people, its series, and its planned times are not the meeting's: they are left out.
-    public mutating func setGuess(_ event: CalendarEventInfo) {
-        clearInvite()
-        calendarTitle = event.title
-        inviteNotSure = true
     }
 
     /// No invite: the title, the people, the series, and the planned times of one go, and the marks of a match with them.

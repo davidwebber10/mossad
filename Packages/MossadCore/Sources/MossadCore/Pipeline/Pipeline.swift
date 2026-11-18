@@ -906,44 +906,52 @@ public actor Pipeline {
         // matched to a guessed end, and can have changed since: it is matched again with the call's real times. A
         // room recording keeps the rules of before; a phone call has the person the owner named as its invite.
         let onCall = !r.platform.isOneTrack && !r.isNotesOnly
-        // Before the voices, an invite that neither a link nor a title proved is a guess: its people only raise the bar
-        // for a voice they do not invite, as before, and name nobody.
-        let first = onCall ? await matchInvite(&r, withVoices: false) : nil
+        let first = onCall ? await matchInvite(&r, evidence: nil) : nil
         var answer = first?.answer
         detail(r.id, "Identifying speakers")
         // Short pieces of each voice, at most a minute per speaker, through the one copy of the voice models that the
         // live transcript's namer also uses; so it runs behind a call.
         let plan = await clearance(r.id, .voiceIdentification)
-        var again = false
-        while true {
-            let invite = onCall ? answer.flatMap(Self.callInvite)
-                : r.platform == .phoneCall ? r.personHint.map(CallInvite.init(hint:)) : nil
-            let identifier = identifier, utterances = r.utterances, call = (id: r.id, start: r.start)
-            // On a phone call the other person may talk more than the owner: their voice must never become the owner's.
-            let enrolOwner = r.platform != .phoneCall
-            let me = dir.appendingPathComponent(Track.me.fileName), them = dir.appendingPathComponent(Track.them.fileName)
-            let result = try await runHeavy(r.id, .voiceIdentification, plan) {
-                try await identifier.identify(utterances: utterances, meURL: me, themURL: them, call: call, invite: invite, enrolOwner: enrolOwner)
+        let identifier = identifier, utterances = r.utterances, call = (id: r.id, start: r.start)
+        // On a phone call the other person may talk more than the owner: their voice must never become the owner's.
+        let enrolOwner = r.platform != .phoneCall
+        let me = dir.appendingPathComponent(Track.me.fileName), them = dir.appendingPathComponent(Track.them.fileName)
+        var reuse: SpeakerIdentification?
+        // An invite that nothing proved: the voices are named first by their own scores, with the people of every event
+        // around the call and nobody named from an invite, and nothing learned. They may prove another event; then the
+        // naming below, with the final invite, is the one that names from the invite and learns.
+        if let read = first?.read, let given = answer, given.voicesMayReplace, (r.meetingID ?? r.titleLink) == nil {
+            let candidates = InviteCheck.candidates(platform: r.platform, start: r.start, end: r.end, in: read.events)
+            if !candidates.all.isEmpty {
+                let pool = InviteCheck.pool(candidates)
+                let pass = try await runHeavy(r.id, .voiceIdentification, plan) {
+                    try await identifier.identify(utterances: utterances, meURL: me, themURL: them, call: call, invite: pool,
+                                                  enrolOwner: enrolOwner, dryRun: true)
+                }
+                reuse = pass
+                let checked = given.checked(platform: r.platform, link: nil, start: r.start, end: r.end, events: read.events,
+                                            evidence: inviteEvidence(names: pass.names, fromInvite: pass.fromInvite), invited: invitedVoices())
+                if checked != given {
+                    r.apply(checked)
+                    answer = checked
+                    Log.info("Calendar: the voices of \(r.id) proved another event of its time")
+                }
             }
-            r.speakerNames = result.names
-            r.unknownSpeakers = result.unknown
-            r.speakerEmbeddings = result.embeddings
-            r.speakerSamples = result.details.isEmpty ? nil : result.details
-            r.fromInvite = result.fromInvite.isEmpty ? nil : result.fromInvite.sorted()
-            dropNamedEcho(&r)
-            guard let read = first?.read else { break }
-            if case .sure? = answer {
-                r.inviteChecked = true
-                break
-            }
-            // Who was in the call, against the same read: the guess is confirmed, replaced, or taken away before the
-            // summary. A proved invite names the voices once more by its rules (the one invited person with no voice).
-            let checked = await matchInvite(&r, withVoices: true, read: read).answer
-            guard case .sure = checked, !again else { break }
-            Log.info("Calendar: the voices proved the invite of \(r.id); naming the voices again with it")
-            answer = checked
-            again = true
         }
+        let invite = onCall ? CallInvite(record: r, sure: answer?.isSure ?? false)
+            : r.platform == .phoneCall ? r.personHint.map(CallInvite.init(hint:)) : nil
+        let fingerprints = reuse
+        let result = try await runHeavy(r.id, .voiceIdentification, plan) {
+            try await identifier.identify(utterances: utterances, meURL: me, themURL: them, call: call, invite: invite, enrolOwner: enrolOwner,
+                                          reuse: fingerprints)
+        }
+        r.speakerNames = result.names
+        r.unknownSpeakers = result.unknown
+        r.speakerEmbeddings = result.embeddings
+        r.speakerSamples = result.details.isEmpty ? nil : result.details
+        r.fromInvite = result.fromInvite.isEmpty ? nil : result.fromInvite.sorted()
+        dropNamedEcho(&r)
+        if first?.read.whole == true { r.inviteChecked = true }
         r.status = .identified
     }
 
@@ -967,10 +975,11 @@ public actor Pipeline {
         Log.info("Dropped \(echo.count) mic voices that are people on the call audio")
     }
 
-    /// Matches the call's invite (`InviteAnswer`) and puts it on the record. `withVoices`: the voices already named check
-    /// an invite that no link or title proved (`InviteCheck`). Returns the read, so a second match can use it.
+    /// Matches the call's invite (`InviteAnswer`) and puts it on the record. `evidence`: the voices already named, which
+    /// may replace an event that nothing proved (`InviteCheck`); nil before the voices. Returns the read and the answer
+    /// (nil for a phone call).
     @discardableResult
-    private func matchInvite(_ r: inout CallRecord, withVoices: Bool, read given: CalendarRead? = nil) async -> (read: CalendarRead, answer: InviteAnswer?) {
+    private func matchInvite(_ r: inout CallRecord, evidence: Set<String>?, read given: CalendarRead? = nil) async -> (read: CalendarRead, answer: InviteAnswer?) {
         detail(r.id, "Finding the calendar invite")
         let read = if let given { given } else { await invite(readAround: r) }
         if r.platform == .phoneCall {
@@ -985,53 +994,52 @@ public actor Pipeline {
             }
             return (read, nil)
         }
-        let answer = inviteAnswer(r, events: read.events, withVoices: withVoices)
-        // No invite from a read that was not whole is not known: what the record has stays, and the next launch looks again.
-        if answer == .none, !read.known || read.google == .failed {
-            r.inviteUnknown = true
-            return (read, answer)
+        let answer = inviteAnswer(r, read: read, evidence: evidence)
+        if answer == .nothing {
+            // No invite, or a calendar that could not be read: then "no invite" is not known, and the record says so.
+            r.inviteUnknown = read.known ? nil : true
         }
         r.apply(answer)
-        if withVoices { r.inviteChecked = true }
+        if evidence != nil, read.whole { r.inviteChecked = true }
         return (read, answer)
-    }
-
-    /// The people of an answer as voice identification reads them: a guess raises the bar for a voice it does not
-    /// invite and names nobody (`CallInvite.sure` false).
-    static func callInvite(_ answer: InviteAnswer) -> CallInvite? {
-        switch answer {
-        case .sure(let e): CallInvite(event: e, sure: true)
-        case .guess(let e): CallInvite(event: e, sure: false)
-        case .none: nil
-        }
     }
 
     private func invite(readAround r: CallRecord) async -> CalendarRead {
         await calendar.read(from: r.start.addingTimeInterval(-CalendarMatcher.readWindow), to: r.end.addingTimeInterval(CalendarMatcher.readWindow))
     }
 
-    /// The invite of a recording on a call platform or in a room, by its link, its title, and its voices.
-    private func inviteAnswer(_ r: CallRecord, events: [CalendarEventInfo], withVoices: Bool) -> InviteAnswer {
-        let owners = Set([ownerName, library.owner?.name].compactMap { $0 })
-        return InviteAnswer.of(platform: r.platform, link: r.meetingID ?? r.titleLink, titleKey: r.firstTitleKey, start: r.start, end: r.end,
-                               events: events, voices: withVoices ? r.namedVoices(without: owners) : nil,
-                               invited: InviteCheck.invitedVoices(profiles: library.profiles, people: library.identity?.people.people ?? []))
+    /// The invite of a recording by its link, its title, and, with `evidence`, its voices.
+    private func inviteAnswer(_ r: CallRecord, read: CalendarRead, evidence: Set<String>?) -> InviteAnswer {
+        let link = r.meetingID ?? r.titleLink
+        let answer = InviteAnswer.of(platform: r.platform, link: link, titleKey: r.firstTitleKey, start: r.start, end: r.end,
+                                     events: read.events, whole: read.whole)
+        guard let evidence else { return answer }
+        return answer.checked(platform: r.platform, link: link, start: r.start, end: r.end, events: read.events, evidence: evidence,
+                              invited: invitedVoices())
     }
 
+    private func invitedVoices() -> (CalendarEventInfo) -> Set<String> {
+        InviteCheck.invitedVoices(profiles: library.profiles, people: library.identity?.people.people ?? [])
+    }
+
+    /// The voices of a recording that are evidence of its event (`InviteCheck.evidence`).
+    private func inviteEvidence(names: [String: String], fromInvite: some Sequence<String>) -> Set<String> {
+        InviteCheck.evidence(names: names, fromInvite: Set(fromInvite), owners: Set([ownerName, library.owner?.name].compactMap { $0 }),
+                             provisional: Set(library.provisional.keys))
+    }
+
+    private func inviteEvidence(_ r: CallRecord) -> Set<String> { inviteEvidence(names: r.speakerNames, fromInvite: r.fromInvite ?? []) }
+
     /// The invite of a call by the rules of its platform, or nil.
-    private func invite(for r: CallRecord) async -> (found: (event: CalendarEventInfo, sure: Bool)?, read: CalendarRead) {
+    private func invite(for r: CallRecord) async -> (found: InviteAnswer?, read: CalendarRead) {
         let read = await invite(readAround: r)
-        let events = read.events
         if r.platform == .phoneCall {
-            guard let event = CalendarMatcher.phoneCallEvent(start: r.start, end: r.end, in: events, hint: r.personHint,
+            guard let event = CalendarMatcher.phoneCallEvent(start: r.start, end: r.end, in: read.events, hint: r.personHint,
                                                              people: library.identity?.people.people ?? []) else { return (nil, read) }
-            return ((event, true), read)
+            return (.proved(event), read)
         }
-        switch inviteAnswer(r, events: events, withVoices: r.status == .written) {
-        case .sure(let e): return ((e, true), read)
-        case .guess(let e): return ((e, false), read)
-        case .none: return (nil, read)
-        }
+        let answer = inviteAnswer(r, read: read, evidence: r.status == .written ? inviteEvidence(r) : nil)
+        return (answer == .nothing ? nil : answer, read)
     }
 
     /// Looks again for the invite of each written meeting marked `inviteUnknown` that ended in the last `days` days,
@@ -1048,21 +1056,22 @@ public actor Pipeline {
             if found == nil, !read.known || read.google == .failed { continue }
             guard var saved = edit(r.id, { record in
                 record.inviteUnknown = nil
-                if let found { record.apply(found.sure ? .sure(found.event) : .guess(found.event)) }
+                if let found { record.apply(found) }
                 return true
             }) else { continue }
             save(&saved, dir: paths.callDirectory(r.id))
-            if found != nil { matched += 1 }
+            if found?.event != nil { matched += 1 }
         }
         if matched > 0 { Log.info("Calendar: \(matched) meetings got their invite at launch") }
         return matched
     }
 
-    /// The meetings written before the voices checked their invite: each recording of the last `days` days with no link
-    /// from its tab and no check yet (`InviteRecheck.due`) is matched again by the link, the title, and the voices it
-    /// already has. A changed invite writes the note again, as a late invite does (the summary, the voices, and the
-    /// owner's title stay; no model request); every one is marked `inviteChecked`, so it runs once. One meeting at a time,
-    /// and `stop` (a call that records) ends the pass before the next one. Returns how many changed.
+    /// The meetings written before the voices checked their invite (`InviteRecheck.due`): each is matched again by its
+    /// link, its title, and the voices it has, and changes only on proof (`InviteRecheck.change`): another event, or "no
+    /// invite" for a link that a whole read holds no event of. The note is written again under the new title, as a late
+    /// invite does (the summary, the voices, and the owner's title stay; no model request). A read that is not whole
+    /// changes nothing and leaves the meeting for the next time; a whole one marks it `inviteChecked`. One meeting at a
+    /// time; `stop` (a call that records) ends the pass before the next one. Returns how many changed.
     public func recheckInvites(newerThan days: Int = InviteRecheck.days, stop: @Sendable () async -> Bool) async -> Int {
         guard await calendar.canRead() else { return 0 }
         let since = now().addingTimeInterval(-Double(days) * 86_400)
@@ -1071,16 +1080,16 @@ public actor Pipeline {
             if await stop() { break }
             guard !inFlight.contains(r.id) else { continue }
             let read = await invite(readAround: r)
-            // A read that is not whole says nothing: the meeting waits for the next launch.
-            guard read.known, read.google != .failed else { continue }
-            let answer = inviteAnswer(r, events: read.events, withVoices: true)
+            guard read.whole else { continue }
+            let answer = inviteAnswer(r, read: read, evidence: inviteEvidence(r))
             var moved = false
             guard var saved = edit(r.id, { record in
                 guard InviteRecheck.due(record, since: since) else { return false }
-                let before = InviteRecheck.Shown(record)
-                record.apply(answer)
+                if let change = InviteRecheck.change(record, answer) {
+                    record.apply(change)
+                    moved = true
+                }
                 record.inviteChecked = true
-                moved = InviteRecheck.Shown(record) != before
                 return true
             }) else { continue }
             let dir = paths.callDirectory(r.id)
@@ -1099,7 +1108,7 @@ public actor Pipeline {
     /// Adds calendar details and the summary. Returns false when the summary should be retried later.
     private func summarize(_ r: inout CallRecord) async -> Bool {
         // A notes-only meeting was made from its invite.
-        if quietRuns[r.id] == nil, !r.isNotesOnly { await matchInvite(&r, withVoices: true) }
+        if quietRuns[r.id] == nil, !r.isNotesOnly { await matchInvite(&r, evidence: inviteEvidence(r)) }
         // After the calendar, so a presenter's name can be matched to the invited people.
         await readScreens(&r)
         if summarizer != nil, !r.utterances.isEmpty { detail(r.id, "Claude is writing the summary") }

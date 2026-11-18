@@ -38,12 +38,15 @@ public struct SpeakerIdentifier: Sendable {
     /// `call` is the call's id and start, kept with each voice sample that the call teaches. `invite` is the call's
     /// invite, nil when it has none; `InviteVoiceRules` says what it changes.
     /// `enrolOwner` false keeps the owner's voice unlearned on a call where the voice that talks most may be another
-    /// person's, such as a phone call.
+    /// person's, such as a phone call. `dryRun` names the voices and changes nothing in the library (the first naming,
+    /// before the check of the invite); `reuse` takes the fingerprints of such a run instead of making them again.
     public func identify(utterances: [Utterance], meURL: URL, themURL: URL, call: (id: String, start: Date)? = nil,
-                         invite: CallInvite? = nil, enrolOwner: Bool = true) async throws -> SpeakerIdentification {
+                         invite: CallInvite? = nil, enrolOwner: Bool = true, dryRun: Bool = false,
+                         reuse: SpeakerIdentification? = nil) async throws -> SpeakerIdentification {
         var result = SpeakerIdentification()
         var keys: [String] = []
         for u in utterances where !keys.contains(u.speakerKey) { keys.append(u.speakerKey) }
+        let library = dryRun ? nil : self.library
 
         // Only count mic time when the other side is quiet, so echo of the other side on the mic is known.
         let them = utterances.filter { $0.track == .them }
@@ -57,7 +60,11 @@ public struct SpeakerIdentifier: Sendable {
         }
         let total = { (key: String) in utterances.filter { $0.speakerKey == key }.reduce(0.0) { $0 + $1.end - $1.start } }
 
-        for key in keys {
+        if let reuse {
+            result.embeddings = reuse.embeddings
+            result.details = reuse.details
+        }
+        for key in keys where reuse == nil {
             let own = utterances.filter { $0.speakerKey == key }
             let url = own[0].track == .me ? meURL : themURL
             guard let f = try await fingerprint(for: own, in: url) else { continue }
@@ -72,32 +79,32 @@ public struct SpeakerIdentifier: Sendable {
         }
 
         // Without an enrolled owner, the speaker who talks most on the mic is the owner.
-        if library.owner == nil, enrolOwner {
+        if self.library.owner == nil, enrolOwner {
             let meKeys = keys.filter { $0.hasPrefix("me:") }
             // The fingerprint uses all of the speaker's audio, so most of it must be clean too.
             if let dominant = meKeys.max(by: { clean($0) < clean($1) }), clean(dominant) >= Self.minimumOwnerSpeech,
                clean(dominant) >= total(dominant) / 2 {
                 result.names[dominant] = ownerName
-                if let e = result.embeddings[dominant] { try library.add(e, to: ownerName, isOwner: true, source: source(dominant, .ownerEnrollment)) }
+                if let e = result.embeddings[dominant] { try library?.add(e, to: ownerName, isOwner: true, source: source(dominant, .ownerEnrollment)) }
             }
         }
 
         let voices = keys.filter { result.names[$0] == nil }.map { key in
-            InviteVoiceRules.Voice(key: key, scores: result.embeddings[key].map(library.ranked) ?? [],
+            InviteVoiceRules.Voice(key: key, scores: result.embeddings[key].map(self.library.ranked) ?? [],
                                    fingerprint: result.embeddings[key] != nil, seconds: result.details[key]?.seconds)
         }
-        let people = library.identity?.people
-        let roster = invite.map { InviteRoster(invite: $0, profiles: library.profiles, people: people?.people ?? []) }
-        let decision = InviteVoiceRules.decide(voices, roster: roster, owner: library.owner?.name, provisional: library.provisional,
-                                               callID: call?.id, matchThreshold: library.matchThreshold, learnThreshold: Self.learnThreshold)
+        let people = library?.identity?.people
+        let roster = invite.map { InviteRoster(invite: $0, profiles: self.library.profiles, people: self.library.identity?.people.people ?? []) }
+        let decision = InviteVoiceRules.decide(voices, roster: roster, owner: self.library.owner?.name, provisional: self.library.provisional,
+                                               callID: call?.id, matchThreshold: self.library.matchThreshold, learnThreshold: Self.learnThreshold)
         for v in voices {
             switch decision.verdicts[v.key] ?? .unknown {
             case .named(let name, let score, let learn):
                 result.names[v.key] = name
-                if learn, let e = result.embeddings[v.key] { try library.add(e, to: name, source: source(v.key, .autoMatch(score))) }
+                if learn, let e = result.embeddings[v.key] { try library?.add(e, to: name, source: source(v.key, .autoMatch(score))) }
             case .inferred(let name, let learn):
                 result.names[v.key] = name
-                guard learn, let e = result.embeddings[v.key] else { continue }
+                guard learn, let library, let e = result.embeddings[v.key] else { continue }
                 // The person the invite's name makes says where the name came from, so a directory can correct it.
                 if let guest = decision.inferred, let people, people.id(forVoiceName: name) == nil {
                     // A people store that refuses a write must not stop the call: the voice's own save makes the person.
@@ -118,7 +125,7 @@ public struct SpeakerIdentifier: Sendable {
         }
         result.fromInvite = decision.fromInvite
         if roster != nil { nameMicCopies(&result) }
-        Log.info(call.map { "\(decision.logLine) (call \($0.id))" } ?? decision.logLine)
+        if !dryRun { Log.info(call.map { "\(decision.logLine) (call \($0.id))" } ?? decision.logLine) }
         return result
     }
 
