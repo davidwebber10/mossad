@@ -93,7 +93,7 @@ extension Pricing {
     /// An hour of meetings as one call. `liveTranscript` is true only when sessions open: the switch is on and
     /// an AssemblyAI key is saved. Chat, and the coach's occasional questions and briefs, are not in it: they do
     /// not follow the hours of meetings.
-    public static func hourCost(transcription: TranscriptionProvider, ai: AIProvider, model: String, liveTranscript: Bool = false,
+    public static func hourCost(transcription: TranscriptionProvider, transcriptionModel: String = "", ai: AIProvider, model: String, liveTranscript: Bool = false,
                                 coach: Bool = false, coachEmail: Bool = false) -> HourCost {
         let audio: UsageEvent.Service? = switch transcription {
         case .assemblyai: .assemblyai
@@ -122,7 +122,7 @@ extension Pricing {
         }
         let transcript = audio.map {
             cost(UsageEvent(date: Date(), callID: nil, service: $0, purpose: .transcription,
-                            model: $0 == .assemblyai ? defaultBatchModel : nil, audioSeconds: 2 * 3600, estimated: true))
+                            model: $0 == .assemblyai ? (AssemblyAIModel.known(transcriptionModel).nonBlank ?? defaultBatchModel) : nil, audioSeconds: 2 * 3600, estimated: true))
         } ?? 0
         // The title of a live call comes from the provider's small model when it has one.
         let titleModel = ai.smallModel ?? name

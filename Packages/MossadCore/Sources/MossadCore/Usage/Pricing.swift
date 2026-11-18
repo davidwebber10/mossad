@@ -20,7 +20,7 @@ public enum Pricing {
     static let defaultClaude = claude[0].price
 
     /// Per audio hour.
-    static let batchModels: [String: Double] = ["universal-3-5-pro": 0.21, "universal-2": 0.15]
+    static let batchModels: [String: Double] = ["universal-3-5-pro": 0.21, "universal-2": 0.15, AssemblyAIModel.stt37: 0.21]
     static let defaultBatchModel = "universal-3-5-pro"
     static let speakerLabelsPerHour = 0.02
     static let streamingPerHour = 0.15

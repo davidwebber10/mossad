@@ -928,11 +928,12 @@
           "body": "Use AssemblyAI, Deepgram, ElevenLabs, or OpenAI with your own key, or a model that runs on your Mac.",
           "details": [
             "Cloud transcription costs about $0.22 to $0.36 an hour of audio",
+            "With AssemblyAI, choose its newest model, STT-3.7, or keep your account's default",
             "On your Mac: Parakeet, Whisper Large v3 Turbo, Apple Speech, or Qwen3-ASR, free"
           ],
           "icon": "waveform.badge.mic",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/AI/Providers.swift", "Packages/MossadCore/Sources/MossadCore/Transcription/TranscriptionProviders.swift", "Packages/MossadCore/Sources/MossadCore/Transcription/LocalModels.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/AI/Providers.swift", "Packages/MossadCore/Sources/MossadCore/Transcription/AssemblyAIClient.swift", "Packages/MossadCore/Sources/MossadCore/Transcription/TranscriptionProviders.swift", "Packages/MossadCore/Sources/MossadCore/Transcription/LocalModels.swift"]
         },
         {
           "id": "notes-providers",

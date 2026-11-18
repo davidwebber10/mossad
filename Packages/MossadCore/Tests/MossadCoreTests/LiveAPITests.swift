@@ -28,6 +28,33 @@ final class LiveAPITests: XCTestCase {
         XCTAssertTrue(text.contains("friday"), text)
     }
 
+    /// AssemblyAI-STT-3.7 takes the body that names it in `speech_models`. Runs only with the key in the environment.
+    func testAssemblyAISTT37TranscribesSpeech() async throws {
+        guard let key = APIKey.assemblyai.value(in: ProcessInfo.processInfo.environment) else { throw XCTSkip("ASSEMBLYAI_API_KEY not set") }
+        let dir = tempDirectory()
+        let aiff = dir.appendingPathComponent("speech.aiff")
+        let say = Process()
+        say.executableURL = URL(fileURLWithPath: "/usr/bin/say")
+        say.arguments = ["-o", aiff.path, "We should ship the cushions on Friday. The Adirondack chairs can wait until Monday."]
+        try say.run()
+        say.waitUntilExit()
+        let caf = dir.appendingPathComponent("them.caf")
+        let input = try AVAudioFile(forReading: aiff)
+        let buffer = AVAudioPCMBuffer(pcmFormat: input.processingFormat, frameCapacity: AVAudioFrameCount(input.length))!
+        try input.read(into: buffer)
+        let writer = try TrackWriter(url: caf, startTime: Date(), clock: { Date() })
+        try writer.append(buffer)
+        writer.close()
+
+        let log = UsageLog(directory: dir)
+        let client = AssemblyAIClient(apiKey: key, model: "assemblyai-stt-3-7", pollInterval: .seconds(2), usage: log)
+        let utterances = try await client.transcribe(file: caf, track: .them)
+        let text = utterances.map(\.text).joined(separator: " ").lowercased()
+        XCTAssertTrue(text.contains("cushions"), text)
+        XCTAssertTrue(text.contains("friday"), text)
+        XCTAssertEqual(log.all().first?.model?.hasPrefix("assemblyai-stt-3-7"), true, String(describing: log.all().first?.model))
+    }
+
     /// Same synthetic voice should score well above the match threshold; different voices below it.
     func testFluidEmbeddingsSeparateVoices() async throws {
         guard ProcessInfo.processInfo.environment["ASSEMBLYAI"] != nil else { throw XCTSkip("live tests not enabled") }
