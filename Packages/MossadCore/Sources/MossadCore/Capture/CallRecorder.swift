@@ -518,14 +518,16 @@ public final class CallRecorder: @unchecked Sendable {
     /// Saves a sign that another call may have started in this recording, at the recording's second of `time`, as a
     /// bookmark is saved. On the capture queue; nothing when no call records.
 
-    public func addCallMark(link: String?, platform: Platform, source: CallMark.Source, sure: Bool, at time: Date, titleKey: String? = nil) {
+    public func addCallMark(link: String?, platform: Platform, source: CallMark.Source, sure: Bool, at time: Date, titleKey: String? = nil,
+                            ownLinkInMeeting: Bool? = nil) {
         // A room recording owns the recorder: a mark on its way when it starts is not the room's.
         guard isRecording, !isManual else { return }
         let now = recordedLength
         // While paused the files do not grow: the mark sits at the pause. Else the wall time since the sign is taken
         // back from where the recording is now, as for the last "muted" sighting.
         let at = isPaused ? now : min(now, max(0, now - max(0, clock().timeIntervalSince(time))))
-        let mark = CallMark(at: at, time: time, link: link, platform: platform, source: source, sure: sure, titleKey: titleKey)
+        let mark = CallMark(at: at, time: time, link: link, platform: platform, source: source, sure: sure, titleKey: titleKey,
+                            ownLinkInMeeting: ownLinkInMeeting)
         edit { $0.callMarks = ($0.callMarks ?? []) + [mark] }
         Log.info("Marked a possible new call in the recording (\(source.rawValue), \(sure ? "sure" : "not sure"))")
     }

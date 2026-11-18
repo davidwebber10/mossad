@@ -1011,7 +1011,7 @@ final class DetectionServiceTests: XCTestCase {
         for i in 11...40 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
         tabs.tabs[chrome] = [meetTab("abc-defg-hij", active: true)]
         for i in 41...70 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
-        let links = marks(events).map { event -> String? in if case .marked(let link, _, _, _, _, _) = event { return link } else { return nil } }
+        let links = marks(events).map { event -> String? in if case .marked(let link, _, _, _, _, _, _) = event { return link } else { return nil } }
         XCTAssertEqual(links, ["klm-nopq-rst", "abc-defg-hij"])
         XCTAssertEqual(callEvents(events).count, 1)
     }
@@ -1149,6 +1149,28 @@ final class DetectionServiceTests: XCTestCase {
                                                titleKey: "2be7ef95b4132e1d")])
         XCTAssertEqual(firstKeys, ["08786467415118f4"])
         XCTAssertEqual(callEvents(events), [.started(platform: .meet, bundleID: chrome, at: now)])
+    }
+
+    /// The release review's I2: the next meeting's page is in front while the call's own tab is still in its meeting.
+    /// The title mark says so (`ownLinkInMeeting`), from the tab list of that tick; with no tab list it says nothing.
+    func testATitleMarkSaysWhetherTheOwnTabWasStillInItsMeeting() {
+        let chrome = "com.google.Chrome"
+        let own = BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet - Weekly sync", isActive: true)
+        tabs.tabs[chrome] = [own]
+        windows.answered[chrome] = ["Meet - Weekly sync - Google Chrome"]
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        var events: [DetectorEvent] = []
+        service.onEvent = { events.append($0) }
+        for i in 0...40 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        var behind = own
+        behind.isActive = false
+        tabs.tabs[chrome] = [behind, BrowserTab(url: "https://meet.google.com/klm-nopq-rst", title: "Meet - Budget review", isActive: true)]
+        windows.answered[chrome] = ["Meet - Budget review - Google Chrome"]
+        for i in 41...90 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        let flags = marks(events).map { event -> Bool?? in
+            if case .marked(_, _, .title, _, _, _, let inMeeting) = event { return .some(inMeeting) } else { return nil }
+        }
+        XCTAssertEqual(flags, [.some(true)])
     }
 
     /// The review's I5: Meet may show the code first and the meeting's name later for one call. Nothing is marked in

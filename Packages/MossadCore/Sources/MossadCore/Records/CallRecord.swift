@@ -143,9 +143,14 @@ public struct CallMark: Codable, Equatable, Sendable {
     /// For a title mark: `CallTitleWatch.key` of the new title's meeting part, never the text. The same meeting gives
     /// the same key, so a return to an earlier title can be read from the marks.
     public var titleKey: String?
+    /// For a title mark: whether the tab list of that tick showed the call's own link still in its meeting (true), or
+    /// for sure not (false). Nil when the list was unknown or the call has no link. True means the call did not change.
+    public var ownLinkInMeeting: Bool?
 
-    public init(at: TimeInterval, time: Date, link: String?, platform: Platform, source: Source, sure: Bool, titleKey: String? = nil) {
+    public init(at: TimeInterval, time: Date, link: String?, platform: Platform, source: Source, sure: Bool, titleKey: String? = nil,
+                ownLinkInMeeting: Bool? = nil) {
         self.titleKey = titleKey
+        self.ownLinkInMeeting = ownLinkInMeeting
         self.at = at
         self.time = time
         self.link = link

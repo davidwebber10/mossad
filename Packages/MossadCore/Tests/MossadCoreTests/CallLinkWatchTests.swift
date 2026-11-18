@@ -10,6 +10,31 @@ final class CallLinkWatchTests: XCTestCase {
         BrowserTab(url: "https://meet.google.com/\(code)?authuser=0", title: inCall ? "Meet - \(code)" : "Meet", isActive: active)
     }
 
+    /// The release review's I6: the call's tab is closed by accident while the next meeting's join page is open, so the
+    /// watch marks the next meeting; the owner is back in the call 20 s later. The way back is a sure mark to the call's
+    /// own link on two readings within 10 s, also while the next meeting's page is still in a meeting.
+    func testAWrongChangeIsTakenBackWhenTheOldLinkIsInItsMeetingAgain() {
+        var w = CallLinkWatch(link: "abc-defg-hij")
+        let closed = [meet("klm-nopq-rst", active: true)]
+        let back = [meet("abc-defg-hij", active: true), meet("klm-nopq-rst")]
+        XCTAssertEqual(w.observe(closed, at: at(0)), .none)
+        XCTAssertEqual(w.observe(closed, at: at(2)), .newCall("klm-nopq-rst", .meet))
+        XCTAssertEqual(w.observe(closed, at: at(10)), .none)
+        XCTAssertEqual(w.observe(back, at: at(20)), .none, "one reading is not enough")
+        XCTAssertEqual(w.pendingSince(at: at(22)), at(20), "the mark back is at its first reading")
+        XCTAssertEqual(w.observe(back, at: at(24)), .newCall("abc-defg-hij", .meet))
+        XCTAssertEqual(w.link, "abc-defg-hij")
+        for s in stride(from: 26.0, through: 60, by: 2) { XCTAssertEqual(w.observe(back, at: at(s)), .none, "the next page alone is no change") }
+        // Readings more than 10 s apart are no way back.
+        var v = CallLinkWatch(link: "abc-defg-hij")
+        _ = v.observe(closed, at: at(0))
+        _ = v.observe(closed, at: at(2))
+        XCTAssertEqual(v.observe(back, at: at(20)), .none)
+        XCTAssertEqual(v.observe(nil, at: at(25)), .none)
+        XCTAssertEqual(v.observe(back, at: at(32)), .none, "12 s after the last sure reading: a new wait")
+        XCTAssertEqual(v.observe(back, at: at(34)), .newCall("abc-defg-hij", .meet))
+    }
+
     func testTheSameLinkStillInAMeetingIsNothing() {
         var w = CallLinkWatch(link: "abc-defg-hij")
         for i in 0..<3 { XCTAssertEqual(w.observe([meet("abc-defg-hij")], at: at(Double(i) * 2)), .none) }

@@ -46,7 +46,8 @@ public enum DetectorEvent: Equatable, Sendable {
     /// The call may have changed to another meeting: a mark in the recording. The service sends it, the detector
     /// never does, and it changes nothing of the call: the call goes on. `titleKey` is `CallTitleWatch.key` of the new
     /// title for a title mark.
-    case marked(link: String?, platform: Platform, source: CallMark.Source, sure: Bool, at: Date, titleKey: String? = nil)
+    case marked(link: String?, platform: Platform, source: CallMark.Source, sure: Bool, at: Date, titleKey: String? = nil,
+                ownLinkInMeeting: Bool? = nil)
 }
 
 public extension DetectorEvent {

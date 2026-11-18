@@ -36,17 +36,23 @@ public struct CallLinkWatch: Equatable, Sendable {
     }
     private var pending: Pending?
     private var adopting: (link: String, at: Date)?
+    /// After a change: the link before it, so a wrong change is taken back when that link is in its meeting again.
+    private var previous: String?
+    /// The first and last sure readings of the way back.
+    private var returning: (first: Date, last: Date)?
 
     public init(link: String?) { self.link = link }
 
     public static func == (a: Self, b: Self) -> Bool {
         a.link == b.link && a.isAdopted == b.isAdopted && a.pending == b.pending
             && a.adopting?.link == b.adopting?.link && a.adopting?.at == b.adopting?.at
+            && a.previous == b.previous && a.returning?.first == b.returning?.first && a.returning?.last == b.returning?.last
     }
 
     /// The time of the first reading of a change that waits (the time its mark gets), nil when none waits. A change
     /// whose last sure reading is older than `readingGap` is forgotten. A link that waits to be taken counts too.
     public func pendingSince(at time: Date) -> Date? {
+        if let returning, time.timeIntervalSince(returning.last) <= Self.readingGap { return returning.first }
         if let pending, time.timeIntervalSince(pending.last) <= Self.readingGap { return pending.origin }
         if let adopting, time.timeIntervalSince(adopting.at) <= Self.readingGap { return adopting.at }
         return nil
@@ -74,6 +80,21 @@ public struct CallLinkWatch: Equatable, Sendable {
             isAdopted = true
             return .adopt(id)
         }
+        // The link before the last change is in its meeting again, on two sure readings within the gap, whatever the
+        // new link shows: that change was wrong (a tab closed by accident while the next meeting's page was open).
+        if let back = previous {
+            if let platform = meetings.first(where: { $0.id == back })?.platform {
+                guard let r = returning, time.timeIntervalSince(r.last) <= Self.readingGap else {
+                    returning = (time, time)
+                    return clear()
+                }
+                self.link = back
+                previous = nil
+                returning = nil
+                return clear(.newCall(back, platform))
+            }
+            returning = nil
+        }
         // The call's own tab is still in its meeting (a next call opened early waits): the same call.
         guard !meetings.contains(where: { $0.id == link }) else { return clear() }
         // A meeting with no link, or two others: which one is the call is not known.
@@ -92,6 +113,7 @@ public struct CallLinkWatch: Equatable, Sendable {
         waiting.ownTabOpen = waiting.ownTabOpen || ownTabOpen
         pending = waiting
         if waiting.ownTabOpen, time.timeIntervalSince(waiting.first) < Self.ownTabOpenWait { return .none }
+        previous = link
         self.link = next
         return clear(.newCall(next, platform))
     }

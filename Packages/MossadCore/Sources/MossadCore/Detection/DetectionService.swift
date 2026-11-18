@@ -39,6 +39,8 @@ public final class DetectionService: @unchecked Sendable {
     /// same change, which replaces it, or a return to the title before it, which drops it; then it is a mark that is
     /// not sure, at the time of the change, with the key of the new title.
     private var titleChange: (at: Date, key: String, fromKey: String?)?
+    /// The last new read of the tabs during a call: whether the call's own link was in its meeting (`CallMark.ownLinkInMeeting`).
+    private var ownLinkRead: (at: Date, inMeeting: Bool?)?
     /// The marks of this tick, sent before the detector's event.
     private var marks: [DetectorEvent] = []
     /// When the call started, for its first minute: no title mark then (Meet can show the code first and the name
@@ -225,7 +227,10 @@ public final class DetectionService: @unchecked Sendable {
             // A title change waits 10 s, and as long as the tabs still check a change: a sure mark replaces it.
             if let change = titleChange, time.timeIntervalSince(change.at) > CallTitleWatch.readingGap, !linkWatch.isPending(at: time) {
                 Log.info("The window of the call shows another Meet meeting; marked as not sure, and the recording goes on")
-                marks.append(.marked(link: nil, platform: .meet, source: .title, sure: false, at: change.at, titleKey: change.key))
+                // From the tab list of this tick only: an older read says nothing.
+                let own = ownLinkRead.flatMap { time.timeIntervalSince($0.at) <= CallTitleWatch.readingGap ? $0.inMeeting : nil }
+                marks.append(.marked(link: nil, platform: .meet, source: .title, sure: false, at: change.at, titleKey: change.key,
+                                     ownLinkInMeeting: own))
                 titleChange = nil
             }
             if let key = firstTitleKey { onFirstTitleKey(key) }
@@ -501,6 +506,7 @@ public final class DetectionService: @unchecked Sendable {
         titleWatch = CallTitleWatch()
         lastSureMark = nil
         titleChange = nil
+        ownLinkRead = nil
         marks = []
         callStart = start
         firstTitleSent = false
@@ -514,6 +520,9 @@ public final class DetectionService: @unchecked Sendable {
     /// a change is a mark, sent with the tick. Only the watch's own link follows, so a later change is a later mark.
     private func watchForMarks(_ list: [BrowserTab]?, fresh: Bool, group: String, titles: () -> [String]?) {
         if fresh {
+            ownLinkRead = (tickTime, list.flatMap { list in
+                linkWatch.link.map { own in CallLinkWatch.meetings(in: list).contains { $0.id == own } }
+            })
             // A mark is at the first reading of its change.
             let since = linkWatch.pendingSince(at: tickTime) ?? tickTime
             switch linkWatch.observe(list, at: tickTime) {

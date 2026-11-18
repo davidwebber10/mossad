@@ -809,9 +809,10 @@ final class AppController: ObservableObject {
                 let forced = detection.callIsForced
                 // A mark goes into the recording and nowhere else (`reachesTheGate` is false): it never ends a recording,
                 // never starts one, and never asks the do-not-record gate.
-                if case .marked(let link, let platform, let source, let sure, let at, let titleKey) = event {
+                if case .marked(let link, let platform, let source, let sure, let at, let titleKey, let ownLinkInMeeting) = event {
                     CaptureQueue.queue.async {
-                        recorder.addCallMark(link: link, platform: platform, source: source, sure: sure, at: at, titleKey: titleKey)
+                        recorder.addCallMark(link: link, platform: platform, source: source, sure: sure, at: at, titleKey: titleKey,
+                                             ownLinkInMeeting: ownLinkInMeeting)
                     }
                     return
                 }
