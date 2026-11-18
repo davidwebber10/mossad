@@ -21,6 +21,31 @@ final class CallRecordTitleTests: XCTestCase {
         XCTAssertEqual(r.titleSource, .custom)
     }
 
+    /// A guessed invite's title loses against the generated title, and is the title only when there is no other.
+    func testAGuessedInvitesTitleIsOnlyTheFallback() {
+        var r = record()
+        let event = CalendarEventInfo(title: "Team meetup", start: Date(), end: Date().addingTimeInterval(1800),
+                                      attendees: ["Pat Quill"], text: "", isAllDay: false, participants: [Invitee(name: "Pat Quill", email: "pat@example.com")])
+        r.setGuess(event)
+        XCTAssertEqual(r.calendarTitle, "Team meetup")
+        XCTAssertEqual(r.inviteNotSure, true)
+        XCTAssertEqual(r.attendees, [])
+        XCTAssertNil(r.invitees)
+        XCTAssertNil(r.plannedStart)
+        XCTAssertEqual(r.title, "Team meetup")
+        XCTAssertEqual(r.titleSource, .guess)
+        r.generatedTitle = "Freight call"
+        XCTAssertEqual(r.title, "Freight call")
+        XCTAssertEqual(r.titleSource, .generated)
+        r.customTitle = "Mine"
+        XCTAssertEqual(r.title, "Mine")
+        r.customTitle = nil
+        r.apply(.sure(event))
+        XCTAssertEqual(r.title, "Team meetup", "a sure invite wins again")
+        XCTAssertEqual(r.titleSource, .calendar)
+        XCTAssertEqual(r.attendees, ["Pat Quill"])
+    }
+
     func testApplyingASummarySetsOnlyTheGeneratedTitle() {
         var r = record()
         r.customTitle = "Mine"

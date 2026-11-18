@@ -346,6 +346,7 @@ final class CallRecorderTests: XCTestCase {
         let event = CalendarEventInfo(title: "Budget review", start: t0, end: t0.addingTimeInterval(1800), attendees: [], text: "", isAllDay: false)
         recorder.setCalendar(event, sure: false, forCall: id)
         XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id)).inviteNotSure, true)
+        XCTAssertNil(try CallRecord.load(from: paths.callDirectory(id)).plannedStart, "a guess keeps only its title")
         recorder.setCalendar(event, sure: true, forCall: id)
         XCTAssertNil(try CallRecord.load(from: paths.callDirectory(id)).inviteNotSure)
     }

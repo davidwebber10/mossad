@@ -649,10 +649,7 @@ public final class CallRecorder: @unchecked Sendable {
     /// follows the invite (the points for next time of a move) takes it for the call's own.
     public func setCalendar(_ event: CalendarEventInfo, sure: Bool = true, forCall id: String) {
         guard record?.id == id else { return }
-        edit {
-            $0.setInvite(event)
-            $0.inviteNotSure = sure ? nil : true
-        }
+        edit { $0.apply(sure ? .sure(event) : .guess(event)) }
     }
 
     /// The live call has no invite: its link is known and no event holds it. A guess made before goes.

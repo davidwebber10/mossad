@@ -1067,7 +1067,8 @@ public actor Pipeline {
         if summarizer != nil, !r.utterances.isEmpty { detail(r.id, "Claude is writing the summary") }
         if let summarizer, !r.utterances.isEmpty {
             do {
-                let transcript = MarkdownWriter.transcript(r), title = r.title, known = knownTags()
+                // A guessed invite's title is not the meeting's: the model does not read it as one.
+                let transcript = MarkdownWriter.transcript(r), title = r.titleSource == .guess ? r.platform.untitled : r.title, known = knownTags()
                 let people = titles(Array(Set(r.speakerNames.values)).sorted())
                 let s = try await UsageContext.$callID.withValue(r.id) {
                     try await summarizer.summarize(transcript: transcript, title: title, knownTags: known, people: people)

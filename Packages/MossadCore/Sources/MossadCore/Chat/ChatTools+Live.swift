@@ -20,7 +20,7 @@ extension ChatTools {
         let transcript = try? LiveTranscript.load(from: url)
         // The lines count seconds of the recording, which leave the pauses out: "the last 5 minutes" counts the same.
         let elapsed = transcript?.recordedNow(at: now) ?? clockTime
-        var parts = ["\(r.calendarTitle ?? r.title) | \(r.platform.displayName) | started \(r.start.formatted(date: .omitted, time: .shortened)) | \(Int(elapsed / 60)) min recorded so far"]
+        var parts = ["\(r.sureCalendarTitle ?? r.title) | \(r.platform.displayName) | started \(r.start.formatted(date: .omitted, time: .shortened)) | \(Int(elapsed / 60)) min recorded so far"]
         if let pause = LiveChatPrompt.pauseNote(clock: clockTime, recorded: elapsed) { parts.append(pause) }
         if !r.attendees.isEmpty { parts.append("Invited: \(r.attendees.joined(separator: ", "))") }
         guard let transcript else {

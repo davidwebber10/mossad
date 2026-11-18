@@ -189,7 +189,8 @@ extension CallRecord {
 
 /// Everything known about one call; saved as `call.json` in the call's audio directory.
 /// Where a meeting's shown title comes from, strongest first.
-public enum TitleSource: Sendable { case custom, calendar, generated, platform }
+/// `guess`: the title of an invite that only may be the call's (`inviteNotSure`), shown when there is no other.
+public enum TitleSource: Sendable { case custom, calendar, generated, platform, guess }
 
 /// Something the meeting decided, with the second of the call when it was made, if known.
 public struct Decision: Codable, Equatable, Sendable, Hashable {
@@ -394,11 +395,26 @@ public struct CallRecord: Codable, Equatable, Sendable {
         self.status = status
     }
 
+    /// The one rule of the shown title: the owner's, the invite's, the generated one, the platform's. The title of an
+    /// invite that is only a guess (`inviteNotSure`) loses against the generated title and is kept as the fallback.
     public var titleSource: TitleSource {
-        if customTitle != nil { .custom } else if calendarTitle != nil { .calendar } else if generatedTitle != nil { .generated } else { .platform }
+        if customTitle != nil { return .custom }
+        if calendarTitle != nil, inviteNotSure != true { return .calendar }
+        if generatedTitle != nil { return .generated }
+        return calendarTitle != nil ? .guess : .platform
     }
 
-    public var title: String { customTitle ?? calendarTitle ?? generatedTitle ?? platform.untitled }
+    public var title: String {
+        switch titleSource {
+        case .custom: customTitle ?? platform.untitled
+        case .calendar, .guess: calendarTitle ?? platform.untitled
+        case .generated: generatedTitle ?? platform.untitled
+        case .platform: platform.untitled
+        }
+    }
+
+    /// The invite's title when the invite is the call's; nil for a guess.
+    public var sureCalendarTitle: String? { inviteNotSure == true ? nil : calendarTitle }
 
     /// Takes the invite's title, people, and planned times. An all-day event plans no time of day.
     public mutating func setInvite(_ event: CalendarEventInfo) {
