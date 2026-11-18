@@ -111,6 +111,46 @@ public struct MuteSpan: Codable, Equatable, Sendable {
     }
 }
 
+/// A pause of the recording. The files leave the paused time out, so the pause is one point of the recording's own
+/// timeline, `at`; `from` and `to` are its wall times. `to` is nil while the pause is open.
+public struct PauseSpan: Codable, Equatable, Sendable {
+    public var at: TimeInterval
+    public var from: Date
+    public var to: Date?
+
+    public init(at: TimeInterval, from: Date, to: Date?) {
+        self.at = at
+        self.from = from
+        self.to = to
+    }
+}
+
+/// A sign during the recording that another call may have started in it: a new link, or a new title.
+public struct CallMark: Codable, Equatable, Sendable {
+    /// Where the sign came from, in the order of trust.
+    public enum Source: String, Codable, Sendable { case ext = "extension", tabs, title }
+
+    /// The second of the recording (paused time left out).
+    public var at: TimeInterval
+    /// The wall time of the sign.
+    public var time: Date
+    /// The new call's link, when known.
+    public var link: String?
+    public var platform: Platform
+    public var source: Source
+    /// True when the source says for sure that the call changed.
+    public var sure: Bool
+
+    public init(at: TimeInterval, time: Date, link: String?, platform: Platform, source: Source, sure: Bool) {
+        self.at = at
+        self.time = time
+        self.link = link
+        self.platform = platform
+        self.source = source
+        self.sure = sure
+    }
+}
+
 extension CallRecord {
     /// Sets the note of the bookmark within a second of `offset`, or adds a bookmark there. A blank note
     /// clears the note and keeps the bookmark. Returns false when a blank note had no bookmark to clear.
@@ -317,6 +357,12 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// The file names of screens the owner deleted. The text step drops them from `frames.json` if they are still
     /// there (a failed save, a run that was reading at that moment), so a deleted screen never comes back.
     public var deletedScreens: [String]?
+    /// The pauses of the recording, from builds that save them. Nil for a call with no pause and for older records.
+    public var pauses: [PauseSpan]?
+    /// The signs during the recording that another call may have started in it. Nil when there was none.
+    public var callMarks: [CallMark]?
+    /// The id of the recording this one was cut from. Nil for a recording that was never cut.
+    public var cutFrom: String?
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
         self.id = id
@@ -453,6 +499,9 @@ extension CallRecord {
         gemini = try c.decodeIfPresent(GeminiNotesRef.self, forKey: .gemini)
         personHint = try c.decodeIfPresent(PersonHint.self, forKey: .personHint)
         moveTo = try c.decodeIfPresent(String.self, forKey: .moveTo)
+        pauses = try c.decodeIfPresent([PauseSpan].self, forKey: .pauses)
+        callMarks = try c.decodeIfPresent([CallMark].self, forKey: .callMarks)
+        cutFrom = try c.decodeIfPresent(String.self, forKey: .cutFrom)
     }
 }
 
