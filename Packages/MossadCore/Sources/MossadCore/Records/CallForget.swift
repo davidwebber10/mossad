@@ -141,7 +141,17 @@ public enum CallForget {
                     let leaving = gone.subtracting(live)
                     _ = try NextTimeBook.change(in: paths.nextTime) { _ = $0.forget(callID: callID, record: r, gone: leaving, went: went, at: now) }
                 case .delete:
-                    _ = try NextTimeBook.change(in: paths.nextTime) { _ = $0.forget(callID: callID, record: r, gone: [], at: now) }
+                    // A point for that one meeting goes only when no other recording of the meeting stays (by its
+                    // recordings, or a sure invite); otherwise it only loses this call. Unknown keeps it.
+                    let others = MoveRemoval.otherRecords(excluding: callID, paths: paths)
+                    _ = try NextTimeBook.change(in: paths.nextTime) { book in
+                        let goes = Set(book.visible.filter { p in
+                            guard p.isForMeeting, let m = p.meeting, NextTimeBook.ownMeeting(m, callID: callID, record: r) else { return false }
+                            guard let others else { return false }
+                            return !others.contains { NextTimeBook.ownMeeting(m, callID: $0.id, record: $0) }
+                        }.map(\.id))
+                        _ = book.forget(callID: callID, record: r, gone: [], went: goes, at: now)
+                    }
                 case let .cut(parts):
                     _ = try NextTimeBook.change(in: paths.nextTime) { _ = $0.handOver(callID: callID, to: parts, at: now) }
                     try stop("books: the live chat")

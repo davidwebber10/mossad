@@ -70,6 +70,26 @@ final class DeleteForgetTests: XCTestCase {
         XCTAssertFalse(RemovedNotes.load(a).meetings.isEmpty, "its notes are never imported again")
     }
 
+    /// I2: a restart split the meeting into two recordings. A Delete of one keeps the owner's point for the meeting; the
+    /// point only loses this call.
+    func testADeleteKeepsAPointWhoseMeetingHasAnotherRecording() async throws {
+        let (a, lib, r, own, _) = try world()
+        var other = r
+        other.id = "20261101-103500"
+        other.markdownPath = nil
+        try FileManager.default.createDirectory(at: a.callDirectory(other.id), withIntermediateDirectories: true)
+        try other.save(to: a.callDirectory(other.id))
+        _ = try NextTimeBook.change(in: a.nextTime) { book in
+            book.update(own) { $0.meeting?.calls = [self.id, other.id] }
+        }
+        _ = await pipeline(a, lib).deleteMeeting(callID: id)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: a.callDirectory(id).path))
+        let point = try XCTUnwrap(try NextTimeBook.load(from: a.nextTime).points.first { $0.id == own })
+        XCTAssertFalse(point.deleted, "the meeting still has a recording")
+        XCTAssertEqual(point.text, "Ask about the zebra")
+        XCTAssertEqual(point.meeting?.calls, [other.id], "the point only loses the deleted call")
+    }
+
     func testADeleteThatAQuitStoppedGoesOnAtTheNextRun() async throws {
         let (a, lib, _, _, _) = try world()
         // The quit came after the first two steps.
