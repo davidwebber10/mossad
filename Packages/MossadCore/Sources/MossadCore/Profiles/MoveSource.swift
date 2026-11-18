@@ -288,6 +288,9 @@ public struct MoveSource: Sendable {
             } catch is MoveCopy.Held {
                 // The part stays; the next look after the call goes on from it.
                 return .waiting
+            } catch is MoveCopy.PointsUnread {
+                // Which points go is not known while the book does not read: nothing is copied yet.
+                return .waiting
             } catch {
                 // The kind of the error only: its text can hold a path of the other profile.
                 Log.error("Move: the copy failed; the meeting stays here (\((error as NSError).domain) \((error as NSError).code))")

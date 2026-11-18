@@ -128,7 +128,9 @@ final class MeetingPointsReviewTests: XCTestCase {
         XCTAssertFalse(book.points.first { $0.id == other.id }!.deleted)
     }
 
-    func testAPointMovedToAPersonWhoGoesWithTheMeetingGoesToo() {
+    /// The owner's decision: the points go with the meeting, also one the check moved from it to the person, whether
+    /// that person stays here or not. A point the owner moved to the person by hand stays with a person who stays.
+    func testAPointTheCheckMovedToAPersonGoesWithTheMeeting() {
         let u = invite()
         var book = NextTimeBook()
         let p = book.add("Ask about the Q3 budget", meeting: NextTimeMeeting(u, people: ["p-sam"]), at: now)!
@@ -136,9 +138,19 @@ final class MeetingPointsReviewTests: XCTestCase {
         NextTimeRules.apply([], checked: [p], call: c, to: &book, at: now, onlyOther: ("p-sam", "Sam Carter"))
         var kept = book
         kept.forget(callID: "c", record: c, at: now)
-        XCTAssertTrue(kept.points[0].isOpen, "Sam stays here: the point stays with Sam")
+        XCTAssertTrue(NextTimeBook.forgotten(kept.points[0]), "Sam stays here, and the point went with the meeting")
         book.forget(callID: "c", record: c, gone: ["p-sam"], at: now)
         XCTAssertTrue(NextTimeBook.forgotten(book.points[0]))
+
+        var byHand = NextTimeBook()
+        let q = byHand.add("Ask about the Q3 budget", meeting: NextTimeMeeting(u, people: ["p-sam"]), at: now)!
+        NextTimeRules.apply([], checked: [q], call: c, to: &byHand, at: now)
+        byHand.move(q.id, toPerson: "p-sam", name: "Sam Carter", at: now)
+        var stays = byHand
+        stays.forget(callID: "c", record: c, at: now)
+        XCTAssertTrue(stays.points[0].isOpen, "Sam stays here: the point the owner gave Sam stays with Sam")
+        byHand.forget(callID: "c", record: c, gone: ["p-sam"], at: now)
+        XCTAssertTrue(NextTimeBook.forgotten(byHand.points[0]), "a person who goes takes it, as before")
     }
 
     func testAMeetingThatWaitsForAMoveDoesNotListItsPointsAsNotRecorded() {

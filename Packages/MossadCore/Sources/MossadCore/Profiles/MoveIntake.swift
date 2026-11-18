@@ -262,8 +262,18 @@ public struct MoveIntake: Sendable {
             guard f.path == recordPath || f.path.hasPrefix(MoveMarker.chatsFolder + "/") else { return true }
             return (try? FileHash.sha256(of: url)) == f.sha256
         }
+        // The points for next time, when some go: by their size and hash, and a file this build reads. A file of a
+        // newer build refuses as a record that does not read: the first profile keeps the meeting and its points.
+        var moved: MovedPoints?
+        var pointsWhole = true
+        if let p = m.points {
+            let url = folder(callID).appendingPathComponent(MovedPoints.fileName)
+            pointsWhole = p.path == MovedPoints.fileName && MoveCopy.size(url) == p.size && (try? FileHash.sha256(of: url)) == p.sha256
+            moved = pointsWhole ? MovedPoints.read(url) : nil
+        }
+        let readable = m.points == nil || !pointsWhole || moved != nil
         // An id that is in `Audio` now is taken, also the one chosen before: another meeting took it meanwhile.
-        var d = MovePlan.decide(record: record, sizesMatch: whole, id: callID, taken: taken())
+        var d = MovePlan.decide(record: readable ? record : nil, sizesMatch: whole && pointsWhole, id: callID, taken: taken())
         if d.intake == .takingIn, sameVolume() != true { d = (.refused, nil, .notWhole) }
         try stop("decide")
         m.intake = d.intake
@@ -281,6 +291,7 @@ public struct MoveIntake: Sendable {
             }
             m.chatIDs = ids
         }
+        if d.intake == .takingIn, m.pointIDs == nil, let moved { m.pointIDs = moved.points.map { _ in UUID().uuidString } }
         try m.save(in: folder(callID), claimed: true)
     }
 
@@ -371,6 +382,11 @@ public struct MoveIntake: Sendable {
             try stop("learn the voices")
             try part(.voices) { try MovedVoices.learn(naming, from: r, callID: f, library: library) }
         }
+        // Before the mark goes: the check of the points never reads the meeting here while it is marked.
+        if m.points != nil {
+            try stop("add the points")
+            try part(.points) { try addPoints(m, callID, as: f) }
+        }
         try stop("sync the meeting")
         try part(.record) { try sync(dir) }
         // The mark goes before the chats: they are new chats of this meeting here.
@@ -388,6 +404,7 @@ public struct MoveIntake: Sendable {
         }
         try stop("remove the copies of the chats")
         try? FileManager.default.removeItem(at: folder(callID).appendingPathComponent(MoveMarker.chatsFolder))
+        try? FileManager.default.removeItem(at: folder(callID).appendingPathComponent(MovedPoints.fileName))
         try? FileManager.default.removeItem(at: saved)
         try stop("write taken")
         m.intake = .taken
@@ -437,6 +454,25 @@ public struct MoveIntake: Sendable {
             try stop("write a chat")
             try store.save(chat)
         }
+    }
+
+    struct PointsUnreadable: Error {}
+    struct BookAwaitsMerge: Error {}
+
+    /// The points for next time as points of this profile's meeting `f`, under the ids decided once. A point whose id
+    /// is here already is not added again.
+    private func addPoints(_ m: MoveMarker, _ callID: String, as f: String) throws {
+        let file = folder(callID).appendingPathComponent(MovedPoints.fileName)
+        // Gone: added in a run before, which then removed the copy.
+        guard FileManager.default.fileExists(atPath: file.path) else { return }
+        let ids = (m.pointIDs ?? []).compactMap(UUID.init(uuidString:))
+        // A file that does not read stops the step: `taken` would let the first profile empty its points.
+        guard let moved = MovedPoints.read(file), ids.count == moved.points.count, ids.count == m.pointIDs?.count else { throw PointsUnreadable() }
+        // A book set aside waits for the other device's copy: nothing is written over it before.
+        guard !StoredFile.awaitsMerge(paths.nextTime.appendingPathComponent(NextTimeBook.fileName)) else { throw BookAwaitsMerge() }
+        let at = now()
+        try NextTimeBook.change(in: paths.nextTime) { _ = $0.takeIn(moved, as: f, ids: ids, at: at) }
+        try sync(paths.nextTime)
     }
 
     /// The files in `Audio/<final id>` against the marker: each file that went as it is, by its size and hash; the

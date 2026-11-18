@@ -226,6 +226,7 @@ extension MoveWords {
         case .voices: "it cannot save the voices it learned from it yet."
         case .record: "it cannot save the meeting there yet."
         case .chats: "it cannot save the meeting's chats yet."
+        case .points: "it cannot save the meeting's points yet."
         case .failed: "one step does not work yet."
         }
         return "“\(target)” took the meeting but has not finished: \(why) It tries again."

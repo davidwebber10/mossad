@@ -12,7 +12,7 @@ public struct MoveMarker: Codable, Equatable, Sendable {
     public static let currentVersion = 1
     public static let allowedKeys: Set<String> = ["version", "callID", "from", "to", "made", "token", "files", "path", "size", "sha256",
                                                   "ownerKeys", "intake", "finalID", "refusal", "count", "chatIDs",
-                                                  "arrived", "tries", "waits", "lastTry"]
+                                                  "arrived", "tries", "waits", "lastTry", "points", "pointIDs"]
 
     public struct File: Codable, Equatable, Sendable {
         public var path: String
@@ -29,7 +29,7 @@ public struct MoveMarker: Codable, Equatable, Sendable {
     public enum Intake: String, Codable, Sendable { case takingIn, taken, refused }
     public enum Refusal: String, Codable, Sendable { case idTaken, unreadable, notWhole }
     /// Where a take-in that failed after the file check waits: a kind from this list, never a title or a name.
-    public enum TakeInWait: String, Codable, CaseIterable, Sendable { case voices, record, chats, failed }
+    public enum TakeInWait: String, Codable, CaseIterable, Sendable { case voices, record, chats, failed, points }
 
     public var version: Int
     public var callID: String
@@ -50,6 +50,12 @@ public struct MoveMarker: Codable, Equatable, Sendable {
     public var count: Int?
     /// The chat id of the first profile to the id it gets here.
     public var chatIDs: [String: String]?
+    /// The points for next time that go with the meeting (`MovedPoints`), beside `call/` and never in `files`: an
+    /// older target checks each file of `files` in its `Audio`, and does not read this field. Nil when none goes, and
+    /// then the marker is as before.
+    public var points: File?
+    /// The ids the points get here, in the file's order: decided once with the chats' ids.
+    public var pointIDs: [String]?
     /// The target's first half ended: `call/call.json` is the record as it arrives (or `call/arrival.json` is, until
     /// its rename).
     public var arrived: Bool?
