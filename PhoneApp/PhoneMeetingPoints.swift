@@ -13,11 +13,12 @@ struct PhoneMeetingPoints: View {
         let discussed = book.discussed(in: callID)
         let carried = book.visible.filter { $0.isOpen && ($0.carried ?? []).contains(callID) }
         let mentioned = book.mentioned(in: callID)
+        let record = store.meetings.first { $0.id == callID }
         // The points of this one meeting that it did not raise: the owner moves them on the Mac.
-        let leftOpen = book.leftOpen(in: callID, record: store.meetings.first { $0.id == callID })
+        let leftOpen = book.leftOpen(in: callID, record: record)
         VStack(spacing: 0) {
             if !mentioned.isEmpty {
-                LabelColumn(label: "Your open points in these notes") {
+                LabelColumn(label: MentionWords.label(record)) {
                     VStack(alignment: .leading, spacing: Space.s) {
                         ForEach(mentioned) { p in
                             let m = p.mentions?.first { $0.callID == callID }
@@ -26,7 +27,7 @@ struct PhoneMeetingPoints: View {
                                     Image(systemName: "circle").font(.caption).foregroundStyle(Palette.tertiary)
                                     VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                                         Text(p.text).textRole(.body).foregroundStyle(Palette.ink)
-                                        Text("Still open. Mossad has only the notes of this meeting" + (m.map { " · at \(meetingClock($0.at, length: 0))" } ?? ""))
+                                        Text(MentionWords.still(p, in: record) + (m.map { " · at \(meetingClock($0.at, length: 0))" } ?? ""))
                                             .textRole(.secondary).foregroundStyle(Palette.secondary)
                                     }
                                 }

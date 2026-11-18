@@ -14,7 +14,7 @@ extension ChatTools {
                     "series": ["type": "string"], "limit": ["type": "integer", "description": "The most meetings to list, default 20."],
                  ] as [String: Any], "required": ["series"]]),
         ToolSpec(name: "next_time_points",
-                 description: "The owner's points to raise later: for the next meeting of a recurring meeting, for one upcoming meeting that is not recurring, or the next time they see a person. Each with point_id, its series, meeting, or person, when it was saved, and what happened to it: discussed (in which call_id, at what second, with the quote), carried over meetings that did not discuss it, or seen in a meeting Mossad has only the notes of. status is open (default), done, or all. Narrow by series (series_id or title words) or person (person_id or whole name). To add one, use add_next_time_point (in Mossad's own chat: add_point).",
+                 description: "The owner's points to raise later: for the next meeting of a recurring meeting, for one upcoming meeting that is not recurring, or the next time they see a person. Each with point_id, its series, meeting, or person, when it was saved, and what happened to it: discussed (in which call_id, at what second, with the quote), carried over meetings that did not discuss it, or seen in a meeting Mossad has only the notes of, or a person's point that came up in a meeting that was not a 1:1 with them (it stays open). status is open (default), done, or all. Narrow by series (series_id or title words) or person (person_id or whole name). To add one, use add_next_time_point (in Mossad's own chat: add_point).",
                  schema: ["type": "object", "properties": [
                     "status": ["type": "string", "enum": ["open", "done", "all"]], "series": ["type": "string"], "person": ["type": "string"], "limit": ["type": "integer"],
                  ] as [String: Any]]),
@@ -30,7 +30,7 @@ extension ChatTools {
                         "days": ["type": "integer"], "query": ["type": "string"], "limit": ["type": "integer"],
                      ] as [String: Any]]),
             ToolSpec(name: "prep",
-                     description: "The page \"Before this meeting\" for one upcoming call: who is invited and when the owner last met each (with one fact from their history), the last meeting of the series or with these people (its decisions and action items, and which of the owner's are open or done), the owner's open tasks for these people, the owner's points for next time, the series in numbers, and how to present to each person when the coach has a read. meeting is an upcoming_id from upcoming_meetings or words of the title; leave it out for the next call.",
+                     description: "The page \"Before this meeting\" for one upcoming call: who is invited and when the owner last met each (with one fact from their history), the last meeting of the series or with these people (its decisions and action items, and which of the owner's are open or done), the owner's open tasks for these people, the owner's points for next time (a person's points only in a 1:1 with that person; in a group meeting only how many wait for each person), the series in numbers, and how to present to each person when the coach has a read. meeting is an upcoming_id from upcoming_meetings or words of the title; leave it out for the next call.",
                      schema: ["type": "object", "properties": ["meeting": ["type": "string"]] as [String: Any]]),
         ]
         #else
@@ -150,9 +150,16 @@ extension ChatTools {
             }.joined(separator: "\n"))
         }
         if let book {
+            // A person's points belong to a 1:1 with them: a group meeting gives only how many wait, as the page does.
             let ids = NextTimeInvite.personIDs(meeting.attendees, people: saved)
-            let points = book.points(for: SeriesCatalog.series(of: meeting, in: all), meeting: meeting, people: ids, canonical: saved.canonical).filter(\.isOpen)
+            let oneOnOne = OneOnOne.person(ofInvite: meeting.attendees, owner: owner, directory: directory, ownerEmails: [settings.ownerEmail], people: saved)
+            let points = book.points(for: SeriesCatalog.series(of: meeting, in: all), meeting: meeting, oneOnOne: oneOnOne, canonical: saved.canonical).filter(\.isOpen)
             if !points.isEmpty { parts.append("Your points:\n" + points.map { "- \($0.text) (point_id: \($0.id.uuidString))" }.joined(separator: "\n")) }
+            let waiting = book.personCounts(ids, oneOnOne: oneOnOne, canonical: saved.canonical)
+            if !waiting.isEmpty {
+                parts.append("Points for a 1:1, not for this meeting (only the count; next_time_points with the person_id lists them):\n"
+                             + waiting.map { "- \($0.count) for \(saved.name(of: $0.person) ?? $0.person) (person_id: \($0.person))" }.joined(separator: "\n"))
+            }
         }
         if let last = prep.lastTime {
             var lines = ["\(last.inSeries ? "Last time in this series" : "Last time with these people"): \(last.meeting.title), \(shortDay(last.meeting.start)) (call_id: \(last.meeting.id))"
@@ -325,7 +332,8 @@ extension ChatTools {
             line += " | not raised in that meeting (call_id: \(call)); still open"
         }
         if p.isOpen, let m = p.lastMention {
-            line += " | came up \(shortDay(m.date)) in a meeting Mossad has only the notes of (call_id: \(m.callID)): \u{201C}\(m.quote)\u{201D}"
+            let place = records.first { $0.id == m.callID }.map { NextTimeRules.ownerMissed($0) ? "a meeting Mossad has only the notes of" : "\($0.title), still open for a 1:1" } ?? "a meeting"
+            line += " | came up \(shortDay(m.date)) in \(place) (call_id: \(m.callID)): \u{201C}\(m.quote)\u{201D}"
         }
         return line
     }

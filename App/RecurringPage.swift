@@ -238,20 +238,36 @@ struct NextTimeTab: View {
             SuggestionList(series: series, suggestions: suggestions)
         }
         let usual = controller.series.usualIDs[series.id] ?? []
-        let shown = usual.filter { p in !controller.series.book.points(forPerson: p.id, canonical: canonical).isEmpty || adding.contains(p.id) }
-        let rest = usual.filter { p in !shown.contains { $0.id == p.id } }
+        // A person's points belong to a 1:1 with them: their words show here only in a 1:1 series with that person; a
+        // group series shows how many wait, as the prep page does.
+        let refs = controller.series.people
+        let oneOnOne = OneOnOne.person(ofSeries: series.usualPeople, owner: controller.ownerName, people: refs)
+        let counted = usual.compactMap { p -> (id: String, name: String, count: Int)? in
+            let n = controller.series.book.points(forPerson: p.id, canonical: canonical).count
+            return n > 0 ? (p.id, p.name, n) : nil
+        }
+        let shown = usual.filter { p in p.id == oneOnOne && (counted.contains { $0.id == p.id } || adding.contains(p.id)) }
+        let waiting = counted.filter { $0.id != oneOnOne }
+        let rest = usual.filter { p in !shown.contains { $0.id == p.id } && !waiting.contains { $0.id == p.id } }
         if !usual.isEmpty {
             MeetingAnalyticsGroup("For one person") {
                 VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                     ForEach(shown, id: \.id) { p in PersonNextTimeSection(personID: p.id, name: p.name) }
+                    if !waiting.isEmpty {
+                        VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                            ForEach(waiting, id: \.id) { p in PointsForOneOnOneRow(personID: p.id, name: p.name, count: p.count) }
+                        }
+                    }
                     if !rest.isEmpty {
                         Menu {
-                            ForEach(rest, id: \.id) { p in Button(p.name) { adding.insert(p.id) } }
+                            // In a 1:1 series the point is added here; in a group series on the person's page, where
+                            // their points are.
+                            ForEach(rest, id: \.id) { p in Button(p.name) { if p.id == oneOnOne { adding.insert(p.id) } else { controller.openPerson(p.id) } } }
                         } label: {
                             Text("Add a point for one person").font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.accent)
                         }
                         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                        .help("A point for the next time you see this person, in this series or any other meeting")
+                        .help("A point for your next 1:1 with this person. It shows in your one-on-ones with them")
                     }
                 }
             }

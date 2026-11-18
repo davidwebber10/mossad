@@ -1,7 +1,7 @@
 import Foundation
 
-/// The owner's points on the page of the call that records now: the same points as the prep page (the series'
-/// and each invited person's), and the points of a person heard by name.
+/// The owner's points on the page of the call that records now: the same points as the prep page (the series', the
+/// meeting's own, and the person's in a 1:1 with them, `OneOnOne.person(ofLive:)`).
 public enum LivePoints {
     /// The series of the call that records now. The catalog holds written meetings only, so the call joins a series
     /// as its invite would: by the calendar's series id, else by the prep page's rule against the earlier meetings.
@@ -21,16 +21,10 @@ public enum LivePoints {
         return SeriesCatalog.series(ofCall: newest.id, in: all)
     }
 
-    /// The saved people of the call, without the owner: the invited ones, then the ones heard by name.
-    public static func personIDs(attendees: [String], heard: [String], people refs: PersonReferences) -> [String] {
-        var out = NextTimeInvite.personIDs(attendees, people: refs)
-        for id in NextTimeInvite.personIDs(heard, people: refs) where !out.contains(id) { out.append(id) }
-        return out
-    }
-
-    /// The series' points, then the points of this one meeting (`record`, by its invite), then each person's, in
-    /// their order: the open ones and the ones that this call closed, so a tick can be taken back.
-    public static func list(_ book: NextTimeBook, series: MeetingSeries?, people: [String], callID: String, record: CallRecord? = nil,
+    /// The series' points, then the points of this one meeting (`record`, by its invite), then the person's when the
+    /// call is a 1:1 with them (`oneOnOne`), in their order: the open ones and the ones that this call closed, so a
+    /// tick can be taken back. A group call lists no person's points, so Mossad never marks one there.
+    public static func list(_ book: NextTimeBook, series: MeetingSeries?, oneOnOne: String?, callID: String, record: CallRecord? = nil,
                             canonical: (String) -> String = { $0 }) -> [NextTimePoint] {
         func shown(_ p: NextTimePoint) -> Bool { !p.deleted && (p.done == nil || p.done?.callID == callID) }
         let order: (NextTimePoint, NextTimePoint) -> Bool = { ($0.rank, $0.created) < ($1.rank, $1.created) }
@@ -39,11 +33,13 @@ public enum LivePoints {
             out += book.points.filter { shown($0) && $0.isForMeeting && $0.meeting?.matches(record) == true }.sorted(by: order)
         }
         var seen = Set(out.map(\.id))
-        for id in people {
+        if let id = oneOnOne {
             let wanted = canonical(id)
             for p in book.points.filter({ shown($0) && $0.seriesID == nil && $0.personID.map(canonical) == wanted }).sorted(by: order)
             where seen.insert(p.id).inserted { out.append(p) }
         }
+        // A point the owner ticked in this call stays, so the tick can be taken back, whatever the rule says now.
+        out += book.points.filter { shown($0) && $0.isForPerson && $0.done?.callID == callID && !seen.contains($0.id) }.sorted(by: order)
         return out
     }
 }

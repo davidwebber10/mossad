@@ -42,6 +42,9 @@ final class SeriesModel: ObservableObject {
     /// The saved people of each invite by its id, and of each series' usual people, made with the catalog: the
     /// pages and the menu read these and never the people file.
     private(set) var invitedIDs: [String: [String]] = [:]
+    /// The one person of each invite that is a 1:1 with one sure person (`OneOnOne.person(ofInvite:)`), by its id:
+    /// only there do that person's points show.
+    private(set) var oneOnOneIDs: [String: String] = [:]
     private(set) var usualIDs: [String: [(id: String, name: String)]] = [:]
     /// The people store, for the id a merged person has now.
     private(set) var people = PersonReferences(people: [])
@@ -60,6 +63,7 @@ final class SeriesModel: ObservableObject {
         let upcoming: [UpcomingMeeting]
         let all: [MeetingSeries]
         let invited: [String: [String]]
+        let oneOnOne: [String: String]
         let usual: [String: [UsualPerson]]
         let people: PersonReferences
     }
@@ -100,9 +104,15 @@ final class SeriesModel: ObservableObject {
         building = Task {
             let made = await Task.detached(priority: .userInitiated) { () -> Made in
                 let (upcoming, all) = Self.catalog(inputs)
-                let refs = PersonReferences(people: PeopleStore.peek(in: inputs.peopleDir) ?? [])
+                let saved = PeopleStore.peek(in: inputs.peopleDir)
+                let refs = PersonReferences(people: saved ?? [])
+                let directory = PersonDirectory(profiles: inputs.profiles, people: saved)
                 var invited: [String: [String]] = [:]
-                for u in upcoming { invited[u.id] = NextTimeInvite.personIDs(u.attendees, people: refs) }
+                var oneOnOne: [String: String] = [:]
+                for u in upcoming {
+                    invited[u.id] = NextTimeInvite.personIDs(u.attendees, people: refs)
+                    oneOnOne[u.id] = OneOnOne.person(ofInvite: u.attendees, owner: inputs.owner, directory: directory, ownerEmails: [inputs.ownerEmail], people: refs)
+                }
                 var usual: [String: [UsualPerson]] = [:]
                 for s in all {
                     var seen: Set<String> = []
@@ -111,10 +121,11 @@ final class SeriesModel: ObservableObject {
                         return UsualPerson(id: id, name: refs.name(of: id) ?? name)
                     }
                 }
-                return Made(upcoming: upcoming, all: all, invited: invited, usual: usual, people: refs)
+                return Made(upcoming: upcoming, all: all, invited: invited, oneOnOne: oneOnOne, usual: usual, people: refs)
             }.value
             guard !Task.isCancelled else { return }
             invitedIDs = made.invited
+            oneOnOneIDs = made.oneOnOne
             usualIDs = made.usual.mapValues { $0.map { (id: $0.id, name: $0.name) } }
             people = made.people
             all = made.all
@@ -151,10 +162,16 @@ final class SeriesModel: ObservableObject {
         return waitingMemo
     }
 
-    /// The owner's open points for an upcoming meeting: its series' and its invited people's.
+    /// The owner's open points for an upcoming meeting: its series', its own, and the person's in a 1:1 with them.
     func points(for meeting: UpcomingMeeting) -> [NextTimePoint] {
         let refs = people
-        return book.points(for: SeriesCatalog.series(of: meeting, in: all), meeting: meeting, people: invitedIDs[meeting.id] ?? [], canonical: { refs.canonical($0) })
+        return book.points(for: SeriesCatalog.series(of: meeting, in: all), meeting: meeting, oneOnOne: oneOnOneIDs[meeting.id], canonical: { refs.canonical($0) })
+    }
+
+    /// The invited people whose points wait for a 1:1, with how many: the prep page says only the count.
+    func waitingForOneOnOne(_ meeting: UpcomingMeeting) -> [(person: String, count: Int)] {
+        let refs = people
+        return book.personCounts(invitedIDs[meeting.id] ?? [], oneOnOne: oneOnOneIDs[meeting.id], canonical: { refs.canonical($0) })
     }
 
     /// Reads the book again when its file changed.
@@ -215,7 +232,7 @@ extension AppController {
         if LivePointRules.syncsAfterChange(recording: isRecording) { syncNow() }
     }
 
-    /// The owner's open points for an upcoming meeting: its series' and its people's. Reads no file.
+    /// The owner's open points for an upcoming meeting: its series', its own, and the person's in a 1:1. Reads no file.
     func nextTimePoints(for meeting: UpcomingMeeting) -> [NextTimePoint] { series.points(for: meeting) }
 
     /// The points of meetings that were not recorded, kept until the book or the meetings change.

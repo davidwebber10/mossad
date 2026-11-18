@@ -54,8 +54,8 @@ final class MeetingPointsTests: XCTestCase {
         XCTAssertEqual(book.points(forMeeting: u).map(\.id), [p.id])
         XCTAssertTrue(book.points(forPerson: "p-sam").isEmpty)
         // The prep page: the meeting's own, then each person's, never twice.
-        XCTAssertEqual(book.points(for: nil, meeting: u, people: ["p-sam"]).map(\.id), [p.id])
-        XCTAssertTrue(book.points(for: nil, people: ["p-sam"]).isEmpty)
+        XCTAssertEqual(book.points(for: nil, meeting: u, oneOnOne: "p-sam").map(\.id), [p.id])
+        XCTAssertTrue(book.points(for: nil, oneOnOne: "p-sam").isEmpty)
         XCTAssertTrue(book.points(forMeeting: invite("Budget chat", inHours: 48, uid: "uid-2")).isEmpty)
     }
 
@@ -94,11 +94,11 @@ final class MeetingPointsTests: XCTestCase {
         var (book, p) = bookWithPoint(for: u)
         let other = book.add("For Sam", personID: "p-sam", personName: "Sam Carter", at: now)!
         let live = record("c", of: u, status: .recording)
-        XCTAssertEqual(LivePoints.list(book, series: nil, people: ["p-sam"], callID: "c", record: live).map(\.id), [p.id, other.id])
-        XCTAssertEqual(LivePoints.list(book, series: nil, people: ["p-sam"], callID: "c").map(\.id), [other.id])
+        XCTAssertEqual(LivePoints.list(book, series: nil, oneOnOne: "p-sam", callID: "c", record: live).map(\.id), [p.id, other.id])
+        XCTAssertEqual(LivePoints.list(book, series: nil, oneOnOne: "p-sam", callID: "c").map(\.id), [other.id])
         // A tick in this call keeps it in the list, to take back.
         book.update(p.id, at: now) { $0.done = .init(callID: "c", at: 30, quote: nil, date: now, byOwner: true) }
-        XCTAssertEqual(LivePoints.list(book, series: nil, people: [], callID: "c", record: live).map(\.id), [p.id])
+        XCTAssertEqual(LivePoints.list(book, series: nil, oneOnOne: nil, callID: "c", record: live).map(\.id), [p.id])
         p = book.points[0]
         XCTAssertFalse(p.isOpen)
     }

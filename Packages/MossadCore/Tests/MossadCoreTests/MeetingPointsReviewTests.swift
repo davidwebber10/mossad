@@ -36,7 +36,7 @@ final class MeetingPointsReviewTests: XCTestCase {
         for (i, name) in voices.enumerated() {
             let label = String(UnicodeScalar(UInt8(66 + i)))
             r.speakerNames["them:\(label)"] = name
-            lines.append(Utterance(track: .them, speakerLabel: label, start: Double(20 + i * 10), end: Double(25 + i * 10), text: "Hi there"))
+            lines.append(Utterance(track: .them, speakerLabel: label, start: Double(20 + i * 40), end: Double(50 + i * 40), text: "Hi there"))
         }
         r.utterances = lines
         return r

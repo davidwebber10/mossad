@@ -24,33 +24,36 @@ extension ChatTools {
         if let pause = LiveChatPrompt.pauseNote(clock: clockTime, recorded: elapsed) { parts.append(pause) }
         if !r.attendees.isEmpty { parts.append("Invited: \(r.attendees.joined(separator: ", "))") }
         guard let transcript else {
-            if let points = livePoints(r, heard: []) { parts.append(points) }
+            if let points = livePoints(r, voices: []) { parts.append(points) }
             parts.append(liveOff == .afterOtherProfile ? LiveOffReason.afterOtherProfile.text
                          : "No live transcript yet. It needs Live transcript on in Settings and an AssemblyAI key; the full transcript comes after the call.")
             return parts.joined(separator: "\n")
         }
-        if let points = livePoints(r, heard: Array(Set(transcript.voiceNames.values))) { parts.append(points) }
+        if let points = livePoints(r, voices: transcript.otherVoices(owner: owner)) { parts.append(points) }
         let text = transcript.text(owner: owner, since: minutes.map { elapsed - $0 * 60 })
         parts.append(text.isEmpty ? "Nothing said in that time." : "Transcript (minutes:seconds into the recording):\n" + text)
         return parts.joined(separator: "\n")
     }
 
-    /// "Your points" of the call that records now, as its panel lists them: the series' and each person's, with
-    /// the owner's ticks and what Mossad heard. The check after the call decides.
-    /// The call's own points, as its panel lists them (`LivePoints`).
-    func livePointList(_ r: CallRecord, heard: [String] = []) -> [NextTimePoint] {
+    /// "Your points" of the call that records now, as its panel lists them (`LivePoints`): the series', the meeting's,
+    /// and the person's in a 1:1 with them, with the owner's ticks and what Mossad heard. The check after the call
+    /// decides.
+    func livePointList(_ r: CallRecord, voices given: [String?]? = nil) -> [NextTimePoint] {
         guard let book else { return [] }
         let (all, _, snapshot) = catalog(now: now)
         let series = LivePoints.series(ofLive: r, in: all, records: records, owner: owner, directory: PersonDirectory(profiles: profiles),
                                        ownerEmails: [settings.ownerEmail], aliases: SeriesCatalog.aliases(snapshot?.calendarEvents ?? []))
-        let names = heard.isEmpty ? Array(Set(r.speakerNames.values)) : heard
-        let people = LivePoints.personIDs(attendees: r.attendees, heard: names, people: saved)
-        return LivePoints.list(book, series: series, people: people, callID: r.id, record: r, canonical: saved.canonical)
+        // A person's points only in a 1:1 with them, by the invite or the one other voice heard (from live.json when
+        // the caller has no transcript in hand).
+        let voices = given ?? paths.flatMap { try? LiveTranscript.load(from: $0.callDirectory(r.id).appendingPathComponent(LiveTranscript.fileName)) }?
+            .otherVoices(owner: owner) ?? []
+        let oneOnOne = OneOnOne.person(ofLive: r, otherVoices: voices, owner: owner, directory: fullDirectory, ownerEmails: [settings.ownerEmail], people: saved)
+        return LivePoints.list(book, series: series, oneOnOne: oneOnOne, callID: r.id, record: r, canonical: saved.canonical)
     }
 
-    func livePoints(_ r: CallRecord, heard: [String]) -> String? {
+    func livePoints(_ r: CallRecord, voices: [String?]) -> String? {
         guard let paths else { return nil }
-        let list = livePointList(r, heard: heard)
+        let list = livePointList(r, voices: voices)
         guard !list.isEmpty else { return nil }
         let marks = LivePointMarks.load(from: paths.callDirectory(r.id)) ?? LivePointMarks()
         return "Your points for this call:\n" + list.map { p in

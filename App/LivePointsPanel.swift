@@ -17,7 +17,19 @@ struct LivePointsPanel: View {
 
     var body: some View {
         let points = controller.livePointList()
-        if !points.isEmpty {
+        let waiting = controller.livePointWaiting()
+        if points.isEmpty, !waiting.isEmpty {
+            // Not a 1:1 with these people: their points wait, and only their count shows.
+            HStack(alignment: .firstTextBaseline, spacing: Space.m) {
+                Text("Your points").textRole(.label).foregroundStyle(Palette.secondary)
+                    .frame(width: LabelColumn<EmptyView>.labelWidth, alignment: .trailing)
+                WaitingForOneOnOne(waiting: waiting)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.bottom, Space.m)
+            .overlay(alignment: .bottom) { Rectangle().fill(Palette.hairline).frame(height: 1) }
+            .detailColumn(top: top, bottom: 0)
+        } else if !points.isEmpty {
             // Each 15 s, for the planned end; the points and the marks redraw it as they change.
             TimelineView(.periodic(from: .now, by: 15)) { context in
                 let open = LivePointRules.open(points, marks: model.marks).count
@@ -31,7 +43,10 @@ struct LivePointsPanel: View {
                                 .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.secondary).lineLimit(1)
                                 .padding(.top, 2)
                         } else {
-                            LivePointRows(model: model, record: record, points: points, show: show)
+                            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
+                                LivePointRows(model: model, record: record, points: points, show: show)
+                                WaitingForOneOnOne(waiting: waiting)
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -194,5 +209,18 @@ struct LivePointRows: View {
             }
         }
         .help(help ?? "")
+    }
+}
+
+/// The count lines of the people of a call whose points wait for a 1:1 with them (`PointsForOneOnOneRow`).
+struct WaitingForOneOnOne: View {
+    let waiting: [(person: String, name: String, count: Int)]
+
+    var body: some View {
+        if !waiting.isEmpty {
+            VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                ForEach(waiting, id: \.person) { w in PointsForOneOnOneRow(personID: w.person, name: w.name, count: w.count) }
+            }
+        }
     }
 }

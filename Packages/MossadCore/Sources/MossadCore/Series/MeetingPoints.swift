@@ -281,8 +281,8 @@ extension NextTimeBook {
 extension NextTimeRules {
     /// The one other person of a 1:1: everyone invited other than the owner is one entry, and that entry is surely one
     /// saved person (`NextTimeInvite`). Nil for a group, a room, or a person who is not surely saved, and nil when the
-    /// call says otherwise: an invite that was not surely the call's, more than one voice on the call besides the
-    /// owner's, or a size of the meeting that is known and not a 1:1 (`MeetingFacts.size`, the Meetings filter's rule).
+    /// call says otherwise: an invite that was not surely the call's, more than one other person among the main voices
+    /// (`OneOnOne.otherPeople`), or a size of the meeting that is known and not a 1:1 (`MeetingFacts.size`, the Meetings filter's rule).
     /// A size that is not known, with one other voice or none, leaves it to the invite.
     public static func onlyOther(_ r: CallRecord, owner: String, directory: PersonDirectory, ownerEmails: [String] = [],
                                  people refs: PersonReferences) -> (id: String, name: String)? {
@@ -290,10 +290,8 @@ extension NextTimeRules {
               MeetingPrep.invited(r.attendees, owner: owner, directory: directory, ownerEmails: ownerEmails).count == 1 else { return nil }
         let ids = NextTimeInvite.personIDs(r.attendees, people: refs)
         guard ids.count == 1, let name = refs.name(of: ids[0]) else { return nil }
-        let ownerKey = PeopleDuplicates.normalized(owner)
-        let voices = Set(r.utterances.filter { $0.track == .them }.map(\.speakerKey))
-            .filter { key in r.speakerNames[key].map { PeopleDuplicates.normalized($0) != ownerKey } ?? true }
-        guard voices.count <= 1 else { return nil }
+        // People, not keys: two keys of one person are one, and a voice with a few words is none (`OneOnOne.otherPeople`).
+        guard OneOnOne.otherPeople(r, owner: owner, people: refs).count <= 1 else { return nil }
         let size = MeetingFacts(record: r, owner: owner).size(people: MeetingFilterPeople(directory: directory, owner: owner))
         guard size == .unknown || size == .oneOnOne else { return nil }
         return (ids[0], name)

@@ -190,12 +190,13 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
     }
 
     /// The open points for an upcoming meeting: its series' first, then its own when it is one meeting (`meeting`),
-    /// then the ones for each invited person. `people` are the saved ids of the invited people.
-    public func points(for series: MeetingSeries?, meeting: UpcomingMeeting? = nil, people: [String], canonical: (String) -> String = { $0 }) -> [NextTimePoint] {
+    /// then the person's when the meeting is a 1:1 with them (`OneOnOne`). A group meeting shows no person's points:
+    /// they wait for a 1:1, and the prep page only counts them (`personCounts`).
+    public func points(for series: MeetingSeries?, meeting: UpcomingMeeting? = nil, oneOnOne: String?, canonical: (String) -> String = { $0 }) -> [NextTimePoint] {
         let own = (series.map { points(of: $0).open } ?? []) + (meeting.map { points(forMeeting: $0) } ?? [])
         var seen = Set(own.map(\.id))
         var theirs: [NextTimePoint] = []
-        for id in people { for p in points(forPerson: id, canonical: canonical) where seen.insert(p.id).inserted { theirs.append(p) } }
+        if let id = oneOnOne { for p in points(forPerson: id, canonical: canonical) where seen.insert(p.id).inserted { theirs.append(p) } }
         return own + theirs
     }
 

@@ -207,7 +207,7 @@ final class LivePointsTests: XCTestCase {
 
     // MARK: The list
 
-    func testTheLiveListIsTheSeriesThenEachPersonWithTheTicksOfThisCall() {
+    func testTheLiveListIsTheSeriesThenThePersonOfTheOneOnOneWithTheTicksOfThisCall() {
         let earlier = [call("a", daysAgo: 14), call("b", daysAgo: 7)]
         let all = SeriesCatalog.build(records: earlier, upcoming: [], owner: owner, directory: PersonDirectory())
         var live = CallRecord(id: "live", platform: .meet, bundleID: "", start: now, end: now, status: .recording)
@@ -215,10 +215,6 @@ final class LivePointsTests: XCTestCase {
         live.attendees = ["Sam Carter"]
         let s = LivePoints.series(ofLive: live, in: all, records: earlier + [live], owner: owner, directory: PersonDirectory())
         XCTAssertEqual(s?.id, all[0].id)
-        let sam = Person(id: PersonID(rawValue: "p-sam"), displayName: "Sam Carter", origin: .voiceNaming, at: .distantPast)
-        let jo = Person(id: PersonID(rawValue: "p-jo"), displayName: "Jo Park", origin: .voiceNaming, at: .distantPast)
-        let refs = PersonReferences(people: [sam, jo])
-        XCTAssertEqual(LivePoints.personIDs(attendees: live.attendees, heard: ["Jo Park", "Sam Carter"], people: refs), ["p-sam", "p-jo"])
         var book = NextTimeBook()
         let one = book.add("API sunset", series: s, at: now)!
         let two = book.add("Hiring", series: s, at: now)!
@@ -226,7 +222,7 @@ final class LivePointsTests: XCTestCase {
         let old = book.add("Old", series: s, at: now)!
         book.update(old.id) { $0.done = .init(callID: "earlier", at: nil, quote: nil, date: now, byOwner: true) }
         book.update(two.id) { $0.done = .init(callID: "live", at: 30, quote: nil, date: now, byOwner: true) }
-        let list = LivePoints.list(book, series: s, people: ["p-sam", "p-jo"], callID: "live")
+        let list = LivePoints.list(book, series: s, oneOnOne: "p-jo", callID: "live")
         XCTAssertEqual(list.map(\.text), ["API sunset", "Hiring", "Offsite"])
         XCTAssertEqual(list.first?.id, one.id)
         // A call with no title of the calendar has no series.
