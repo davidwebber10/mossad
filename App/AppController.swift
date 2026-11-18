@@ -858,6 +858,10 @@ final class AppController: ObservableObject {
             detection.onFirstTitleKey = { @Sendable key in
                 CaptureQueue.queue.async { recorder.setFirstTitleKey(key) }
             }
+            // The code of the call's own Meet title, when its tab gave no link: the calendar match reads it, nothing else.
+            detection.onTitleLink = { @Sendable code in
+                CaptureQueue.queue.async { recorder.setTitleLink(code) }
+            }
             // The recorder ends a mute span where "muted" was last seen, not where the unmute was seen.
             detection.onMuteChangeAt = { @Sendable [weak self] muted, lastMutedSeen in
                 if self?.noRecordGate.isBlockingCall == true { return }

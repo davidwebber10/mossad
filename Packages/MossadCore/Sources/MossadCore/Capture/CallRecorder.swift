@@ -515,6 +515,13 @@ public final class CallRecorder: @unchecked Sendable {
         edit { $0.firstTitleKey = key }
     }
 
+    /// Saves the Meet code of the call's own window title, once, for a call whose tab gave no link at the start. On the
+    /// capture queue; nothing for a room recording.
+    public func setTitleLink(_ code: String) {
+        guard isRecording, !isManual, let r = record, r.meetingID == nil, r.titleLink == nil else { return }
+        edit { $0.titleLink = code }
+    }
+
     /// Saves a sign that another call may have started in this recording, at the recording's second of `time`, as a
     /// bookmark is saved. On the capture queue; nothing when no call records.
 

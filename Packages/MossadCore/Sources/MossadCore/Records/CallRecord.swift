@@ -378,6 +378,9 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// True once the cut of this recording by its marks was decided and gave no cut (`CutPlan` found none, or the cut
     /// was refused or failed): it is processed as one meeting and never decided again. Nil before the decision.
     public var cutChecked: Bool?
+    /// The Meet code that the call's own window title showed, when its tab gave no link at the start. Only the calendar
+    /// match reads it: never the join of two recordings, the do-not-record gate, or the move of a call. Nil otherwise.
+    public var titleLink: String?
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
         self.id = id
@@ -518,6 +521,7 @@ extension CallRecord {
         callMarks = try c.decodeIfPresent([CallMark].self, forKey: .callMarks)
         cutFrom = try c.decodeIfPresent(String.self, forKey: .cutFrom)
         firstTitleKey = try c.decodeIfPresent(String.self, forKey: .firstTitleKey)
+        titleLink = try c.decodeIfPresent(String.self, forKey: .titleLink)
         cutChecked = try c.decodeIfPresent(Bool.self, forKey: .cutChecked)
     }
 }

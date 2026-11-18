@@ -122,4 +122,60 @@ final class CallTitleWatchTests: XCTestCase {
         XCTAssertEqual(CallTitleWatch.key("Budget review"), "2be7ef95b4132e1d")
         XCTAssertEqual(CallTitleWatch.key("abc-defg-hij"), "fbc346f7fdf4b387")
     }
+
+    /// A Meet title that is the meeting's code gives that code in the form of a link's id; a name gives nothing.
+    func testTheMeetCodeOfATitle() {
+        let rows: [(String, String?)] = [
+            ("Meet - abc-defg-hij - Google Chrome", "abc-defg-hij"),
+            ("Meet – abc-defg-hij – Google Chrome", "abc-defg-hij"),
+            ("Meet - abc-defg-hij - Google Chrome - Work", "abc-defg-hij"),
+            ("Meet - abc-defg-hij", "abc-defg-hij"),
+            ("Meet - Weekly sync - Google Chrome", nil),
+            ("Meet - abcd-efg-hij - Google Chrome", nil),
+            ("Meet - abc-defg-hijk - Google Chrome", nil),
+            ("Meet - ABC-DEFG-HIJ - Google Chrome", nil),
+            ("Meet - abc-defg-hij review - Google Chrome", nil),
+            ("Meet - Google Chrome", nil),
+            ("Inbox - Mail - Google Chrome", nil),
+        ]
+        for (title, code) in rows {
+            XCTAssertEqual(CallTitleWatch.meetCode(inTitle: title), code, title)
+        }
+        XCTAssertEqual(CallTitleWatch.meetCode(inTitle: "Meet - abc-defg-hij - Google Chrome"),
+                       MeetingMatcher.meetingID(forTabURL: "https://meet.google.com/abc-defg-hij"))
+    }
+
+    /// The code is the call's link only on two readings within 10 s of exactly one Meet title, and only once.
+    func testTheCodeWatchNeedsTwoReadingsWithinTenSeconds() {
+        let code = window("abc-defg-hij")
+        var w = TitleCodeWatch()
+        XCTAssertNil(w.observe([code], at: at(0)))
+        XCTAssertEqual(w.observe([code], at: at(4)), "abc-defg-hij")
+        XCTAssertNil(w.observe([code], at: at(8)), "once")
+        XCTAssertEqual(w.code, "abc-defg-hij")
+
+        var far = TitleCodeWatch()
+        XCTAssertNil(far.observe([code], at: at(0)))
+        XCTAssertNil(far.observe([code], at: at(12)), "12 s apart: the count starts again")
+        XCTAssertEqual(far.observe([code], at: at(16)), "abc-defg-hij")
+
+        var two = TitleCodeWatch()
+        XCTAssertNil(two.observe([code, window("klm-nopq-rst")], at: at(0)))
+        XCTAssertNil(two.observe([code, window("klm-nopq-rst")], at: at(4)), "two meetings: not known which")
+
+        var name = TitleCodeWatch()
+        XCTAssertNil(name.observe([window("Weekly sync")], at: at(0)))
+        XCTAssertNil(name.observe([window("Weekly sync")], at: at(4)), "a name is no code")
+
+        var unknown = TitleCodeWatch()
+        XCTAssertNil(unknown.observe([code], at: at(0)))
+        XCTAssertNil(unknown.observe(nil, at: at(2)), "an unknown reading is no information")
+        XCTAssertNil(unknown.observe(["Inbox - Mail - Google Chrome"], at: at(3)))
+        XCTAssertEqual(unknown.observe([code], at: at(6)), "abc-defg-hij")
+
+        var other = TitleCodeWatch()
+        XCTAssertNil(other.observe([code], at: at(0)))
+        XCTAssertNil(other.observe([window("Weekly sync")], at: at(2)))
+        XCTAssertNil(other.observe([code], at: at(4)), "another title between the two readings starts the count again")
+    }
 }

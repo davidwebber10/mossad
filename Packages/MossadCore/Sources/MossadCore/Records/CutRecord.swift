@@ -32,6 +32,8 @@ public enum CutRecord {
         for k in ["markers", "muteSpans", "screens", "screenGaps", "deletedScreens", "parts", "callMarks", "pauses"] { f[k] = .divided }
         // The owner's own title and tags; tags the model gave are made again.
         for k in ["customTitle", "tags", "tagsSetByOwner"] { f[k] = .first }
+        // The code of the call's own title is taken before any mark: the first part's.
+        f["titleLink"] = .first
         // A notes-only meeting, a phone call, and a call whose mute silence is still to be written are refused, so
         // `source`, `personHint`, and `mutedAudioPending` hold their plain values. A recording marked for another profile is
         // cut only by its marks, and each part keeps the mark and is held for the owner.
@@ -101,6 +103,7 @@ public enum CutRecord {
             if k > 0 {
                 p.customTitle = nil
                 p.tagsSetByOwner = nil
+                p.titleLink = nil
             }
             if k > 0 || r.tagsSetByOwner != true { p.tags = [] }
             clearDerived(&p)

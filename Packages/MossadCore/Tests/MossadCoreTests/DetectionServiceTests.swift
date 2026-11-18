@@ -1129,6 +1129,56 @@ final class DetectionServiceTests: XCTestCase {
         XCTAssertEqual(marks(events), [], "the call took its own link, so its own tab is no change")
     }
 
+    /// The tab list is unknown and the windows show the meeting's code: on two readings within 10 s the code is the
+    /// call's link from its title, sent once. It is no mark, and the service's link and the mute check stay as they were.
+    func testACallWithNoLinkTakesTheCodeOfItsTitle() {
+        let chrome = "com.google.Chrome"
+        let mute = FakeMute()
+        let service = DetectionService(mic: mic, tabs: tabs, windows: windows, mute: mute)
+        tabs.unreadable = [chrome]
+        windows.answered[chrome] = ["Meet - abc-defg-hij - Google Chrome"]
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        var events: [DetectorEvent] = []
+        var links: [String] = []
+        service.onEvent = { events.append($0) }
+        service.onTitleLink = { links.append($0) }
+        for i in 0...60 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(links, ["abc-defg-hij"])
+        XCTAssertNil(service.meetingID)
+        XCTAssertEqual(marks(events), [])
+        service.checkMute(at: now.addingTimeInterval(121))
+        XCTAssertNil(mute.lastMeetingID)
+    }
+
+    /// A meeting's name in the title is no link; a call whose own tab gave its link at the start takes none from its
+    /// title; and a code that shows only after another meeting was marked is that meeting's, not the call's.
+    func testATitleGivesNoLinkForANameACallWithALinkOrAfterAMark() {
+        let chrome = "com.google.Chrome"
+        tabs.unreadable = [chrome]
+        windows.answered[chrome] = ["Meet - Weekly sync - Google Chrome"]
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        var links: [String] = []
+        var events: [DetectorEvent] = []
+        service.onEvent = { events.append($0) }
+        service.onTitleLink = { links.append($0) }
+        for i in 0...40 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(links, [], "a name")
+        windows.answered[chrome] = ["Meet - klm-nopq-rst - Google Chrome"]
+        for i in 41...90 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(marks(events).count, 1)
+        XCTAssertEqual(links, [], "the code of the meeting after a mark")
+
+        let withLink = DetectionService(mic: mic, tabs: tabs, windows: windows)
+        var linked: [String] = []
+        withLink.onTitleLink = { linked.append($0) }
+        tabs.unreadable = []
+        tabs.tabs[chrome] = [meetTab("abc-defg-hij", active: true)]
+        windows.answered[chrome] = ["Meet - abc-defg-hij - Google Chrome"]
+        for i in 0...40 { withLink.tick(at: now.addingTimeInterval(1000 + Double(i) * 2)) }
+        XCTAssertEqual(withLink.meetingID, "abc-defg-hij")
+        XCTAssertEqual(linked, [], "the call's own tab gave its link")
+    }
+
     /// The tab list is unknown (a second copy of the browser answers): the windows' Meet title changes, and a mark
     /// that is not sure, with the key of the new title, is written 10 s later, at the time of the change.
     func testATitleChangeMarksAsNotSure() {
