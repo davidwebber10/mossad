@@ -287,10 +287,10 @@ final class SeriesTests: XCTestCase {
         XCTAssertEqual(suggestions(records, goal: ("Open with the decision", false)).map(\.kind), [.goal])
     }
 
-    func testDismissalsLowerAKindAndNeverBlocksIt() {
+    func testDismissalsLikeThisLowerAKindAndNeverBlocksIt() {
         let records = [call("a", daysAgo: 14), call("b", daysAgo: 7, items: [ActionItem(owner: "Sam Carter", task: "Send the vendor list")])]
         XCTAssertEqual(suggestions(records).count, 1)
-        let no = (0..<2).map { SuggestionAnswer(key: "openItem:old\($0)", kind: "openItem", verdict: .dismiss, date: now) }
+        let no = (0..<2).map { SuggestionAnswer(key: "openItem:old\($0)", kind: "openItem", verdict: .dismiss, date: now, lowers: true) }
         XCTAssertTrue(suggestions(records, answers: no).isEmpty)
         // Old answers no longer count.
         let old = no.map { a -> SuggestionAnswer in var a = a; a.date = now.addingTimeInterval(-100 * 86_400); return a }

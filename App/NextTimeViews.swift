@@ -242,8 +242,9 @@ struct DiscussedRow: View {
 
 // MARK: The coach's suggestions
 
-/// The coach's suggestions, apart from the owner's points: each with its source, Keep, and Dismiss. A no lowers
-/// that kind, as on the Findings deck; "Never" stops the kind until Undo.
+/// The coach's suggestions, apart from the owner's points: each with its source, Keep, and Dismiss. Dismiss hides
+/// that one suggestion and teaches nothing; "Dismiss suggestions like this" also lowers the kind, as on the Findings
+/// deck; "Never" stops the kind until Undo.
 struct SuggestionList: View {
     @EnvironmentObject var controller: AppController
     let series: MeetingSeries
@@ -293,6 +294,7 @@ struct SuggestionList: View {
             .help("Move it into your points for next time")
             Menu {
                 Button("Dismiss") { dismiss(s, .dismiss) }
+                Button("Dismiss suggestions like this") { dismiss(s, .dismiss, lowersKind: true) }
                 Button("Never suggest \(s.kind.title.lowercased())") { dismiss(s, .never) }
             } label: {
                 Text("Dismiss").font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.ink)
@@ -301,20 +303,23 @@ struct SuggestionList: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .help("Not useful: the coach suggests fewer of this kind")
+            .help("Hide this suggestion")
         }
         .font(.system(size: Rhythm.bodySize))
         .padding(.vertical, 7).padding(.horizontal, 8)
         .background(Palette.accentTint.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
-    private func dismiss(_ s: SeriesSuggestion, _ verdict: SuggestionAnswer.Verdict) {
-        controller.changeNextTime { $0.answer(s, verdict) }
-        last = (s.key, verdict == .never ? "No more \(s.kind.title.lowercased()) for now." : "Dismissed. The coach suggests fewer of this kind.")
+    private func dismiss(_ s: SeriesSuggestion, _ verdict: SuggestionAnswer.Verdict, lowersKind: Bool = false) {
+        controller.changeNextTime { $0.answer(s, verdict, lowersKind: lowersKind) }
+        let words = verdict == .never ? "No more \(s.kind.title.lowercased()) for now."
+            : lowersKind ? "Dismissed. The coach suggests fewer of this kind." : "Dismissed."
+        last = (s.key, words)
     }
 }
 
-/// The kinds of suggestion that are off, blocked with "Never" or lowered by dismissals, with the way to turn them on.
+/// The kinds of suggestion that are off, blocked with "Never" or lowered by "Dismiss suggestions like this", with the
+/// way to turn them on.
 private struct OffKinds: View {
     @EnvironmentObject var controller: AppController
     let answers: [SuggestionAnswer]

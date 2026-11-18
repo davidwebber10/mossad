@@ -45,8 +45,9 @@ public struct SeriesSuggestion: Sendable, Equatable, Identifiable, Hashable {
 }
 
 /// Which kinds of suggestion the owner wants, from their answers, by the rules of the Findings deck
-/// (`CoachTraining`): a keep raises a kind, a dismiss lowers it, an answer counts for 90 days, and "never" blocks
-/// the kind until the owner allows it again. A lowered kind shows no more suggestions.
+/// (`CoachTraining`): a keep raises a kind, "Dismiss suggestions like this" lowers it, an answer counts for 90 days,
+/// and "never" blocks the kind until the owner allows it again. A lowered kind shows no more suggestions. A plain
+/// dismissal only hides its own suggestion.
 public struct SuggestionTraining: Equatable, Sendable {
     public private(set) var weights: [String: Int] = [:]
     public private(set) var blocked: Set<String> = []
@@ -59,7 +60,7 @@ public struct SuggestionTraining: Equatable, Sendable {
             switch a.verdict {
             case .never: blocked.insert(a.kind)
             case .keep where date.timeIntervalSince(a.date) <= CoachTraining.weightDays * 86_400: weights[a.kind, default: 0] += 1
-            case .dismiss where date.timeIntervalSince(a.date) <= CoachTraining.weightDays * 86_400: weights[a.kind, default: 0] -= 1
+            case .dismiss where a.lowers == true && date.timeIntervalSince(a.date) <= CoachTraining.weightDays * 86_400: weights[a.kind, default: 0] -= 1
             default: break
             }
         }
