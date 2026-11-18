@@ -895,11 +895,12 @@
             "Every 15 minutes, never during a call",
             "Meetings you marked do not record stay out",
             "The people who spoke join your People list with their address, only when your directory leaves no doubt who they are",
-            "A person you deleted or an address you said is not theirs stays gone"
+            "A person you deleted or an address you said is not theirs stays gone",
+            "Rather add people yourself? Turn it off in Settings, and everyone already added stays"
           ],
           "icon": "doc.richtext",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Google/GeminiImport.swift", "Packages/MossadCore/Sources/MossadCore/Google/GeminiNotes.swift", "Packages/MossadCore/Sources/MossadCore/Google/GeminiPeople.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Google/GeminiImport.swift", "Packages/MossadCore/Sources/MossadCore/Google/GeminiNotes.swift", "Packages/MossadCore/Sources/MossadCore/Google/GeminiPeople.swift", "App/GoogleSetup.swift"]
         },
         {
           "id": "directory",
