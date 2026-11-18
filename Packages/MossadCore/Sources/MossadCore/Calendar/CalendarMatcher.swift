@@ -212,11 +212,18 @@ public struct CalendarRead: Sendable {
     /// "No event" is an answer. The window app's sources always say so, as before.
     public var known: Bool
     public var google: CalendarSnapshot.Access.Read
-    public init(events: [CalendarEventInfo], known: Bool, google: CalendarSnapshot.Access.Read = .no) {
+    /// Whether the Mac's calendars could be read: `.no` without the permission.
+    public var mac: CalendarSnapshot.Access.Read
+    public init(events: [CalendarEventInfo], known: Bool, google: CalendarSnapshot.Access.Read = .no, mac: CalendarSnapshot.Access.Read = .yes) {
         self.events = events
         self.known = known
         self.google = google
+        self.mac = mac
     }
+
+    /// Every calendar that should answer did: no Google read failed, and the Mac's calendars were read unless Google was.
+    /// The cut by the marks reads anything less as an unknown calendar.
+    public var whole: Bool { known && google != .failed && (mac != .no || google == .yes) }
 }
 
 extension CalendarSource {
@@ -235,6 +242,12 @@ public enum CalendarMatcher {
         case .teams: ["teams.microsoft.com", "teams.cloud.microsoft", "teams.live.com"]
         case .inPerson, .phoneCall, .unknown: []
         }
+    }
+
+    /// The event names a call link of this platform in its text.
+    public static func hasCallLink(_ e: CalendarEventInfo, platform: Platform) -> Bool {
+        let text = (e.text.removingPercentEncoding ?? e.text).lowercased()
+        return linkMarkers(platform).contains { text.contains($0) }
     }
 
     /// With a meeting ID, the nearby event whose link carries that ID. Without one (the Zoom and Teams apps),
@@ -261,8 +274,7 @@ public enum CalendarMatcher {
             let callMarkers = Platform.callApps.flatMap(linkMarkers)
             candidates = timed.filter { e in overlap(e) > 0 && !callMarkers.contains { text(e).contains($0) } }
         } else {
-            let markers = linkMarkers(platform)
-            candidates = timed.filter { e in overlap(e) > 0 && markers.contains { text(e).contains($0) } }
+            candidates = timed.filter { e in overlap(e) > 0 && hasCallLink(e, platform: platform) }
         }
         guard let best = candidates.max(by: { overlap($0) < overlap($1) }) else { return nil }
         // A personal room has one id for all its meetings: only an event at the call's time is surely the call's.
@@ -370,6 +382,9 @@ public final class EventKitCalendarSource: CalendarSource, @unchecked Sendable {
     private var access = CalendarAccess(allowedAtStart: EKEventStore.authorizationStatus(for: .event) == .fullAccess)
 
     public init() {}
+
+    /// False without full access: an empty list is then no answer.
+    public func canRead() async -> Bool { EKEventStore.authorizationStatus(for: .event) == .fullAccess }
 
     /// The Mac's answer for this process: "fullAccess", "writeOnly", "denied", "restricted", or "notDetermined".
     /// It only reads the status: it never asks.

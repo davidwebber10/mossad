@@ -169,7 +169,8 @@ public actor Pipeline {
         defer { deciding.remove(callID) }
         let read = await calendar.read(from: r.start.addingTimeInterval(-600), to: r.end.addingTimeInterval(600))
         let length = Self.trackLengths(dir).values.max() ?? 0
-        let plan = CutPlan.decide(r, events: read.known ? read.events : nil, length: length)
+        // A read that failed in part (Google, or the Mac's calendars) is an unknown calendar, as in a worker.
+        let plan = CutPlan.decide(r, events: read.whole ? read.events : nil, length: length)
         let marks = r.callMarks?.count ?? 0
         if !plan.cuts.isEmpty {
             do {
@@ -177,6 +178,13 @@ public actor Pipeline {
                 Log.info("Cut plan of \(callID): \(marks) marks, \(plan.cuts.count) cuts, \(ids.count) meetings (\(plan.reasons.joined(separator: "; ")))")
                 return ids
             } catch {
+                // A cut that started and is not done goes on at the next run (`finishInterruptedCuts`): nothing is set, and
+                // neither the original nor a part is processed now.
+                if case CutError.unfinished = error { return [] }
+                if FileManager.default.fileExists(atPath: dir.appendingPathComponent(CutLedger.fileName).path) {
+                    Log.error("Cut plan of \(callID): the cut stopped after it began; it goes on at the next run")
+                    return []
+                }
                 let kind = if case CutError.refused = error { "refused" } else { "failed" }
                 Log.error("Cut plan of \(callID): \(marks) marks, \(plan.cuts.count) cuts, the cut was \(kind); processed as one meeting (\(plan.reasons.joined(separator: "; ")))")
             }

@@ -44,11 +44,14 @@ extension Pipeline {
     public enum CutError: LocalizedError, Equatable {
         case refused(String)
         case failed(String)
+        /// The cut began and is not done (a part waits to be put in place, a removal step waits): the next run goes on.
+        case unfinished
 
         public var errorDescription: String? {
             switch self {
             case let .refused(why): why
             case let .failed(why): "The cut failed and the recording is as it was: \(why)"
+            case .unfinished: "The cut is not done yet; it goes on at the next launch."
             }
         }
     }
@@ -174,6 +177,13 @@ extension Pipeline {
             throw CutError.failed(error.localizedDescription)
         }
         try await goForward(dir: dir, ledger: ledger)
+        // Done only when no ledger is left and the original is gone: a part that waits, a step that waits, or a cut that
+        // was undone gives no id to process.
+        if FileManager.default.fileExists(atPath: dir.appendingPathComponent(CutLedger.fileName).path)
+            || FileManager.default.fileExists(atPath: paths.callDirectory(ledger.ids[0]).appendingPathComponent(CutLedger.fileName).path) {
+            throw CutError.unfinished
+        }
+        if FileManager.default.fileExists(atPath: dir.path) { throw CutError.failed("the cut was undone") }
         Log.info("Cut \(callID) into \(ledger.ids.count) parts: \(ledger.ids.joined(separator: ", "))")
         return ledger.ids
     }
@@ -350,6 +360,11 @@ extension Pipeline {
             MoveEnded.shown(id, paths: paths)
         }
         try? FileManager.default.removeItem(at: dir.appendingPathComponent(CutLedger.fileName))
+        // Decided: one meeting, never cut again by its marks.
+        if var r = try? CallRecord.load(from: dir) {
+            r.cutChecked = true
+            try? r.save(to: dir)
+        }
         Log.error("The cut of \(ledger.original) was undone (\(why)); it is processed as one meeting")
     }
 

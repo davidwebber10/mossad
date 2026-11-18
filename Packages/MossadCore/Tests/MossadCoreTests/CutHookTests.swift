@@ -24,10 +24,19 @@ final class CutHookTests: XCTestCase {
         return l
     }
 
-    private func pipeline(_ a: Paths, events: [CalendarEventInfo] = []) -> Pipeline {
-        Pipeline(paths: a, transcriber: FakeTranscriber(), library: library(a), embeddings: ToneEmbeddingProvider(), calendar: FakeCalendar(events: events),
+    private func pipeline(_ a: Paths, events: [CalendarEventInfo] = [], calendar: CalendarSource? = nil, transcriber: FakeTranscriber = FakeTranscriber()) -> Pipeline {
+        Pipeline(paths: a, transcriber: transcriber, library: library(a), embeddings: ToneEmbeddingProvider(), calendar: calendar ?? FakeCalendar(events: events),
                  summarizer: nil, notify: { _ in }, now: { [t0] in t0 + 7200 }, ownerName: "Avery Webb")
     }
+
+    /// A calendar read with its own answer, as the window app's merged source gives it.
+    struct ReadCalendar: CalendarSource {
+        var read: CalendarRead
+        func events(from: Date, to: Date) async -> [CalendarEventInfo] { read.events }
+        func read(from: Date, to: Date) async -> CalendarRead { read }
+    }
+
+    private var second: String { CallRecorder.callID(for: t0 + cutAt) }
 
     /// A recorded call of 150 s with both tracks and the given marks.
     private func recorded(_ a: Paths, marks: [CallMark]?, moveTo: String? = nil, change: (inout CallRecord) -> Void = { _ in }) throws {
@@ -172,6 +181,90 @@ final class CutHookTests: XCTestCase {
         await p.finishInterruptedCuts()
         XCTAssertNotNil(load(a, id), "the original is whole")
         XCTAssertEqual(MoveEnded.all(a).map(\.callID), [], "no held reason for a part that never was")
+    }
+
+    // MARK: The release review
+
+    /// `process` gives each part to the steps once, and never the original.
+    func testProcessRunsEachPartOnce() async throws {
+        let a = temp()
+        try recorded(a, marks: [sureMark])
+        let transcriber = FakeTranscriber()
+        await pipeline(a, transcriber: transcriber).process(id)
+        XCTAssertNil(load(a, id))
+        let parts = try FileManager.default.contentsOfDirectory(atPath: a.audio.path).filter { !$0.hasPrefix(".") }.sorted()
+        XCTAssertEqual(parts.count, 2)
+        XCTAssertEqual(parts.compactMap { load(a, $0)?.status }.filter { $0 == .recorded }, [], "each part went through the steps")
+        XCTAssertEqual(transcriber.calls.count, 4, "two tracks for each of two parts, once")
+    }
+
+    /// A cut that fails (not refused): the original is whole, decided, and processed as one meeting.
+    func testAFailedCutLeavesTheOriginalAsOneMeeting() async throws {
+        let a = temp()
+        try recorded(a, marks: [sureMark])
+        // No folder of a part can be made.
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: a.audio.path)
+        addTeardownBlock { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: a.audio.path) }
+        let ids = await pipeline(a).cutIfNeeded(callID: id)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: a.audio.path)
+        XCTAssertEqual(ids, [id])
+        XCTAssertEqual(load(a, id)?.cutChecked, true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: a.callDirectory(id).appendingPathComponent("cut.json").path))
+    }
+
+    /// Minor 1: a part that cannot be put in place leaves the cut not done: no id to process, nothing set on the original,
+    /// and the next run goes on with the cut.
+    func testACutThatIsNotDoneGivesNothingToProcess() async throws {
+        let a = temp()
+        try recorded(a, marks: [sureMark])
+        let p = pipeline(a)
+        let blocked = a.callDirectory(second)
+        await p.setCutStop { point in
+            if point == "published saved" { try? FileManager.default.createDirectory(at: blocked, withIntermediateDirectories: true) }
+        }
+        let ids = await p.cutIfNeeded(callID: id)
+        XCTAssertEqual(ids, [], "the cut is not done")
+        XCTAssertNil(load(a, id)?.cutChecked)
+        XCTAssertEqual(load(a, id)?.status, .recorded, "the original is not processed")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: a.callDirectory(id).appendingPathComponent("cut.json").path))
+    }
+
+    /// Minor 1: a throw after `published` (a ledger that cannot be saved): no id, nothing set; the cut goes forward later.
+    func testAThrowAfterPublishedDoesNotProcessTheOriginal() async throws {
+        let a = temp()
+        try recorded(a, marks: [sureMark])
+        let p = pipeline(a)
+        let dir = a.callDirectory(id)
+        addTeardownBlock { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
+        await p.setCutStop { point in
+            if point == "published done" { try? FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path) }
+        }
+        let ids = await p.cutIfNeeded(callID: id)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path)
+        await p.setCutStop(nil)
+        XCTAssertEqual(ids, [])
+        XCTAssertNil(load(a, id)?.cutChecked)
+        await p.finishInterruptedCuts()
+        XCTAssertNil(load(a, id), "the cut went forward")
+    }
+
+    /// Minor 3: a Google read that failed is an unknown calendar: a change that is not sure makes no cut.
+    func testAFailedGoogleReadIsAnUnknownCalendar() async throws {
+        let a = temp()
+        try recorded(a, marks: [titleMark])
+        let near = CalendarEventInfo(title: "Made-up", start: t0 + cutAt, end: t0 + length, attendees: [], text: "https://meet.google.com/ddd-eeee-fff",
+                                     isAllDay: false)
+        let failed = ReadCalendar(read: CalendarRead(events: [near], known: true, google: .failed))
+        let ids = await pipeline(a, calendar: failed).cutIfNeeded(callID: id)
+        XCTAssertEqual(ids, [id])
+        try recorded(a, marks: [titleMark])
+        let noMac = ReadCalendar(read: CalendarRead(events: [near], known: true, google: .no, mac: .no))
+        let unread = await pipeline(a, calendar: noMac).cutIfNeeded(callID: id)
+        XCTAssertEqual(unread, [id], "the Mac's calendars could not be read and Google is not connected")
+        let read = ReadCalendar(read: CalendarRead(events: [near], known: true, google: .yes))
+        try recorded(a, marks: [titleMark])
+        let cut = await pipeline(a, calendar: read).cutIfNeeded(callID: id)
+        XCTAssertEqual(cut.count, 2, "the same calendar read whole cuts")
     }
 
     func testThePageOfACutRecordingShowsItsFirstPart() {
