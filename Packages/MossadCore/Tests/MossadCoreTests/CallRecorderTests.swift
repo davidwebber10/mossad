@@ -206,6 +206,12 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: paths.audio.path).isEmpty)
     }
 
+    /// A record of this build says it knows its pauses: none is an empty list, never a missing field.
+    func testANewRecordingKnowsItHasNoPause() throws {
+        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id)).pauses, [])
+    }
+
     func testAPauseIsSavedAsASpanWithBothWallTimes() throws {
         let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
         speak(from: 0, to: 30)
@@ -235,7 +241,7 @@ final class CallRecorderTests: XCTestCase {
         _ = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
         speak(from: 0, to: 120)
         let r = try XCTUnwrap(recorder.end(at: now, trimTo: nil))
-        XCTAssertNil(r.pauses)
+        XCTAssertEqual(r.pauses, [], "known: no pause")
         XCTAssertNil(r.callMarks)
     }
 

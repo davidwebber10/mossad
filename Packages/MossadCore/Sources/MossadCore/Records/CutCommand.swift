@@ -75,7 +75,7 @@ public enum CutCommand {
         }
         var lines = ["Meeting \(r.id) (\(r.status.rawValue)): \(span(length)) of audio."]
         let pauses = r.pauses ?? []
-        lines.append(pauses.isEmpty ? "Pauses: none." : "Pauses (\(pauses.count)): " + pauses.enumerated().map { n, p in
+        lines.append(r.pauses == nil ? "Pauses: not known (recorded by an older version)." : pauses.isEmpty ? "Pauses: none." : "Pauses (\(pauses.count)): " + pauses.enumerated().map { n, p in
             "\(n + 1). At \(seconds(p.at)) (\(clock(p.at))), from \(f.string(from: p.from)) to \(p.to.map(f.string) ?? "the end")."
         }.joined(separator: " "))
         lines.append(r.parts.count < 2 ? "Merged parts: none." : "Merged parts (\(r.parts.count)): " + r.parts.enumerated().map { n, p in
@@ -88,6 +88,9 @@ public enum CutCommand {
         for (k, p) in parts.enumerated() where k + 1 < borders.count {
             let from = borders[k], to = borders[k + 1]
             lines.append("  \(k + 1). \(p.id): \(seconds(from)) to \(seconds(to)) (\(span(to - from))), \(f.string(from: p.start)) to \(f.string(from: p.end)).")
+        }
+        for (k, at) in sorted.enumerated() where k + 1 < parts.count {
+            lines.append("Cut \(k + 1) at \(seconds(at)) of the audio, \(f.string(from: parts[k + 1].start)) on the clock.")
         }
         return lines.joined(separator: "\n")
     }

@@ -44,10 +44,14 @@ final class CutCommandTests: XCTestCase {
             Parts to make: 2.
               1. 20261117-143000-2: 0 s to 5292 s (88 min 12 s), 2026-11-01 08:00:00 to 2026-11-01 09:29:12.
               2. 20261117-160218: 5292 s to 8700 s (56 min 48 s), 2026-11-01 09:29:12 to 2026-11-01 10:26:00.
+            Cut 1 at 5292 s of the audio, 2026-11-01 09:29:12 on the clock.
             """)
         let plain = CutCommand.planText(record: CallRecord(id: "x", platform: .meet, bundleID: "", start: t0, end: t0 + 100, status: .recorded),
                                         length: 100, parts: [], cuts: [], timeZone: utc)
-        XCTAssertTrue(plain.contains("Pauses: none."))
+        XCTAssertTrue(plain.contains("Pauses: not known (recorded by an older version)."), plain)
+        var known = CallRecord(id: "x", platform: .meet, bundleID: "", start: t0, end: t0 + 100, status: .recorded)
+        known.pauses = []
+        XCTAssertTrue(CutCommand.planText(record: known, length: 100, parts: [], cuts: [], timeZone: utc).contains("Pauses: none."))
         XCTAssertTrue(plain.contains("Merged parts: none."))
     }
 

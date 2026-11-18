@@ -189,6 +189,8 @@ public final class CallRecorder: @unchecked Sendable {
         let dir = paths.callDirectory(id)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var r = CallRecord(id: id, platform: platform, bundleID: bundleID, start: start, end: start, status: .recording)
+        // Known from the start: no pause yet. A record with no list is from an older build, which saved none.
+        r.pauses = []
         r.meetingID = meetingID
         let themWriter: TrackWriter, meWriter: TrackWriter
         do {
