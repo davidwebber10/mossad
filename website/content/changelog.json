@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "2.29.1",
+      "date": "2026-11-18",
+      "notes": [
+        "Mossad now finds the right calendar event for a call: from the call's link, from the meeting's name in the Google Meet window, and from who spoke. A call that is not on your calendar no longer takes the name of another event, and your meetings of the last two weeks are checked again. Your points for a person now show in your one-on-ones with them, not in group meetings: a group meeting shows how many there are."
+      ]
+    },
+    {
       "version": "2.29.0",
       "date": "2026-11-18",
       "notes": [
