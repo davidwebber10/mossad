@@ -1,14 +1,17 @@
 import Foundation
 
 /// One place where a recording is cut: a second of the recording's own timeline (paused time left out), and the
-/// link of the call that starts there, when known.
+/// link of the call that starts there, when known. `titleKey`: the `CallMark.titleKey` of the change that the cut is
+/// at, when its marks had one (the later part's first title).
 public struct Cut: Codable, Equatable, Sendable {
     public var at: TimeInterval
     public var link: String?
+    public var titleKey: String?
 
-    public init(at: TimeInterval, link: String?) {
+    public init(at: TimeInterval, link: String?, titleKey: String? = nil) {
         self.at = at
         self.link = link
+        self.titleKey = titleKey
     }
 }
 
@@ -23,7 +26,9 @@ public enum CutRecord {
     /// `CutRecordTests.testEveryFieldOfARecordHasARule`, which lists the fields by reflection.
     public static let fields: [String: Rule] = {
         var f: [String: Rule] = [:]
-        for k in ["id", "start", "end", "status", "meetingID", "cutFrom"] { f[k] = .special }
+        // `firstTitleKey`: the original's in the first part; a later part's is its cut's title key (`Cut.titleKey`, else the
+        // mark at the cut), else nil.
+        for k in ["id", "start", "end", "status", "meetingID", "cutFrom", "firstTitleKey"] { f[k] = .special }
         for k in ["markers", "muteSpans", "screens", "screenGaps", "deletedScreens", "parts", "callMarks", "pauses"] { f[k] = .divided }
         // The owner's own title and tags; tags the model gave are made again.
         for k in ["customTitle", "tags", "tagsSetByOwner"] { f[k] = .first }
@@ -57,6 +62,8 @@ public enum CutRecord {
             p.status = .recorded
             p.cutFrom = r.cutFrom ?? r.id
             p.meetingID = k == 0 ? r.meetingID : cuts[k - 1].link
+            p.firstTitleKey = k == 0 ? r.firstTitleKey
+                : cuts[k - 1].titleKey ?? r.callMarks?.first { $0.at == cuts[k - 1].at && $0.titleKey != nil }?.titleKey
             p.start = k == 0 ? r.start : wallTime(of: from, in: r, afterPauses: true)
             p.end = last ? r.end : wallTime(of: to, in: r, afterPauses: false)
 

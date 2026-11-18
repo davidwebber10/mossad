@@ -29,7 +29,7 @@ final class CutRecordTests: XCTestCase {
 
     func testEveryFieldOfARecordHasARule() throws {
         XCTAssertEqual(storedFields, Set(CutRecord.fields.keys), "a field of CallRecord with no rule, or a rule with no field")
-        XCTAssertEqual(CutRecord.fields.count, 66)
+        XCTAssertEqual(CutRecord.fields.count, 67)
     }
 
     /// One table: each field of a record with every field set, before and after, in both parts.
@@ -57,7 +57,7 @@ final class CutRecordTests: XCTestCase {
         }
         let counts = Dictionary(grouping: CutRecord.fields.values, by: { $0 }).mapValues(\.count)
         XCTAssertEqual(counts[.divided], 8)
-        XCTAssertEqual(counts[.special], 6)
+        XCTAssertEqual(counts[.special], 7)
         XCTAssertEqual(counts[.first], 3)
         XCTAssertEqual(counts[.same], 6)
         XCTAssertEqual(counts[.cleared], 43)
@@ -85,6 +85,17 @@ final class CutRecordTests: XCTestCase {
         XCTAssertEqual(parts[1].pauses, [], "known: no pause in this part")
         XCTAssertNil(parts[0].callMarks)
         XCTAssertNil(parts[1].callMarks, "the mark of its own cut is not the second part's: it is never cut again by it")
+    }
+
+    func testTheFirstTitleOfEachPart() {
+        var r = recorded(length: 3000)
+        r.firstTitleKey = "weekly sync"
+        r.callMarks = [CallMark(at: 1000, time: t0 + 1000, link: nil, platform: .meet, source: .title, sure: false, titleKey: "kickoff"),
+                       CallMark(at: 2000, time: t0 + 2000, link: "ccc", platform: .meet, source: .tabs, sure: true)]
+        let parts = CutRecord.parts(of: r, at: [Cut(at: 1000, link: nil), Cut(at: 2000, link: "ccc")], ids: ["a", "b", "c"], length: 3000)
+        XCTAssertEqual(parts.map(\.firstTitleKey), ["weekly sync", "kickoff", nil], "a later part takes its own mark's title, else none")
+        let given = CutRecord.parts(of: r, at: [Cut(at: 990, link: "bbb", titleKey: "review")], ids: ["a", "b"], length: 3000)
+        XCTAssertEqual(given.map(\.firstTitleKey), ["weekly sync", "review"], "the plan's key of the change wins")
     }
 
     func testOnlyTheOwnersTagsGoToTheFirstPart() {
