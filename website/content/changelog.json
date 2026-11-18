@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "2.29.0",
+      "date": "2026-11-18",
+      "notes": [
+        "When Mossad sees the call change in your browser, two calls back to back now become two meetings, each with its own notes. The recording never stops for this: Mossad makes the two meetings after the call. Delete now removes everything of a meeting: its recording and notes, its tasks, its chats, your points for it, and the voice samples learned from it. The people stay."
+      ]
+    },
+    {
       "version": "2.28.1",
       "date": "2026-11-17",
       "notes": [
