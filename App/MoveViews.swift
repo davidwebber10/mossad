@@ -97,7 +97,8 @@ struct MoveLineView: View {
 }
 
 extension View {
-    /// The confirmation of "Move to": what the first profile already sent, what leaves with the meeting, and the
+    /// The confirmation of "Move to": what the first profile already sent, what leaves with the meeting (with its
+    /// points for next time when it has some), and the
     /// chats that are deleted and not moved.
     func moveConfirmation(_ controller: AppController) -> some View {
         let request = controller.moveRequest
@@ -111,7 +112,7 @@ extension View {
             Button("Cancel", role: .cancel) {}
         } message: {
             if let r = request {
-                Text(([MoveWords.sent(r.sent, from: active, to: r.target.name), MoveWords.leaves(active)]
+                Text(([MoveWords.sent(r.sent, from: active, to: r.target.name), MoveWords.leaves(active, points: r.points)]
                       + [MoveWords.chatsDeleted(r.deletedChats)].compactMap { $0 }).joined(separator: "\n\n"))
             }
         }

@@ -166,10 +166,12 @@ public enum MoveRemoval {
                 var tasks = try CommitmentBook.load(from: paths.commitments)
                 if tasks.forget(callID: callID, at: now) > 0 { try tasks.save(to: paths.commitments) }
                 try stop("books: the points")
-                // A point of this one meeting goes with it, and so does a point it moved to a person who goes.
+                // Exactly the points that went and that the target took (the ledger's list, as the points are now); a
+                // ledger of an older build has no list and empties what it emptied before.
                 let live = Set((library.identity?.people.people ?? []).filter(\.isLive).map(\.id.rawValue))
                 let gone = Set(out.people ?? []).subtracting(live)
-                _ = try NextTimeBook.change(in: paths.nextTime) { _ = $0.forget(callID: callID, record: r, gone: gone, at: now) }
+                let went = out.points.map { ids in out.pointsTaken == true ? Set(ids.compactMap(UUID.init(uuidString:))) : [] }
+                _ = try NextTimeBook.change(in: paths.nextTime) { _ = $0.forget(callID: callID, record: r, gone: gone, went: went, at: now) }
                 try stop("books: the chats")
                 _ = ChatStore(directory: paths.chats).deleteChats(forCall: callID)
             case .shares:

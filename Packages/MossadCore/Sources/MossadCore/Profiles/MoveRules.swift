@@ -155,8 +155,10 @@ public enum MoveWords {
         }
     }
 
-    public static func leaves(_ active: String) -> String {
-        "The meeting leaves “\(active)” with its tasks, its chats, and what Mossad learned from it."
+    /// `points`: the points for next time that go with the meeting (`NextTimeBook.moved`), named only when there are some.
+    public static func leaves(_ active: String, points: Int = 0) -> String {
+        let also = points > 0 ? " its points for next time," : ""
+        return "The meeting leaves “\(active)” with its tasks, its chats,\(also) and what Mossad learned from it."
     }
 
     /// The meeting's row while it moves: the share copied, else after a while where it waits.

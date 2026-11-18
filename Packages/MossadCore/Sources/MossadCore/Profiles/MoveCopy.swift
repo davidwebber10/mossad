@@ -59,16 +59,25 @@ public enum MoveCopy {
         public var chats: [Chat]
         /// The chats of the call that read other things: deleted in this profile with the meeting.
         public var deletedChats: [UUID]
+        /// The points for next time that go with it; nil when none does, and then no file is written.
+        public var points: MovedPoints?
+        /// This profile's ids of those points, in the file's order, for the ledger.
+        public var pointIDs: [UUID] = []
         public var bytes: Int64
     }
 
     public enum Refused: Error, Equatable { case inWork, unknownFile }
     public struct NotTheSame: Error {}
+    /// The points for next time do not read now (set aside and waiting for the other device's copy, or damaged): the
+    /// copy waits, as which points go is not known.
+    public struct PointsUnread: Error {}
     /// A call started: the copy stopped before its next file, and its part stays for the next run.
     public struct Held: Error {}
     public typealias OtherVolume = MoveFiles.OtherVolume
 
-    public static func plan(_ callID: String, in paths: Paths, to target: String, owner: OwnerIdentity, fetched: URL?) throws -> Plan {
+    /// `gone`: the people who go with the meeting (`MoveRemoval.peopleIDs`): a point the owner moved to one of them goes.
+    public static func plan(_ callID: String, in paths: Paths, to target: String, owner: OwnerIdentity, fetched: URL?,
+                            gone: Set<String> = []) throws -> Plan {
         guard MovePaths.isID(callID), MovePaths.isID(target) else { throw MovePaths.Invalid() }
         let dir = paths.callDirectory(callID)
         let r = try CallRecord.load(from: dir)
@@ -84,8 +93,10 @@ public enum MoveCopy {
         let chats = ChatStore(directory: paths.chats).all().filter { $0.callID == callID }
         let split = MovedChats.split(chats, title: r.title, otherTitles: others)
         let bytes = files.reduce(Int64(0)) { $0 + (size($1.from) ?? 0) }
+        guard let book = NextTimeBook.peek(in: paths.nextTime) else { throw PointsUnread() }
         return Plan(to: target, record: MovedRecord.prepared(r, to: target), ownerKeys: MovedRecord.ownerKeys(r, owner: owner), files: files,
-                    chats: split.moved, deletedChats: split.deleted.map(\.id), bytes: bytes)
+                    chats: split.moved, deletedChats: split.deleted.map(\.id), points: book.moved(callID: callID, record: r, gone: gone),
+                    pointIDs: book.going(callID: callID, record: r, gone: gone).map(\.id), bytes: bytes)
     }
 
     /// No audio on this Mac, and a backup copy that the record names.
@@ -193,14 +204,20 @@ public enum MoveCopy {
                 try stop("write a chat")
                 files.append(try written(chat, as: "\(MoveMarker.chatsFolder)/\(chat.id.uuidString).json", in: folder))
             }
+            var points: MoveMarker.File?
+            if let moved = plan.points {
+                try stop("write the points")
+                points = try written(moved, as: MovedPoints.fileName, in: folder)
+            }
             try stop("sync the folder")
             // Every folder of the part, the deepest first, so each entry is on the disk before the marker.
             let dirs = (fm.enumerator(at: folder, includingPropertiesForKeys: [.isDirectoryKey])?.allObjects as? [URL] ?? [])
                 .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
                 .sorted { $0.pathComponents.count > $1.pathComponents.count }
             for dir in dirs { try MoveFiles.fullSync(dir) }
-            let marker = MoveMarker(callID: plan.record.id, from: from, to: plan.to, made: now, token: token,
+            var marker = MoveMarker(callID: plan.record.id, from: from, to: plan.to, made: now, token: token,
                                     files: files.sorted { $0.path < $1.path }, ownerKeys: plan.ownerKeys)
+            marker.points = points
             try stop("write the marker")
             try marker.save(in: folder, claimed: false)
             try MoveFiles.fullSync(folder.appendingPathComponent(MoveMarker.fileName))
@@ -216,7 +233,8 @@ public enum MoveCopy {
         }
     }
 
-    /// Keeps in a part only the regular files of the plan; the record, the chats, and the marker are written again.
+    /// Keeps in a part only the regular files of the plan; the record, the chats, the points, and the marker are written
+    /// again.
     private static func keepOnly(_ paths: Set<String>, in folder: URL) throws {
         let fm = FileManager.default
         let base = folder.resolvingSymlinksInPath().path + "/"

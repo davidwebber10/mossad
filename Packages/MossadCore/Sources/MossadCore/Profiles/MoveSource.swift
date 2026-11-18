@@ -221,6 +221,17 @@ public struct MoveSource: Sendable {
     /// A move "after the call" whose end was not the owner's own Cancel keeps the call's mark: it is not processed here.
     public static func keepsMark(afterCall: Bool, why: MovePlan.Cancel) -> Bool { afterCall && why != .byOwner }
 
+    /// The copy waits for this profile's points for next time to read: one log line when the wait begins, and the
+    /// row says why (`MoveOut.pointsWait`).
+    private func waitForPoints(_ out: inout MoveOut, begun: MoveOut.State) throws -> Event {
+        guard out.pointsWait != true else { return .waiting }
+        Log.info("Move: the copy of \(out.callID) waits until the points for next time of this profile can be read")
+        guard let now = MoveOut.load(out.callID, paths: s.paths), now.state == begun, now.token == out.token else { throw Overtaken() }
+        out.pointsWait = true
+        try out.save(s.paths)
+        return .waiting
+    }
+
     private func step(_ callID: String) async throws -> Event {
         guard MovePaths.isID(callID), var out = MoveOut.load(callID, paths: s.paths), MovePaths.isID(out.to), MovePaths.isToken(out.token) else { return .nothing }
         let begun = out.state
@@ -260,6 +271,8 @@ public struct MoveSource: Sendable {
             let calling = s.calling, worker = s.worker
             let work = MoveWorkPlan.plan(.startCopy, callRecording: calling(), worker: worker)
             if work == .hold { return .waiting }
+            // Which points go is not known while this profile's book does not read: nothing is fetched or copied yet.
+            guard NextTimeBook.peek(in: s.paths.nextTime) != nil else { return try waitForPoints(&out, begun: begun) }
             do {
                 var fetched: URL?
                 let dir = s.paths.callDirectory(callID)
@@ -271,7 +284,10 @@ public struct MoveSource: Sendable {
                     fetched = await s.fetch(record, s.paths.moves.appendingPathComponent("\(callID).download"))
                     guard fetched != nil else { try save(.cancelling, cancel: .backupFailed); return .working }
                 }
-                let plan = try MoveCopy.plan(callID, in: s.paths, to: out.to, owner: OwnerIdentity.read(name: s.ownerName(), paths: s.paths), fetched: fetched)
+                // A point the owner moved to a person who goes with the meeting goes too; unknown is nobody.
+                let gone = Set(MoveRemoval.peopleIDs(callID, paths: s.paths, library: s.library) ?? [])
+                let plan = try MoveCopy.plan(callID, in: s.paths, to: out.to, owner: OwnerIdentity.read(name: s.ownerName(), paths: s.paths),
+                                             fetched: fetched, gone: gone)
                 if s.room(plan.bytes, b.incoming) == false { try save(.cancelling, cancel: .noRoom); return .working }
                 let progress = s.progress
                 let token = out.token, from = s.profileID, now = s.now(), stop = s.stop
@@ -280,6 +296,8 @@ public struct MoveSource: Sendable {
                                        held: { MoveWorkPlan.plan(.nextFile, callRecording: calling(), worker: worker) == .hold }, stop: stop)
                 }
                 if let fetched { try? FileManager.default.removeItem(at: fetched.deletingLastPathComponent()) }
+                out.points = plan.pointIDs.map(\.uuidString)
+                out.pointsWait = nil
                 try save(.copied)
             } catch is MoveStop {
                 throw MoveStop()
@@ -288,6 +306,8 @@ public struct MoveSource: Sendable {
             } catch is MoveCopy.Held {
                 // The part stays; the next look after the call goes on from it.
                 return .waiting
+            } catch is MoveCopy.PointsUnread {
+                return try waitForPoints(&out, begun: begun)
             } catch {
                 // The kind of the error only: its text can hold a path of the other profile.
                 Log.error("Move: the copy failed; the meeting stays here (\((error as NSError).domain) \((error as NSError).code))")
@@ -313,7 +333,12 @@ public struct MoveSource: Sendable {
         case .wait:
             return .waiting
         case .remove:
-            if out.state == .waiting { try save(.removing) }
+            if out.state == .waiting {
+                // The target took the points only when its claimed marker has an id for each (an older target, or one
+                // updated in the middle, writes none): else this profile keeps them.
+                if case .claimed(let m) = look, let went = out.points { out.pointsTaken = !went.isEmpty && m.pointIDs?.count == went.count }
+                try save(.removing)
+            }
             // A step that failed waits longer after each try (`MoveRetry`); "Try again" clears the time of the last.
             guard MoveRetry.due(tries: out.tries ?? 0, last: out.lastTry, now: s.now()) else { return .waiting }
             let before = out.nextStep
