@@ -175,3 +175,98 @@ final class DeleteCoachTests: XCTestCase {
         XCTAssertTrue(moved.answers.isEmpty, "a move takes the answers with it, as on main")
     }
 }
+
+/// I1 and I4: a meeting in delete is gone for every reader at once, and two deletes in work never save over each other.
+final class DeleteLedgerTests: XCTestCase {
+    private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+    private let a1 = "20261101-100000", b1 = "20261102-100000"
+
+    private func world() throws -> (Paths, VoiceLibrary) {
+        let a = Paths(root: tempDirectory())
+        addTeardownBlock { try? FileManager.default.removeItem(at: a.root) }
+        try writtenCall(in: a, id: a1)
+        try writtenCall(in: a, id: b1)
+        let lib = VoiceLibrary(directory: a.voices)
+        lib.identity = VoiceIdentity(people: PeopleStore(directory: a.people), samples: VoiceSampleStore(directory: a.voices))
+        return (a, lib)
+    }
+
+    private func pipeline(_ a: Paths, _ lib: VoiceLibrary) -> Pipeline {
+        Pipeline(paths: a, transcriber: FakeTranscriber(), library: lib, embeddings: ToneEmbeddingProvider(), calendar: FakeCalendar(),
+                 summarizer: nil, notify: { _ in }, now: { [t0] in t0 }, ownerName: "Avery Webb")
+    }
+
+    final class Gate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var waiter: CheckedContinuation<Void, Never>?
+        private var open = false
+        private(set) var reached = false
+        func wait() async {
+            await withCheckedContinuation { c in
+                lock.withLock {
+                    reached = true
+                    if open { c.resume() } else { waiter = c }
+                }
+            }
+        }
+        func release() { lock.withLock { open = true; waiter?.resume(); waiter = nil } }
+        var isReached: Bool { lock.withLock { reached } }
+    }
+
+    func testTwoDeletesInWorkNeverSaveOverEachOther() async throws {
+        let (a, lib) = try world()
+        let p = pipeline(a, lib)
+        let gate = Gate()
+        let a1 = a1
+        p.setForgetActions(CallForget.Actions(coach: { _ in }, stopShares: { callID in
+            var book = ShareBook.load(from: a.shares)
+            book.markStopping(callID: callID)
+            try? book.save(to: a.shares)
+        }, backup: { r in
+            if r.id == a1 { await gate.wait(); return true }
+            return false
+        }, removeFolder: { _ in true }))
+        let first = Task { await p.deleteMeeting(callID: a1) }
+        while !gate.isReached { try await Task.sleep(for: .milliseconds(10)) }
+        // B starts while A waits at its backup step, and B waits at its own.
+        _ = await p.deleteMeeting(callID: b1)
+        gate.release()
+        _ = await first.value
+        let entries = try XCTUnwrap(DeleteLedger.load(a)).entries
+        XCTAssertEqual(entries.map(\.callID), [b1], "A ended; B is still in the ledger")
+        XCTAssertEqual(entries.first?.removed, ["voices", "coach", "books", "shares"])
+        // A stop (a quit), then the next run with a backup that answers: B ends.
+        let next = pipeline(a, lib)
+        await next.finishDeletes()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: a.callDirectory(b1).path))
+        XCTAssertNil(DeleteLedger.load(a)?.entries.first)
+    }
+
+    /// I1: from the click the meeting is gone for every reader, while its removal waits.
+    func testAMeetingInDeleteIsGoneForEveryReader() async throws {
+        let (a, lib) = try world()
+        let p = pipeline(a, lib)
+        p.setForgetActions(CallForget.Actions(coach: { _ in }, stopShares: { _ in }, backup: { _ in false }, removeFolder: { _ in true }))
+        let started = await p.deleteMeeting(callID: a1)
+        XCTAssertNotNil(started)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: a.callDirectory(a1).path), "its removal waits")
+        XCTAssertEqual(ProcessingQueue(paths: a).allRecords().map(\.id), [b1], "the list, the search, and the queue")
+        XCTAssertTrue(MoveOut.syncHeld(a).contains(a1), "the sync push, the iPhone copy, the chat tools, and --mcp")
+        XCTAssertEqual(ChatTools(records: [try CallRecord.load(from: a.callDirectory(a1))], owner: "Avery Webb", paths: a).records.count, 0)
+        let merged = await p.merge(callIDs: [a1, b1])
+        XCTAssertNil(merged, "a meeting in delete is never joined")
+        await p.retry(a1)
+        XCTAssertTrue(DeleteLedger.load(a)?.contains(a1) == true)
+    }
+
+    /// I1: with no voice identity, a meeting that taught no voice is still removed at once.
+    func testADeleteWithNoIdentityEndsWhenTheCallTaughtNoVoice() async throws {
+        let (a, _) = try world()
+        var r = try CallRecord.load(from: a.callDirectory(a1))
+        r.speakerEmbeddings = [:]
+        try r.save(to: a.callDirectory(a1))
+        let p = pipeline(a, VoiceLibrary(directory: a.voices))
+        _ = await p.deleteMeeting(callID: a1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: a.callDirectory(a1).path))
+    }
+}

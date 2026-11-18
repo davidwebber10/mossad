@@ -334,15 +334,15 @@ extension Pipeline {
         let dir = paths.callDirectory(callID)
         guard MovePaths.isID(callID), !inFlight.contains(callID), let r = try? CallRecord.load(from: dir),
               r.status == .written || r.status == .failed, r.moveTo == nil,
-              !FileManager.default.fileExists(atPath: dir.appendingPathComponent(CutLedger.fileName).path),
-              var deletes = DeleteLedger.load(paths) else { return nil }
-        if !deletes.contains(callID) {
-            deletes.entries.append(.init(callID: callID, removed: [], started: now()))
-            do { try deletes.save(paths) } catch {
-                Log.error("Deleting \(callID) failed: \(error)")
-                return nil
-            }
+              !FileManager.default.fileExists(atPath: dir.appendingPathComponent(CutLedger.fileName).path) else { return nil }
+        // From here the meeting is gone for every reader (`DeleteLedger.ids`); the removal goes on behind.
+        guard changeDeletes({ d in
+            if !d.contains(callID) { d.entries.append(.init(callID: callID, removed: [], started: now())) }
+        }) else {
+            Log.error("Deleting \(callID) failed: the list of deletes in progress could not be read or saved")
+            return nil
         }
+        heavy.forget(callID)
         await finishDeletes(only: callID)
         return r
     }
@@ -350,35 +350,49 @@ extension Pipeline {
     /// The deletes that a quit stopped, or whose step waited, go on.
     public func finishDeletes() async { await finishDeletes(only: nil) }
 
+    /// The one writer of `deletes.json`: it reads, changes, and saves with no wait between, on this actor, so two
+    /// deletes in work never save over each other. False when the file does not read or does not save.
+    @discardableResult
+    func changeDeletes(_ change: (inout DeleteLedger) -> Void) -> Bool {
+        guard var deletes = DeleteLedger.load(paths) else { return false }
+        change(&deletes)
+        do { try deletes.save(paths) } catch {
+            Log.error("The list of deletes could not be saved: \(error)")
+            return false
+        }
+        return true
+    }
+
     private func finishDeletes(only: String?) async {
-        guard var deletes = DeleteLedger.load(paths) else {
+        guard let listed = DeleteLedger.load(paths) else {
             Log.error("The list of deletes in progress could not be read; nothing is removed now")
             return
         }
-        for callID in deletes.entries.map(\.callID) where only == nil || only == callID {
+        for callID in listed.entries.map(\.callID) where only == nil || only == callID {
             guard !inFlight.contains(callID) else { continue }
             inFlight.insert(callID)
             defer { inFlight.remove(callID) }
             let actions = forgetActions(removeFolder: { [paths] id in
                 (try? CallForget.removeFolder(id, paths: paths, outside: CallForget.deleting(paths), forgetLog: false, stop: { _ in })) ?? false
             })
-            while let i = deletes.entries.firstIndex(where: { $0.callID == callID }), let step = deletes.entries[i].nextStep {
+            // Each step reads the ledger as it is now, never a copy from before a wait.
+            while let step = DeleteLedger.load(paths)?.entries.first(where: { $0.callID == callID })?.nextStep {
                 let done = (try? await CallForget.run(step, callID: callID, purpose: .delete, paths: paths, library: library,
                                                       ownerName: ownerName, actions: actions, now: now())) ?? false
                 guard done else {
                     Log.error("Deleting \(callID) waits at its \(step.rawValue) step; the next run goes on")
                     break
                 }
-                deletes.entries[i].removed.append(step.rawValue)
-                if deletes.entries[i].nextStep == nil {
-                    deletes.entries.remove(at: i)
-                    heavy.forget(callID)
-                    Log.info("Deleted call \(callID)")
-                }
-                do { try deletes.save(paths) } catch {
-                    Log.error("The list of deletes could not be saved: \(error)")
-                    return
-                }
+                var ended = false
+                guard changeDeletes({ d in
+                    guard let i = d.entries.firstIndex(where: { $0.callID == callID }) else { return }
+                    d.entries[i].removed.append(step.rawValue)
+                    if d.entries[i].nextStep == nil {
+                        d.entries.remove(at: i)
+                        ended = true
+                    }
+                }) else { return }
+                if ended { Log.info("Deleted call \(callID)") }
             }
         }
     }

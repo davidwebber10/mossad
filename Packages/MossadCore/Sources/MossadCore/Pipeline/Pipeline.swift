@@ -169,6 +169,8 @@ public actor Pipeline {
             try? FileManager.default.removeItem(at: dir.appendingPathComponent(Self.quietFileName))
         }
         guard var r = try? CallRecord.load(from: dir) else { return }
+        // A meeting whose Delete has begun is never processed again.
+        if DeleteLedger.ids(paths).contains(id) { return }
         // A meeting that leaves for another profile sends nothing to this profile's providers.
         if r.moveTo != nil {
             Log.info("\(id) is moving to another profile; it is not processed here")
@@ -370,7 +372,7 @@ public actor Pipeline {
     /// Starts a failed or waiting call again now.
     public func retry(_ id: String) async {
         let dir = paths.callDirectory(id)
-        guard var r = try? CallRecord.load(from: dir), r.moveTo == nil else { return }
+        guard var r = try? CallRecord.load(from: dir), r.moveTo == nil, !DeleteLedger.ids(paths).contains(id) else { return }
         if r.status == .failed, let step = r.failedStep {
             r.status = step
             r.failedStep = nil
@@ -1201,6 +1203,12 @@ public actor Pipeline {
     /// are deleted with their notes, and the joined meeting gets a new summary and note. Returns its ID.
     @discardableResult
     public func merge(callIDs: [String]) async -> String? {
+        // A meeting whose Delete has begun is never joined: its removal would take the joined audio with it.
+        let deleting = DeleteLedger.ids(paths)
+        if let gone = callIDs.first(where: deleting.contains) {
+            Log.info("Not joining \(gone): it is being deleted")
+            return nil
+        }
         let records = callIDs.compactMap { try? CallRecord.load(from: paths.callDirectory($0)) }.sorted { $0.start < $1.start }
         guard records.count >= 2, records.count == Set(callIDs).count,
               records.allSatisfy({ ($0.status == .written || $0.status == .failed) && $0.moveTo == nil }) else { return nil }

@@ -103,7 +103,8 @@ public enum CallForget {
                 // never identified taught no voice, so there is nothing to wait for (not for a move: its rule is kept).
                 guard library.identity != nil else {
                     if case .move = purpose { return false }
-                    return r.speakerEmbeddings.isEmpty && r.status == .recorded
+                    // A call that holds no fingerprint taught no voice: nothing to wait for.
+                    return r.speakerEmbeddings.isEmpty
                 }
                 let owner = OwnerIdentity.read(name: ownerName, paths: paths).speakerKeys(in: r)
                 for (key, name) in r.speakerNames.sorted(by: { $0.key < $1.key }) {
@@ -143,7 +144,8 @@ public enum CallForget {
                 case .delete:
                     // A point for that one meeting goes only when no other recording of the meeting stays (by its
                     // recordings, or a sure invite); otherwise it only loses this call. Unknown keeps it.
-                    let others = MoveRemoval.otherRecords(excluding: callID, paths: paths)
+                    let deleting = DeleteLedger.ids(paths)
+                    let others = MoveRemoval.otherRecords(excluding: callID, paths: paths)?.filter { !deleting.contains($0.id) }
                     _ = try NextTimeBook.change(in: paths.nextTime) { book in
                         let goes = Set(book.visible.filter { p in
                             guard p.isForMeeting, let m = p.meeting, NextTimeBook.ownMeeting(m, callID: callID, record: r) else { return false }
@@ -281,6 +283,13 @@ public struct DeleteLedger: Codable, Equatable, Sendable {
     }
 
     public func contains(_ callID: String) -> Bool { entries.contains { $0.callID == callID } }
+
+    /// The meetings whose Delete has begun: gone for every reader from the owner's click (the list, the search, the
+    /// queue, a merge, the sync, the chat tools, `--mcp`, the iPhone copy), while their removal goes on.
+    public static func ids(_ paths: Paths) -> Set<String> {
+        guard FileManager.default.fileExists(atPath: url(paths).path) else { return [] }
+        return Set(load(paths)?.entries.map(\.callID) ?? [])
+    }
 }
 
 extension NextTimeBook {
