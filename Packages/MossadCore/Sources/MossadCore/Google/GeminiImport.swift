@@ -82,8 +82,11 @@ public enum GeminiImport {
     /// A recording of this event: it overlaps the event, and it ran on the event's link or took the event's invite.
     static func isSameMeeting(_ r: CallRecord, _ e: CalendarEventInfo, now: Date) -> Bool {
         guard overlap(r, e, now: now) > 0 else { return false }
+        // A recording with a link that the event does not hold is proved not to be that event's meeting.
+        let link = r.meetingID ?? r.titleLink
+        if let link, CalendarMatcher.match(for: r.platform, meetingID: link, start: .distantPast, end: .distantFuture, in: [e]) == nil { return false }
         if r.calendarTitle?.caseInsensitiveCompare(e.title) == .orderedSame { return true }
-        return CalendarMatcher.bestEvent(for: r.platform, meetingID: r.meetingID, start: r.start, end: r.status == .recording ? now : r.end, in: [e]) != nil
+        return CalendarMatcher.bestEvent(for: r.platform, meetingID: link, start: r.start, end: r.status == .recording ? now : r.end, in: [e]) != nil
     }
 
     /// Whether the document is ready: a transcript has its end line, or the meeting ended an hour ago. Gemini can
