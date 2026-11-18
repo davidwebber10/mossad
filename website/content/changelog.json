@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "2.28.0",
+      "date": "2026-11-17",
+      "notes": [
+        "The call that you record is now at the top of the window on every page: one click opens it. When Mossad cannot see your mute button, it says that you were muted when it last looked, and it keeps your mic. Save a point for any online meeting on your calendar, also one that happens once: a point that you did not raise in a one-on-one waits for the next time you see that person. With Google connected, the people who spoke in Gemini notes join your People list with their address, only when your directory leaves no doubt, and a person you deleted stays gone. A network that blocks your server now says so."
+      ]
+    },
+    {
       "version": "2.27.0",
       "date": "2026-11-17",
       "notes": [
