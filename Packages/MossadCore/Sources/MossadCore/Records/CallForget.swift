@@ -117,7 +117,13 @@ public enum CallForget {
                 try library.forgetSamples(ofCall: callID)
             case .coach:
                 try stop("coach: the memory")
-                try actions.coach { $0.forgetMoved(callID: callID) }
+                // A move takes the owner's answers and what they confirmed with it. A Delete and a cut keep them, as the
+                // Delete always did: each answer is a signal about the coaching, not about the meeting.
+                if case .move = purpose {
+                    try actions.coach { $0.forgetMoved(callID: callID) }
+                } else {
+                    try actions.coach { $0.forget(callID: callID) }
+                }
                 try stop("coach: the runner")
                 CoachRunner.forget(callID, paths: paths)
                 try stop("coach: the reads")

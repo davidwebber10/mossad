@@ -112,3 +112,46 @@ final class DeleteForgetTests: XCTestCase {
         XCTAssertNil(DeleteLedger.load(a)?.entries.first)
     }
 }
+
+/// I3: a Delete and a cut forget the call as the old Delete did; only a move drops the owner's answers.
+final class DeleteCoachTests: XCTestCase {
+    private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private func coachRun(_ purpose: CallForget.Purpose) async throws -> CoachProfile {
+        let a = Paths(root: tempDirectory())
+        addTeardownBlock { try? FileManager.default.removeItem(at: a.root) }
+        let r = try writtenCall(in: a)
+        var p = CoachProfile()
+        var q = CoachQuestion(statement: "Sam leads the budget", kind: .role, evidence: "said so", callID: r.id, at: 10, asked: t0)
+        q.status = .confirmed
+        p.questions.append(q)
+        p.facts.append(CoachFact(kind: .role, text: "Sam leads the budget", date: t0))
+        let card = CoachFinding(id: "card-\(r.id)", callID: r.id, date: t0, kind: .didWell, text: "Clear ask", skill: "asks")
+        p.answers.append(FindingAnswer(card, verdict: .never, date: t0))
+        p.history.append(CoachHistoryEntry(callID: r.id, title: "Zebra", date: t0, headline: "About the zebra"))
+        let box = Box(p)
+        let actions = CallForget.Actions(coach: { change in box.change(change) }, stopShares: { _ in }, backup: { _ in true }, removeFolder: { _ in true })
+        let lib = VoiceLibrary(directory: a.voices)
+        let done = try await CallForget.run(.coach, callID: r.id, purpose: purpose, paths: a, library: lib, ownerName: "Avery Webb", actions: actions, now: t0)
+        XCTAssertTrue(done)
+        return box.value
+    }
+
+    final class Box: @unchecked Sendable {
+        var value: CoachProfile
+        init(_ v: CoachProfile) { value = v }
+        func change(_ c: (inout CoachProfile) -> Void) { c(&value) }
+    }
+
+    func testADeleteKeepsTheOwnersAnswersAndConfirmedFacts() async throws {
+        for purpose in [CallForget.Purpose.delete, .cut([])] {
+            let p = try await coachRun(purpose)
+            XCTAssertEqual(p.answers.map(\.verdict), [.never], "the owner's never again stays: \(purpose)")
+            XCTAssertEqual(p.facts.count, 1, "a confirmed fact stays: \(purpose)")
+            XCTAssertTrue(p.history.isEmpty, "the call's review goes: \(purpose)")
+            XCTAssertNil(p.movedCalls, "a deleted call is no moved call: \(purpose)")
+        }
+        let moved = try await coachRun(.move(gone: [], went: nil))
+        XCTAssertTrue(moved.answers.isEmpty, "a move takes the answers with it, as on main")
+    }
+}
