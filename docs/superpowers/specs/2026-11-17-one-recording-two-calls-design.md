@@ -34,8 +34,7 @@ in the detector that can lose a call is worse than the defect. Its pure type `Ca
 - Two calls that follow each other in one recording become two meetings, each with its own title, people, summary,
   and note, with no action by the owner.
 - No audio is lost: not at the change, not by a wrong guess, not by a crash in the middle of the work.
-- During a call, nothing new can stop a recording. The one exception is a meeting that the owner marked "do not
-  record".
+- During a call, nothing new can stop a recording.
 - With one call in a recording, Mossad is exactly as today.
 - The meeting of 2026-11-17 is repaired.
 
@@ -135,8 +134,11 @@ Sources, in the order of trust:
 
 Rules:
 - A mark never ends a recording and never starts one.
-- **Do not record:** when a sure mark's new link, or the calendar event of that link, is under a do-not-record
-  rule, the recording ends there by the normal end path. A mark that is not sure does not end anything.
+- **Do not record (changed after the review of the marks, 2026-11-17):** a mark never ends a recording, also not
+  for a meeting under a do-not-record rule. The review found that this one exception could end a live call of the
+  owner by a wrong mark. So in release A a do-not-record meeting that follows a recorded call with no gap is
+  recorded and, after the cut, is its own meeting, which the owner can delete. Before this work it was joined to
+  the first call. Release B looks at this again, with the extension's sure signal.
 - While a change waits for its second reading, the tabs are read at most once per tick, and the probe's own
   back-off holds.
 - The live page, the Now card, and the live transcript go on unchanged after a mark. (The title in the window
