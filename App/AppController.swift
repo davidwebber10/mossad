@@ -2147,10 +2147,10 @@ final class AppController: ObservableObject {
         let events = await calendar.events(from: start.addingTimeInterval(-900), to: start.addingTimeInterval(5400))
         // A slow read for a call that has ended must not replace the calendar of the call that records now.
         if isRecording(callID) { liveCalendar = (callID, platform, meetingID, start, events) }
-        guard let event = CalendarMatcher.bestEvent(for: platform, meetingID: meetingID, start: start,
-                                                    end: start.addingTimeInterval(1800), in: events) else { return }
+        guard let found = CalendarMatcher.match(for: platform, meetingID: meetingID, start: start,
+                                                end: start.addingTimeInterval(1800), in: events) else { return }
         CaptureQueue.queue.async {
-            recorder.setCalendar(event, forCall: callID)
+            recorder.setCalendar(found.event, sure: found.sure, forCall: callID)
             Task { @MainActor in self.refresh() }
         }
     }

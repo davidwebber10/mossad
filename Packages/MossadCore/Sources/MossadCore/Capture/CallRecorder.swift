@@ -607,9 +607,14 @@ public final class CallRecorder: @unchecked Sendable {
 
     /// The invite found while the call runs, so the live call already shows its real title.
     /// Ignored when that call has ended meanwhile; the pipeline matches the calendar again anyway.
-    public func setCalendar(_ event: CalendarEventInfo, forCall id: String) {
+    /// `sure`: the matcher's own word (`CalendarMatcher.match`). A guess is saved as `inviteNotSure`, so nothing that
+    /// follows the invite (the points for next time of a move) takes it for the call's own.
+    public func setCalendar(_ event: CalendarEventInfo, sure: Bool = true, forCall id: String) {
         guard record?.id == id else { return }
-        edit { $0.setInvite(event) }
+        edit {
+            $0.setInvite(event)
+            $0.inviteNotSure = sure ? nil : true
+        }
     }
 
     /// A provisional title from the live transcript. Ignored when that call has ended or already has a generated one.

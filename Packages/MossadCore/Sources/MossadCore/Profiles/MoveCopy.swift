@@ -61,6 +61,8 @@ public enum MoveCopy {
         public var deletedChats: [UUID]
         /// The points for next time that go with it; nil when none does, and then no file is written.
         public var points: MovedPoints?
+        /// This profile's ids of those points, in the file's order, for the ledger.
+        public var pointIDs: [UUID] = []
         public var bytes: Int64
     }
 
@@ -73,7 +75,9 @@ public enum MoveCopy {
     public struct Held: Error {}
     public typealias OtherVolume = MoveFiles.OtherVolume
 
-    public static func plan(_ callID: String, in paths: Paths, to target: String, owner: OwnerIdentity, fetched: URL?) throws -> Plan {
+    /// `gone`: the people who go with the meeting (`MoveRemoval.peopleIDs`): a point the owner moved to one of them goes.
+    public static func plan(_ callID: String, in paths: Paths, to target: String, owner: OwnerIdentity, fetched: URL?,
+                            gone: Set<String> = []) throws -> Plan {
         guard MovePaths.isID(callID), MovePaths.isID(target) else { throw MovePaths.Invalid() }
         let dir = paths.callDirectory(callID)
         let r = try CallRecord.load(from: dir)
@@ -91,7 +95,8 @@ public enum MoveCopy {
         let bytes = files.reduce(Int64(0)) { $0 + (size($1.from) ?? 0) }
         guard let book = NextTimeBook.peek(in: paths.nextTime) else { throw PointsUnread() }
         return Plan(to: target, record: MovedRecord.prepared(r, to: target), ownerKeys: MovedRecord.ownerKeys(r, owner: owner), files: files,
-                    chats: split.moved, deletedChats: split.deleted.map(\.id), points: book.moved(callID: callID, record: r), bytes: bytes)
+                    chats: split.moved, deletedChats: split.deleted.map(\.id), points: book.moved(callID: callID, record: r, gone: gone),
+                    pointIDs: book.going(callID: callID, record: r, gone: gone).map(\.id), bytes: bytes)
     }
 
     /// No audio on this Mac, and a backup copy that the record names.

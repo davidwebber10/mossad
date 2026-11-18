@@ -179,6 +179,14 @@ public struct MoveOut: Codable, Equatable, Sendable {
     public var waitsSince: Date?
     /// The target took the meeting and has not finished after the last wait step: where it waits.
     public var targetWaits: MoveMarker.TakeInWait?
+    /// The ids of this profile's points for next time that went into the copy (`MovedPoints`), saved with `.copied`;
+    /// empty when none went. Nil in a ledger of an older build: its removal empties what it emptied before.
+    public var points: [String]?
+    /// Saved with `.removing`: the target's claimed marker lists an id for each point that went (`pointIDs`, which only
+    /// a target that takes the points writes). Only then does the removal empty them; else they stay here.
+    public var pointsTaken: Bool?
+    /// The copy waits because this profile's points for next time do not read now (`MoveCopy.PointsUnread`).
+    public var pointsWait: Bool?
 
     /// Why a removal step waits, as far as this profile can tell.
     public enum Wait: String, Codable, CaseIterable, Sendable { case peopleNotReady, shareNotSaved, backupNotDone, folderNotRemoved, failed }

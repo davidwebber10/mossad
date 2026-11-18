@@ -72,6 +72,40 @@ final class MovedPointsTests: XCTestCase {
         ]
     }
 
+    /// Review C1: a call in the slot of another meeting's invite, matched only as a guess, takes no point of that
+    /// meeting along and empties none. A point that the check found in the call (`meeting.calls`) still goes.
+    func testAGuessedInviteTakesNoPointAlongAndEmptiesNone() {
+        var guessed = record
+        guessed.inviteNotSure = true
+        let byInvite = point("Matched by the invite", 2) { $0.meeting = NextTimeMeeting(self.detail()) }
+        let found = point("Found by the check", 1) { $0.meeting = NextTimeMeeting(self.detail(), calls: [self.x]) }
+        XCTAssertFalse(NextTimeBook.goesWithMove(byInvite, callID: x, record: guessed))
+        XCTAssertTrue(NextTimeBook.goesWithMove(found, callID: x, record: guessed))
+        var book = NextTimeBook()
+        book.points = [found, byInvite]
+        XCTAssertEqual(book.moved(callID: x, record: guessed)?.points.map(\.text), ["Found by the check"])
+        book.forget(callID: x, record: guessed, went: Set(book.going(callID: x, record: guessed).map(\.id)), at: t0 + 100)
+        XCTAssertTrue(NextTimeBook.forgotten(book.points[0]))
+        XCTAssertEqual(book.points[1].text, "Matched by the invite", "the point keeps its words")
+        XCTAssertFalse(book.points[1].deleted)
+        XCTAssertNotNil(book.points[1].meeting?.detail)
+        // A ledger of an older build (no list) empties none by a guessed invite either.
+        var old = NextTimeBook()
+        old.points = [byInvite]
+        old.forget(callID: x, record: guessed, at: t0 + 100)
+        XCTAssertEqual(old.points[0].text, "Matched by the invite")
+    }
+
+    /// A ledger of an older build (no list of the points that went): `forget` empties what it emptied before this
+    /// branch, and nothing more (a point the check moved to a person who stays keeps its words: it did not go).
+    func testAnOlderLedgerEmptiesWhatItEmptiedBefore() {
+        var book = NextTimeBook()
+        book.points = table.map(\.point)
+        book.forget(callID: x, record: record, at: t0 + 100)
+        let words = Set(table.map(\.point).filter { p in book.points.first { $0.id == p.id }.map(NextTimeBook.forgotten) == true }.map(\.text))
+        XCTAssertEqual(words, ["Found by the check", "Matched by the invite", "No detail", "Deleted by hand"])
+    }
+
     func testWhichPointsGoWithTheMeeting() {
         for row in table {
             XCTAssertEqual(NextTimeBook.goesWithMove(row.point, callID: x, record: record), row.goes && !row.point.deleted, row.name)
@@ -82,18 +116,54 @@ final class MovedPointsTests: XCTestCase {
         XCTAssertEqual(moved?.points.map(\.text), table.filter(\.goes).map(\.point.text))
     }
 
-    /// The first profile keeps nothing of a point that goes: each one is the empty marker after `forget`, and every point
-    /// that stays keeps its words.
+    /// The first profile keeps nothing of a point that goes: each one is the empty marker after `forget` with the
+    /// ledger's list, and every point that stays keeps its words.
     func testEveryPointThatGoesIsEmptiedAndNoOtherIs() {
         var book = NextTimeBook()
         book.points = table.map(\.point)
-        let going = Set(book.visible.filter { NextTimeBook.goesWithMove($0, callID: x, record: record) }.map(\.id))
-        book.forget(callID: x, record: record, at: t0 + 100)
+        let going = Set(book.going(callID: x, record: record).map(\.id))
+        book.forget(callID: x, record: record, went: going, at: t0 + 100)
         for row in table where !row.point.deleted {
             let after = book.points.first { $0.id == row.point.id }!
             XCTAssertEqual(NextTimeBook.forgotten(after), going.contains(row.point.id), row.name)
             if !going.contains(row.point.id) { XCTAssertEqual(after.text, row.point.text, row.name) }
         }
+    }
+
+    /// Review I3: a point the owner moved by hand to a person who goes with the meeting goes too, as an open point of the
+    /// meeting. A person who stays keeps it.
+    func testAPointMovedByHandToAPersonWhoGoesGoesWithTheMeeting() throws {
+        let byHand = table.first { $0.name.hasPrefix("a meeting point the owner moved") }!.point
+        XCTAssertFalse(NextTimeBook.goesWithMove(byHand, callID: x, record: record))
+        XCTAssertTrue(NextTimeBook.goesWithMove(byHand, callID: x, record: record, gone: ["p-sam"]))
+        XCTAssertFalse(NextTimeBook.goesWithMove(byHand, callID: x, record: record, gone: ["p-jo"]))
+        var book = NextTimeBook()
+        book.points = [byHand]
+        let moved = try XCTUnwrap(book.moved(callID: x, record: record, gone: ["p-sam"]))
+        XCTAssertEqual(moved.points.map(\.text), ["Moved by hand"])
+        XCTAssertNil(moved.points[0].done)
+        XCTAssertEqual(book.going(callID: x, record: record, gone: ["p-sam"]).map(\.id), [byHand.id])
+    }
+
+    /// Review I2: the removal empties exactly the points that went (the ledger's ids), as they are at the removal. A
+    /// point that became the meeting's after the copy keeps its words and only loses the call.
+    func testTheRemovalEmptiesExactlyThePointsThatWent() {
+        var book = NextTimeBook()
+        book.points = table.map(\.point)
+        let went: Set<UUID> = [table[0].point.id, table[5].point.id]
+        book.forget(callID: x, record: record, went: went, at: t0 + 100)
+        for row in table where !row.point.deleted {
+            let after = book.points.first { $0.id == row.point.id }!
+            XCTAssertEqual(NextTimeBook.forgotten(after), went.contains(row.point.id), row.name)
+        }
+        let kept = book.points.first { $0.id == table[1].point.id }!
+        XCTAssertEqual(kept.text, "Matched by the invite", "a point of the meeting that did not go keeps its words")
+        XCTAssertFalse(book.points.first { $0.id == table[2].point.id }!.meeting?.calls?.contains(x) ?? false, "and loses the call")
+        // An empty list (nothing went, or the target did not take the points) empties nothing.
+        var none = NextTimeBook()
+        none.points = table.map(\.point)
+        none.forget(callID: x, record: record, went: [], at: t0 + 100)
+        XCTAssertFalse(none.points.contains(where: NextTimeBook.forgotten))
     }
 
     func testNoPointsIsNoFile() {

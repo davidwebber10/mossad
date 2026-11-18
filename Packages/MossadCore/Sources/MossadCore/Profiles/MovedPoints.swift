@@ -99,27 +99,45 @@ public struct MovedPoints: Codable, Equatable, Sendable {
 
 extension NextTimeBook {
     /// Whether a point goes with the meeting `callID` when it moves to another profile: a point of that one meeting
-    /// (by its recordings, or by `record`'s invite for a call marked during the call, which was never checked), and a
-    /// point that the check moved from that meeting to the person of a 1:1 ("Not raised": the check adds the call to
-    /// both `meeting.calls` and `carried` as it gives the point to the person). A series point, a point the owner made
-    /// for a person, and one the owner moved by hand stay.
-    public static func goesWithMove(_ p: NextTimePoint, callID: String, record: CallRecord?) -> Bool {
+    /// (by its recordings, or by `record`'s invite only when that invite is sure: a call marked during the call was
+    /// never checked, and a guess may be another meeting's slot), a point that the check moved from that meeting to the
+    /// person of a 1:1 ("Not raised": the check adds the call to both `meeting.calls` and `carried` as it gives the
+    /// point to the person), and a point of the meeting that the owner moved by hand to a person in `gone` (the people
+    /// who go with the meeting). A series point, a point the owner made for a person, and one the owner moved by hand
+    /// to a person who stays, stay.
+    public static func goesWithMove(_ p: NextTimePoint, callID: String, record: CallRecord?, gone: Set<String> = []) -> Bool {
         guard !p.deleted, let m = p.meeting else { return false }
         let found = m.calls?.contains(callID) == true
-        if p.isForMeeting { return found || record.map(m.matches) == true }
-        return p.isForPerson && found && p.carried?.contains(callID) == true
+        let own = ownMeeting(m, callID: callID, record: record)
+        if p.isForMeeting { return own }
+        guard p.isForPerson else { return false }
+        return (found && p.carried?.contains(callID) == true) || (own && p.personID.map(gone.contains) == true)
+    }
+
+    /// The point's meeting is the call: by its recordings, or by the record's invite when that invite is sure.
+    static func ownMeeting(_ m: NextTimeMeeting, callID: String, record: CallRecord?) -> Bool {
+        if m.calls?.contains(callID) == true { return true }
+        guard let record, record.inviteNotSure != true else { return false }
+        return m.matches(record)
+    }
+
+    /// The points that go with the meeting, in their order.
+    public func going(callID: String, record: CallRecord?, gone: Set<String> = []) -> [NextTimePoint] {
+        visible.filter { Self.goesWithMove($0, callID: callID, record: record, gone: gone) }.sorted { ($0.rank, $0.created) < ($1.rank, $1.created) }
     }
 
     /// The points that go with the meeting, in their order; nil when none does (then no file goes).
-    public func moved(callID: String, record: CallRecord?) -> MovedPoints? {
-        let going = visible.filter { Self.goesWithMove($0, callID: callID, record: record) }.sorted { ($0.rank, $0.created) < ($1.rank, $1.created) }
+    public func moved(callID: String, record: CallRecord?, gone: Set<String> = []) -> MovedPoints? {
+        let going = going(callID: callID, record: record, gone: gone)
         guard !going.isEmpty else { return nil }
         return MovedPoints(checked: checked.contains(callID), points: going.map { p in
-            let done = p.done.map { d -> MovedPoints.Point.Done in
+            // A point the owner moved to a person who goes arrives as an open point of the meeting, as one the check moved.
+            let done = p.isForMeeting || p.carried?.contains(callID) == true ? p.done : nil
+            let moved = done.map { d -> MovedPoints.Point.Done in
                 let here = d.callID == callID
                 return .init(inThisCall: here, at: here ? d.at : nil, quote: here ? d.quote : nil, date: d.date, byOwner: d.byOwner)
             }
-            return MovedPoints.Point(text: p.text, created: p.created, rank: p.rank, done: done,
+            return MovedPoints.Point(text: p.text, created: p.created, rank: p.rank, done: moved,
                                      reopened: p.reopened?.contains(callID) == true ? true : nil,
                                      meeting: p.meeting?.detail.map { .init(title: $0.title, start: $0.start, end: $0.end, event: $0.event) })
         })

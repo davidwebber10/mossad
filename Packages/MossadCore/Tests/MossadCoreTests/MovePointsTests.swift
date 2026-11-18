@@ -235,7 +235,8 @@ final class MovePointsTests: XCTestCase {
         init(_ v: MoveRules.TargetPlace) { value = v }
     }
 
-    private func source(_ a: Paths, place: Place, stop: @escaping @Sendable (String) throws -> Void = { _ in }) -> MoveSource {
+    private func source(_ a: Paths, place: Place, fetch: @escaping @Sendable (CallRecord, URL) async -> URL? = { _, _ in nil },
+                        stop: @escaping @Sendable (String) throws -> Void = { _ in }) -> MoveSource {
         let lib = library(a)
         let pipeline = Pipeline(paths: a, transcriber: FakeTranscriber(), library: lib, embeddings: ToneEmbeddingProvider(), calendar: FakeCalendar(),
                                 summarizer: FakeSummarizer(), notify: { _ in }, now: { [t0] in t0 }, ownerName: "Avery Webb")
@@ -250,7 +251,7 @@ final class MovePointsTests: XCTestCase {
         }, backup: { r in CloudArchive.rememberDeletes(of: r, paths: a); return true },
         removeFolder: { id, to in await pipeline.removeMoved(callID: id, target: to, stop: stop) })
         return MoveSource(MoveSource.Setup(paths: a, profileID: "default", pipeline: pipeline, library: lib, ownerName: { "Avery Webb" },
-                                           target: { _ in place.value }, fetch: { _, _ in nil }, usage: { _ in [] }, actions: actions,
+                                           target: { _ in place.value }, fetch: fetch, usage: { _ in [] }, actions: actions,
                                            now: { [t0] in t0 }, stop: stop))
     }
 
@@ -352,6 +353,155 @@ final class MovePointsTests: XCTestCase {
         XCTAssertTrue(events.contains(.cancelled(.refusedIDTaken)), "\(events)")
         XCTAssertEqual(bytes(a), before)
         XCTAssertFalse(FileManager.default.fileExists(atPath: b.nextTime.appendingPathComponent(NextTimeBook.fileName).path))
+    }
+
+    private func finish(_ a: Paths, _ b: Paths, place: Place) async {
+        for _ in 0..<6 {
+            _ = await source(a, place: place).run(id)
+            _ = intake(b).run()
+        }
+        _ = await source(a, place: place).run(id)
+    }
+
+    private func setAside(_ dir: URL) throws {
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent(NextTimeBook.fileName)
+        let r = StoredFile.Recovery(file: NextTimeBook.fileName, kept: "next-time.unreadable.json", at: t0, awaitsMerge: true, told: false)
+        try JSONEncoder.callRecord.encode(r).write(to: StoredFile.marker(for: file))
+    }
+
+    /// Review I2: the ledger keeps the ids of the points that went into the copy; a change in the window between the
+    /// copy and `taken` does not put a point in both profiles, and a point that became the meeting's after the copy
+    /// keeps its words here.
+    func testTheLedgerListsThePointsThatWentAndTheRemovalEmptiesOnlyThose() async throws {
+        let (a, b) = try world()
+        let place = Place(.paths(b))
+        _ = await source(a, place: place).start(id, to: work)
+        _ = await source(a, place: place).run(id)
+        XCTAssertEqual(MoveOut.load(id, paths: a)?.points, [uuid(1), uuid(2)].map(\.uuidString))
+        try NextTimeBook.change(in: a.nextTime) { book in
+            book.move(self.uuid(1), toPerson: "p-sam", name: "Sam Carter", at: self.t0)
+            var late = NextTimePoint(text: "A point made after the copy", rank: 3, created: self.made)
+            late.meeting = NextTimeMeeting(nil, calls: [self.id])
+            book.points.append(late)
+        }
+        await finish(a, b, place: place)
+        XCTAssertEqual(MoveOut.load(id, paths: a)?.state, .done)
+        XCTAssertEqual(MoveOut.load(id, paths: a)?.pointsTaken, true)
+        XCTAssertEqual(try NextTimeBook.load(from: a.nextTime).visible.map(\.text), ["Hiring", "Ask Sam about the trip", "A point made after the copy"])
+        XCTAssertEqual(try NextTimeBook.load(from: b.nextTime).visible.map(\.text), ["Ask about the zebra budget", "The crossing"])
+    }
+
+    /// Review I4: a target that did not take the points (an older build, or one updated in the middle) writes no
+    /// `pointIDs`: the first profile keeps its points.
+    func testATargetThatDidNotTakeThePointsLeavesThemInTheFirstProfile() async throws {
+        let (a, b) = try world()
+        let place = Place(.paths(b))
+        _ = await source(a, place: place).start(id, to: work)
+        _ = await source(a, place: place).run(id)
+        XCTAssertEqual(intake(b).run(), [id])
+        let folder = MoveMarker.folder(id, in: b)
+        var m = try XCTUnwrap(claimed(b))
+        m.pointIDs = nil
+        try m.save(in: folder, claimed: true)
+        await finish(a, b, place: place)
+        XCTAssertEqual(MoveOut.load(id, paths: a)?.state, .done)
+        XCTAssertEqual(MoveOut.load(id, paths: a)?.pointsTaken, false)
+        XCTAssertEqual(try NextTimeBook.load(from: a.nextTime).visible.map(\.text),
+                       ["Ask about the zebra budget", "The crossing", "Hiring", "Ask Sam about the trip"])
+    }
+
+    /// Review I1: a refusal after the points were added takes them out of the target again.
+    func testALateRefusalTakesThePointsOutOfTheTarget() async throws {
+        let (a, b) = try world()
+        let place = Place(.paths(b))
+        _ = await source(a, place: place).start(id, to: work)
+        _ = await source(a, place: place).run(id)
+        _ = intake(b, stop: { if $0 == "sync the meeting" { throw MoveStop() } }).run()
+        XCTAssertEqual(try NextTimeBook.load(from: b.nextTime).visible.count, 2, "the points were added")
+        let audio = b.callDirectory(id).appendingPathComponent("recording.m4a")
+        let h = try FileHandle(forWritingTo: audio)
+        try h.truncate(atOffset: 10)
+        try h.close()
+        XCTAssertEqual(intake(b).run(), [])
+        XCTAssertEqual(claimed(b)?.refusal, .notWhole)
+        XCTAssertTrue(try NextTimeBook.load(from: b.nextTime).visible.isEmpty, "no point of the meeting is left in the target")
+        let local = (try? String(contentsOf: b.nextTime.appendingPathComponent(MeetingPointsLocal.fileName), encoding: .utf8)) ?? ""
+        XCTAssertFalse(local.contains("Zebra budget"))
+        await finish(a, b, place: place)
+        XCTAssertNil(MoveOut.load(id, paths: a))
+        XCTAssertEqual(try NextTimeBook.load(from: a.nextTime).visible.count, 4, "the first profile keeps its points")
+    }
+
+    /// The points are in the target's book before the arriving mark comes off the record.
+    func testThePointsAreAddedBeforeTheMarkGoes() throws {
+        let (_, b, _) = try arrive()
+        _ = intake(b, stop: { if $0 == "take the mark off" { throw MoveStop() } }).run()
+        XCTAssertEqual(try CallRecord.load(from: b.callDirectory(id)).moveTo, work, "still marked")
+        XCTAssertEqual(try NextTimeBook.load(from: b.nextTime).visible.count, 2)
+    }
+
+    /// The marker's ids do not fit the file: the take-in waits at the points and never writes `taken`.
+    func testPointIDsThatDoNotFitTheFileHoldTheTakeIn() throws {
+        let (_, b, _) = try arrive()
+        intake(b).step(id)
+        intake(b).step(id)
+        var m = try XCTUnwrap(claimed(b))
+        XCTAssertEqual(m.pointIDs?.count, 2)
+        m.pointIDs = [UUID().uuidString]
+        try m.save(in: MoveMarker.folder(id, in: b), claimed: true)
+        _ = intake(b).run()
+        XCTAssertEqual(claimed(b)?.intake, .takingIn)
+        XCTAssertEqual(claimed(b)?.waits, .points)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: b.nextTime.appendingPathComponent(NextTimeBook.fileName).path))
+    }
+
+    /// The target's book was set aside and waits for the other device's copy: the points wait, then go on.
+    func testATargetBookSetAsideHoldsThePoints() throws {
+        let (_, b, _) = try arrive()
+        try setAside(b.nextTime)
+        _ = intake(b).run()
+        XCTAssertEqual(claimed(b)?.waits, .points)
+        try FileManager.default.removeItem(at: StoredFile.marker(for: b.nextTime.appendingPathComponent(NextTimeBook.fileName)))
+        let later = MoveIntake(paths: b, me: work, library: library(b), ownerName: { "Avery Webb" }, voiceFingerprints: { true },
+                               now: { [t0] in t0 + 86_400 })
+        XCTAssertEqual(later.run(), [id])
+        XCTAssertEqual(try NextTimeBook.load(from: b.nextTime).visible.count, 2)
+    }
+
+    /// Review M1: the first profile's book was set aside: the copy waits with its own words, before any download, and
+    /// goes on when the book reads.
+    func testAFirstProfileBookSetAsideHoldsTheCopyWithItsOwnWords() async throws {
+        let (a, b) = try world()
+        // Only in the backup: each look would download it again.
+        var r = try CallRecord.load(from: a.callDirectory(id))
+        r.cloudKey = "recordings/\(id)/recording.m4a"
+        r.cloudHash = String(repeating: "c", count: 64)
+        try r.save(to: a.callDirectory(id))
+        for name in ["me.caf", "them.caf", "recording.m4a"] { try FileManager.default.removeItem(at: a.callDirectory(id).appendingPathComponent(name)) }
+        try setAside(a.nextTime)
+        final class Count: @unchecked Sendable { var n = 0 }
+        let fetched = Count()
+        let place = Place(.paths(b))
+        let s = source(a, place: place, fetch: { _, _ in fetched.n += 1; return nil })
+        let started = await s.start(id, to: work)
+        XCTAssertEqual(started, .started)
+        for _ in 0..<3 {
+            let event = await s.run(id)
+            XCTAssertEqual(event, .waiting)
+        }
+        XCTAssertEqual(fetched.n, 0, "no download while the points do not read")
+        let out = try XCTUnwrap(MoveOut.load(id, paths: a))
+        XCTAssertEqual(out.state, .copying)
+        XCTAssertEqual(out.pointsWait, true)
+        XCTAssertTrue(names(b.incoming).isEmpty, "nothing was copied")
+        let row = MoveShow.row(try CallRecord.load(from: a.callDirectory(id)), move: out, name: "Work", copied: nil, reach: .open, held: nil, now: t0 + 600)
+        XCTAssertEqual(row?.text, MoveWords.pointsUnread("Work"))
+        XCTAssertEqual(row?.cancels, true)
+        try FileManager.default.removeItem(at: StoredFile.marker(for: a.nextTime.appendingPathComponent(NextTimeBook.fileName)))
+        _ = await s.run(id)
+        XCTAssertEqual(fetched.n, 1, "the copy goes on")
+        XCTAssertNil(MoveOut.load(id, paths: a)?.pointsWait)
     }
 
     // MARK: Words

@@ -37,6 +37,8 @@ public enum MoveShow {
             switch move.state {
             case .waiting where move.targetWaits != nil:
                 return Row(text: MoveWords.notFinished(target, move.targetWaits!), cancels: false, held: false)
+            case .copying where move.pointsWait == true:
+                return Row(text: MoveWords.pointsUnread(target), cancels: true, held: false)
             case .copying, .copied, .waiting:
                 let waited = now.timeIntervalSince(move.started)
                 if copied == nil, waited >= MoveRules.slowAfter, reach != .open {
@@ -219,6 +221,12 @@ extension MoveWords {
     }
 
     public static let tryAgain = "Try again"
+
+    /// The copy waits because this profile's points for next time cannot be read now (set aside, waiting for the
+    /// other device's copy).
+    public static func pointsUnread(_ target: String) -> String {
+        "Moving to \(target)… It waits until Mossad can read your points for next time on this Mac."
+    }
 
     /// The other profile took the meeting in and a part after its file check fails again and again.
     public static func notFinished(_ target: String, _ waits: MoveMarker.TakeInWait) -> String {

@@ -456,6 +456,23 @@ public struct MoveIntake: Sendable {
         }
     }
 
+    /// Empties the points of a refused meeting in this profile's book, with their local detail. A book that has none of
+    /// them is not written.
+    private func removePoints(_ ids: Set<UUID>) throws {
+        let file = paths.nextTime.appendingPathComponent(NextTimeBook.fileName)
+        guard FileManager.default.fileExists(atPath: file.path) else { return }
+        guard !StoredFile.awaitsMerge(file) else { throw BookAwaitsMerge() }
+        guard try NextTimeBook.load(from: paths.nextTime).points.contains(where: { ids.contains($0.id) && !NextTimeBook.forgotten($0) }) else { return }
+        let at = now()
+        try NextTimeBook.change(in: paths.nextTime) { book in
+            for i in book.points.indices where ids.contains(book.points[i].id) {
+                NextTimeBook.empty(&book.points[i])
+                book.points[i].updated = at
+            }
+        }
+        try sync(paths.nextTime)
+    }
+
     struct PointsUnreadable: Error {}
     struct BookAwaitsMerge: Error {}
 
@@ -501,6 +518,11 @@ public struct MoveIntake: Sendable {
            let inAudio = try? CallRecord.load(from: paths.callDirectory(f)), inAudio.id == f, inAudio.moveTo == me {
             try stop("out of Audio")
             try MoveFiles.rename(paths.callDirectory(f), to: callFolder(callID), with: rename)
+        }
+        // The points may be in the book already (they come before the mark goes): a refused meeting leaves none here.
+        if let ids = m.pointIDs, !ids.isEmpty {
+            try stop("take the points out")
+            try removePoints(Set(ids.compactMap(UUID.init(uuidString:))))
         }
         try stop("write refused")
         m.intake = .refused
