@@ -95,11 +95,12 @@
           "body": "The recording ends when the meeting window or tab closes, not after a guess from a few quiet seconds.",
           "details": [
             "If that signal is missing, three minutes without microphone use end the call",
-            "Calls shorter than one minute are not kept"
+            "Calls shorter than one minute are not kept",
+            "Two calls back to back in your browser become two meetings, each with its own notes"
           ],
           "icon": "stop.circle",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Detection/CallDetector.swift", "Packages/MossadCore/Sources/MossadCore/Records/ProcessingQueue.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Detection/CallDetector.swift", "Packages/MossadCore/Sources/MossadCore/Records/ProcessingQueue.swift", "Packages/MossadCore/Sources/MossadCore/Detection/CallLinkWatch.swift", "Packages/MossadCore/Sources/MossadCore/Records/CutPlan.swift", "Packages/MossadCore/Sources/MossadCore/Pipeline/Pipeline+Cut.swift"]
         },
         {
           "id": "two-tracks",
