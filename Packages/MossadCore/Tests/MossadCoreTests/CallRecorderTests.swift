@@ -211,6 +211,30 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertEqual(r.callMarks?.first?.titleKey, "2be7ef95b4132e1d")
     }
 
+    /// The code of the call's own Meet title is saved once as `titleLink`, never as `meetingID`; a call whose link
+    /// was read at the start and a room recording take none.
+    func testTheTitleLinkIsSavedOnceAndNeverReplacesTheLink() throws {
+        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        speak(from: 0, to: 30)
+        recorder.setTitleLink("abc-defg-hij")
+        recorder.setTitleLink("klm-nopq-rst")
+        var r = try CallRecord.load(from: paths.callDirectory(id))
+        XCTAssertEqual(r.titleLink, "abc-defg-hij", "written once")
+        XCTAssertNil(r.meetingID)
+        _ = recorder.end(at: t0.addingTimeInterval(30), trimTo: nil)
+
+        let linked = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], meetingID: "uvw-xyza-bcd",
+                                        at: t0.addingTimeInterval(100))
+        recorder.setTitleLink("abc-defg-hij")
+        r = try CallRecord.load(from: paths.callDirectory(linked))
+        XCTAssertNil(r.titleLink)
+        _ = recorder.end(at: t0.addingTimeInterval(130), trimTo: nil)
+
+        let room = try recorder.beginManual(at: t0.addingTimeInterval(200))
+        recorder.setTitleLink("abc-defg-hij")
+        XCTAssertNil(try CallRecord.load(from: paths.callDirectory(room)).titleLink)
+    }
+
     /// A room recording owns the recorder: a mark or a title key on its way when it starts is not the room's.
     func testARoomRecordingTakesNoMarkAndNoTitleKey() throws {
         let id = try recorder.beginManual(at: t0)

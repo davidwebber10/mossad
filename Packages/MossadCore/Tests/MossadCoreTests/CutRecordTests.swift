@@ -29,7 +29,7 @@ final class CutRecordTests: XCTestCase {
 
     func testEveryFieldOfARecordHasARule() throws {
         XCTAssertEqual(storedFields, Set(CutRecord.fields.keys), "a field of CallRecord with no rule, or a rule with no field")
-        XCTAssertEqual(CutRecord.fields.count, 68)
+        XCTAssertEqual(CutRecord.fields.count, 70)
     }
 
     /// One table: each field of a record with every field set, before and after, in both parts.
@@ -58,9 +58,9 @@ final class CutRecordTests: XCTestCase {
         let counts = Dictionary(grouping: CutRecord.fields.values, by: { $0 }).mapValues(\.count)
         XCTAssertEqual(counts[.divided], 8)
         XCTAssertEqual(counts[.special], 7)
-        XCTAssertEqual(counts[.first], 3)
+        XCTAssertEqual(counts[.first], 4)
         XCTAssertEqual(counts[.same], 6)
-        XCTAssertEqual(counts[.cleared], 44)
+        XCTAssertEqual(counts[.cleared], 45)
         XCTAssertEqual(parts.map(\.speakersExpected), [nil, nil], "the owner's number was for the whole recording")
 
         // The special fields.

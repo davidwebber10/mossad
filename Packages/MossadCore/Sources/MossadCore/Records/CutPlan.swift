@@ -62,7 +62,8 @@ public enum CutPlan {
         let minimum = ProcessingQueue.minimumCallDuration
         var cuts: [Cut] = [], reasons: [String] = []
         // The part that runs before the change being read: its link, its first title, and its own event.
-        var link = r.meetingID, titleKey = r.firstTitleKey
+        // A part whose tab gave no link has the code of its own title as its link (`titleLink`), when it showed one.
+        var link = r.meetingID ?? r.titleLink, titleKey = r.firstTitleKey
         var event = ownEvent(r, until: changes[0].time, events: events)
         var skipped: Set<Int> = []
         // Links judged a breakout room of the part that runs: a later visit to one is no change either.
@@ -137,10 +138,11 @@ public enum CutPlan {
     /// The first part's own event, by the matcher. With no link, only an event that overlaps at least half of the part or
     /// half of itself: an event that only begins near the end of the part is the next call's.
     static func ownEvent(_ r: CallRecord, until end: Date, events: [CalendarEventInfo]?) -> CalendarEventInfo? {
-        guard let events, let e = CalendarMatcher.match(for: r.platform, meetingID: r.meetingID, start: r.start, end: end, in: events)?.event else {
+        let link = r.meetingID ?? r.titleLink
+        guard let events, let e = CalendarMatcher.match(for: r.platform, meetingID: link, start: r.start, end: end, in: events)?.event else {
             return nil
         }
-        guard r.meetingID == nil else { return e }
+        guard link == nil else { return e }
         let overlap = min(end, e.end).timeIntervalSince(max(r.start, e.start))
         return overlap >= end.timeIntervalSince(r.start) / 2 || overlap >= e.end.timeIntervalSince(e.start) / 2 ? e : nil
     }

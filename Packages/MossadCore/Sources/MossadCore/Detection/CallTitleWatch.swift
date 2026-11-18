@@ -64,7 +64,10 @@ public struct CallTitleWatch: Equatable, Sendable {
     /// sign is not a new meeting. A meeting name that holds a separator is cut short; two such names can then look
     /// alike, which can only miss a mark, never make one.
     public static func meeting(inWindowTitle title: String) -> String? {
-        var parts = [title.replacingOccurrences(of: "\u{200B}", with: "").trimmingCharacters(in: .whitespaces)]
+        // One Unicode form and single spaces, so a window's title and an event's title of the same meeting have one key.
+        let plain = title.replacingOccurrences(of: "\u{200B}", with: "").precomposedStringWithCanonicalMapping
+            .replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
+        var parts = [plain.trimmingCharacters(in: .whitespaces)]
         for separator in separators { parts = parts.flatMap { $0.components(separatedBy: separator) } }
         parts = parts.map { $0.trimmingCharacters(in: .whitespaces) }
         if parts.count >= 2, browserNames.contains(parts[parts.count - 1]) {
@@ -74,5 +77,48 @@ public struct CallTitleWatch: Equatable, Sendable {
         }
         guard parts.count >= 2, parts[0] == "Meet", !parts[1].isEmpty else { return nil }
         return parts[1]
+    }
+}
+
+/// The Meet code of the call's own window title, when the tab list gave no link (a second copy of the browser
+/// answers it): exactly one Meet title whose meeting part is a code, on two readings within `readingGap`, once. A reading
+/// with no Meet title says nothing; another title between the two readings starts the count again. Pure.
+public struct TitleCodeWatch: Equatable, Sendable {
+    public private(set) var code: String?
+    private var pending: String?
+    private var pendingAt: Date?
+
+    public init() {}
+
+    public mutating func observe(_ titles: [String]?, at time: Date) -> String? {
+        guard code == nil, let titles else { return nil }
+        let meetings = Set(titles.compactMap(CallTitleWatch.meeting(inWindowTitle:)))
+        guard !meetings.isEmpty else { return nil }
+        guard meetings.count == 1, let found = meetings.first.flatMap(CallTitleWatch.meetCode(inMeeting:)) else {
+            pending = nil
+            pendingAt = nil
+            return nil
+        }
+        if pending == found, let since = pendingAt, time.timeIntervalSince(since) <= CallTitleWatch.readingGap {
+            code = found
+            pending = nil
+            pendingAt = nil
+            return found
+        }
+        pending = found
+        pendingAt = time
+        return nil
+    }
+}
+
+extension CallTitleWatch {
+    /// The meeting code of a Meet window title when its meeting part is a code ("abc-defg-hij"), in the form of a Meet
+    /// link's id (`MeetingMatcher.meetingID(forTabURL:)`); nil for a meeting's name or any other title.
+    public static func meetCode(inTitle title: String) -> String? {
+        meeting(inWindowTitle: title).flatMap(meetCode(inMeeting:))
+    }
+
+    static func meetCode(inMeeting part: String) -> String? {
+        part.range(of: #"^[a-z]{3}-[a-z]{4}-[a-z]{3}$"#, options: .regularExpression) != nil ? part : nil
     }
 }

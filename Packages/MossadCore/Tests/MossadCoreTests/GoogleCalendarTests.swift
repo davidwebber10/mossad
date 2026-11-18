@@ -224,6 +224,28 @@ final class GoogleCalendarTests: XCTestCase {
         XCTAssertEqual(events.map(\.title), ["Lunch"], "unknown is not false: the Mac's copy stays")
     }
 
+    /// A read is whole only when every calendar answered whole: a failed Google read, a Mac calendar with no access and
+    /// no Google, or a Google answer cut short is an unknown calendar, which never says "no invite".
+    func testAReadIsWholeOnlyWhenEveryCalendarAnswered() async throws {
+        struct Mac: CalendarSource {
+            var readable: Bool
+            func events(from: Date, to: Date) async -> [CalendarEventInfo] { [] }
+            func canRead() async -> Bool { readable }
+        }
+        let secrets = MemorySecrets()
+        try secrets.setClient(testClient)
+        try secrets.setTokens(GoogleTokens(accessToken: "a", refreshToken: "r", expiry: Date().addingTimeInterval(3600), scopes: [.calendar]))
+        let failing = GoogleSession(secrets: secrets, transport: StubTransport { _ in (503, Data()) })
+        let failed = await MergedCalendarSource(mac: Mac(readable: true), google: { GoogleCalendarSource(session: failing) })
+            .read(from: Date(), to: Date().addingTimeInterval(60))
+        XCTAssertFalse(failed.whole, "Google failed")
+        let blind = await MergedCalendarSource(mac: Mac(readable: false), google: { nil }).read(from: Date(), to: Date().addingTimeInterval(60))
+        XCTAssertFalse(blind.whole, "no access to the Mac's calendars and no Google")
+        let empty = await MergedCalendarSource(mac: Mac(readable: true), google: { nil }).read(from: Date(), to: Date().addingTimeInterval(60))
+        XCTAssertTrue(empty.whole, "an empty answer of a calendar that was read is whole")
+        XCTAssertFalse(CalendarRead(events: [], known: true, google: .yes, complete: false).whole, "an answer cut short")
+    }
+
     func testAnInviteeGivenOnlyAsAnAddressGetsTheDirectorysName() async throws {
         let secrets = MemorySecrets()
         try secrets.setClient(testClient)

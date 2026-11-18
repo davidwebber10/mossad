@@ -121,6 +121,126 @@ extension PipelineTests {
         XCTAssertEqual(second, 0)
     }
 
+    /// Call 1 of the morning of three wrong titles, written by an older build with the overlap's event as its invite.
+    /// The check at launch gives it the event whose invited person spoke, writes the note again under that title, and
+    /// keeps the summary and the voices. It runs once; a call that records stops it.
+    func testTheCheckAtLaunchMovesAnOlderMeetingToTheEventWhosePeopleSpoke() async throws {
+        try library.add([0, 1, 0, 0], to: "Alex Rivera")
+        let right = CalendarEventInfo(title: "Leadership sync", start: start.addingTimeInterval(-60), end: start.addingTimeInterval(1740),
+                                      attendees: ["Alex Rivera", "Sam Carter"], text: "https://meet.google.com/aaa-aaaa-aaa", isAllDay: false)
+        let wrong = CalendarEventInfo(title: "Quick check", start: start.addingTimeInterval(1740), end: start.addingTimeInterval(3540),
+                                      attendees: ["Pat Quill"], text: "https://meet.google.com/bbb-bbbb-bbb", isAllDay: false)
+        let id = try makeRecord()
+        await pipeline(source: ReadableCalendar(events: [wrong], readable: true)).process(id)
+        var old = try load(id)
+        old.setInvite(wrong)
+        old.inviteNotSure = nil
+        old.inviteChecked = nil
+        old.end = start.addingTimeInterval(3840)
+        old.speakerNames["them:A"] = "Alex Rivera"
+        old.fromInvite = nil
+        try old.save(to: paths.callDirectory(id))
+
+        let next = pipeline(source: ReadableCalendar(events: [right, wrong], readable: true))
+        let stopped = await next.recheckInvites(stop: { true })
+        XCTAssertEqual(stopped, 0)
+        XCTAssertNil(try load(id).inviteChecked, "a call that records stops the pass")
+
+        let changed = await next.recheckInvites(stop: { false })
+        XCTAssertEqual(changed, 1)
+        let after = try load(id)
+        XCTAssertEqual(after.calendarTitle, "Leadership sync")
+        XCTAssertNil(after.inviteNotSure)
+        XCTAssertEqual(after.inviteChecked, true)
+        XCTAssertEqual(after.summary, old.summary)
+        XCTAssertEqual(after.speakerNames, old.speakerNames)
+        let notes = try FileManager.default.contentsOfDirectory(atPath: paths.meetings.path).filter { $0.hasSuffix(".md") }
+        XCTAssertEqual(notes.count, 1, "\(notes)")
+        XCTAssertTrue(notes[0].hasSuffix(" - Leadership sync.md"), "\(notes)")
+        let again = await next.recheckInvites(stop: { false })
+        XCTAssertEqual(again, 0, "once")
+    }
+
+    /// A meeting written by an older build with `invite` as its invite, the voices `names`, and no check yet.
+    func olderMeeting(_ invite: CalendarEventInfo?, sure: Bool = true, names: [String: String] = [:], end: TimeInterval = 1800,
+                      change: (inout CallRecord) -> Void = { _ in }) throws -> String {
+        let id = try makeRecord()
+        var r = try load(id)
+        r.status = .written
+        r.end = start.addingTimeInterval(end)
+        if let invite { r.setInvite(invite) }
+        r.inviteNotSure = sure ? nil : true
+        r.speakerNames = names
+        change(&r)
+        try r.save(to: paths.callDirectory(id))
+        return id
+    }
+
+    func meetEvent(_ title: String, _ from: TimeInterval, _ to: TimeInterval, _ people: [String], link: String) -> CalendarEventInfo {
+        CalendarEventInfo(title: title, start: start.addingTimeInterval(from), end: start.addingTimeInterval(to), attendees: people,
+                          text: "https://meet.google.com/\(link)", isAllDay: false)
+    }
+
+    /// The four real cases, each as an older meeting the check at launch meets, and a Zoom user's correct meeting.
+    func testTheCheckAtLaunchChangesAMeetingOnlyOnProof() async throws {
+        try library.add([0, 1, 0, 0], to: "Alex Rivera")
+        let quick = meetEvent("Quick check", -2100, -300, ["Alex Rivera"], link: "bbb-bbbb-bbb")
+        let meetup = meetEvent("Team meetup", -300, 1500, ["Pat Quill", "Lee Morgan"], link: "ccc-cccc-ccc")
+        let rows: [(String, CallRecord?, [CalendarEventInfo], (CallRecord) -> Void)] = [
+            // Call 2: main's sure pick of the one overlapping event; the voice of the event that ended 5 minutes before.
+            ("call 2", try load(olderMeeting(meetup, names: ["me:A": "Avery Lane", "them:A": "Alex Rivera"])), [quick, meetup], { r in
+                XCTAssertEqual(r.calendarTitle, "Quick check", "call 2")
+                XCTAssertEqual(r.attendees, ["Alex Rivera"], "call 2")
+            }),
+        ]
+        for (name, record, events, check) in rows {
+            let id = try XCTUnwrap(record?.id)
+            let changed = await pipeline(source: ReadableCalendar(events: events, readable: true)).recheckInvites(stop: { false })
+            XCTAssertEqual(changed, 1, name)
+            check(try load(id))
+            try FileManager.default.removeItem(at: paths.callDirectory(id))
+        }
+
+        // Call 3 with the code of its title, which no event holds: no invite.
+        var id = try olderMeeting(meetup) { $0.titleLink = "zzz-zzzz-zzz" }
+        var changed = await pipeline(source: ReadableCalendar(events: [meetup], readable: true)).recheckInvites(stop: { false })
+        XCTAssertEqual(changed, 1)
+        XCTAssertNil(try load(id).calendarTitle)
+        try FileManager.default.removeItem(at: paths.callDirectory(id))
+
+        // A part of a cut with the wrong pick, not sure; its own title key proves its event.
+        id = try olderMeeting(meetup, sure: false) {
+            $0.cutFrom = "20261020-140000"
+            $0.firstTitleKey = CallTitleWatch.key("Quick check")
+        }
+        changed = await pipeline(source: ReadableCalendar(events: [quick, meetup], readable: true)).recheckInvites(stop: { false })
+        XCTAssertEqual(changed, 1)
+        XCTAssertEqual(try load(id).calendarTitle, "Quick check")
+        XCTAssertNil(try load(id).inviteNotSure)
+        try FileManager.default.removeItem(at: paths.callDirectory(id))
+
+        // A Zoom user's correct meeting: one event, its people not saved voices, no evidence. Nothing changes; it is checked.
+        let vendor = CalendarEventInfo(title: "Vendor call", start: start, end: start.addingTimeInterval(1800), attendees: ["Lee Morgan"],
+                                       text: "https://zoom.us/j/123456789", isAllDay: false)
+        id = try olderMeeting(vendor, names: ["me:A": "Avery Lane", "them:A": "Lee Morgan"]) { $0.platform = .zoom; $0.fromInvite = ["them:A"] }
+        let before = try load(id)
+        changed = await pipeline(source: ReadableCalendar(events: [vendor], readable: true)).recheckInvites(stop: { false })
+        XCTAssertEqual(changed, 0)
+        var after = try load(id)
+        XCTAssertEqual(after.inviteChecked, true)
+        after.inviteChecked = nil
+        XCTAssertEqual(after, before, "nothing else changes")
+
+        // An unknown calendar changes nothing and does not mark the meeting checked.
+        after = try load(id)
+        after.inviteChecked = nil
+        try after.save(to: paths.callDirectory(id))
+        changed = await pipeline(source: ReadableCalendar(events: [], readable: true, google: .failed)).recheckInvites(stop: { false })
+        XCTAssertEqual(changed, 0)
+        XCTAssertNil(try load(id).inviteChecked)
+        XCTAssertEqual(try load(id).calendarTitle, "Vendor call")
+    }
+
     func testAMarkedMeetingWithNoInviteLosesOnlyItsMark() async throws {
         let id = try makeRecord()
         await pipeline(source: ReadableCalendar(events: [], readable: false)).process(id)

@@ -49,6 +49,11 @@ public final class DetectionService: @unchecked Sendable {
     static let titleSettles: TimeInterval = 60
     private var firstTitleSent = false
     private var firstTitleKey: String?
+    /// The code of the call's own Meet title, for a call whose tab gave no link (`TitleCodeWatch`); sent with the tick.
+    private var codeWatch = TitleCodeWatch()
+    private var titleLink: String?
+    /// A mark was made in this call: a code after it is the next meeting's, not the call's.
+    private var markedThisCall = false
     /// The window titles are read for the marks at most this often, and after a read that failed or was slow the
     /// next one waits longer (`titleBackoff`), so a browser that does not answer costs the tick little.
     static let titleReadEvery: TimeInterval = 4
@@ -119,6 +124,9 @@ public final class DetectionService: @unchecked Sendable {
     /// The key (`CallTitleWatch.key`) of the Meet title the call shows when its first minute ends, once per call. Runs
     /// on the detection queue, before the tick's marks.
     public var onFirstTitleKey: (String) -> Void = { _ in }
+    /// The Meet code of the call's own window title (`TitleCodeWatch`), once per call, when its tab gave no link. Runs
+    /// on the detection queue, before the tick's marks. Not the service's link: the mute check stays as it was.
+    public var onTitleLink: (String) -> Void = { _ in }
     /// Called when the person mutes or unmutes in the call app, during a call. Runs on the mute queue. A "muted" that
     /// cannot be read again for `MuteTracker.unknownLimit` reports unmuted; `lastMutedSeen` then tells when it was
     /// last seen.
@@ -234,9 +242,12 @@ public final class DetectionService: @unchecked Sendable {
                 titleChange = nil
             }
             if let key = firstTitleKey { onFirstTitleKey(key) }
+            if let code = titleLink { onTitleLink(code) }
+            if !marks.isEmpty { markedThisCall = true }
             for mark in marks { onEvent(mark) }
         }
         firstTitleKey = nil
+        titleLink = nil
         marks = []
         if let event = detector.process(snapshot) {
             switch event {
@@ -511,6 +522,9 @@ public final class DetectionService: @unchecked Sendable {
         callStart = start
         firstTitleSent = false
         firstTitleKey = nil
+        codeWatch = TitleCodeWatch()
+        titleLink = nil
+        markedThisCall = false
         nextTitleRead = .distantPast
         titleFailures = 0
     }
@@ -558,6 +572,12 @@ public final class DetectionService: @unchecked Sendable {
             titleFailures = 0
             // Half a second of slack, for a tick that comes a little early.
             nextTitleRead = tickTime.addingTimeInterval(Self.titleReadEvery - 0.5)
+        }
+        // A call with no link from its tab: the code of its own title is its link for the calendar. Only before any mark,
+        // and only while the title is the call's own (no change waits), so a code is never the next meeting's.
+        if meetingID == nil, !markedThisCall, marks.isEmpty, titleChange == nil, titleWatch.pendingSince == nil,
+           let code = codeWatch.observe(read, at: tickTime) {
+            if titleWatch.title == nil || titleWatch.title == code { titleLink = code }
         }
         let before = titleWatch.title
         let seen = titleWatch.pendingSince ?? tickTime

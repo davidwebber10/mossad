@@ -199,6 +199,18 @@ final class CutPlanTests: XCTestCase {
         XCTAssertEqual(cuts(record(), [title(240, "weekly-name")], events: [own, titled]), [], "the same title and start")
     }
 
+    /// A part with no link from its tab but the code of its own title: that code is its link. The tabs that show the same
+    /// code later are no change, and the part's own event is found by it.
+    func testTheTitleLinkIsThePartsOwnLink() {
+        var r = record(link: nil)
+        r.titleLink = "aaa-aaaa-aaa"
+        XCTAssertEqual(cuts(r, [sure(1800, "aaa-aaaa-aaa")]), [], "the same meeting seen in the tabs")
+        XCTAssertEqual(cuts(r, [sure(1800, "bbb-bbbb-bbb")]), [1800], "another link still cuts")
+        XCTAssertEqual(cuts(record(link: nil), [sure(1800, "aaa-aaaa-aaa")]), [1800], "with no link of its own, as before")
+        let own = event(-300, 600, link: "aaa-aaaa-aaa")
+        XCTAssertEqual(CutPlan.ownEvent(r, until: t0 + 3000, events: [own]), own, "its event by the code, however little it overlaps")
+    }
+
     /// I4: an adopted link that is the meeting's own is no change.
     func testI4AnAdoptedLinkThatIsTheMeetingsOwnIsNoChange() {
         let events = [event(0, 3600, link: "aaa-aaaa-aaa"), event(1800, 3600)]

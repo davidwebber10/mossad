@@ -51,6 +51,35 @@ final class GeminiImportTests: XCTestCase {
         XCTAssertEqual(GeminiImport.plan(events: [e], records: [recording(e, meetingID: "zzz-zzzz-zzz")], now: now).map(\.action), [.create])
     }
 
+    /// A recording with a link that the event does not hold is not that event's meeting, also when it took the event's
+    /// title as a pick of the overlap, and also when the link came from the window's title.
+    func testARecordingProvedToBeAnotherMeetingGetsNoNotes() {
+        let e = event()
+        XCTAssertEqual(GeminiImport.plan(events: [e], records: [recording(e, meetingID: "zzz-zzzz-zzz", title: "Weekly design review")], now: now)
+            .map(\.action), [.create], "the title of a pick is no proof against the link")
+        var byTitle = recording(e, meetingID: nil, title: "Weekly design review")
+        byTitle.titleLink = "zzz-zzzz-zzz"
+        XCTAssertEqual(GeminiImport.plan(events: [e], records: [byTitle], now: now).map(\.action), [.create])
+        byTitle.titleLink = "abc-defg-hij"
+        XCTAssertEqual(GeminiImport.plan(events: [e], records: [byTitle], now: now).map(\.action), [.attach(callID: "rec-1")])
+    }
+
+    /// N4: a recording whose sure invite is another event is not this event's meeting, also with no link; a not-sure
+    /// invite keeps main's behavior.
+    func testARecordingWithASureInviteOfAnotherEventGetsNoNotes() {
+        let e = event()
+        let other = event("Budget review", hoursAgo: 2.5, minutes: 60, doc: nil, link: "https://meet.google.com/zzz-zzzz-zzz", eventID: "evt2")
+        var sure = recording(e, meetingID: nil)
+        sure.setInvite(other)
+        XCTAssertEqual(GeminiImport.plan(events: [e], records: [sure], now: now).map(\.action), [.create])
+        var notSure = sure
+        notSure.inviteNotSure = true
+        XCTAssertEqual(GeminiImport.plan(events: [e], records: [notSure], now: now).map(\.action), [.attach(callID: "rec-1")])
+        var same = recording(e, meetingID: nil)
+        same.setInvite(e)
+        XCTAssertEqual(GeminiImport.plan(events: [e], records: [same], now: now).map(\.action), [.attach(callID: "rec-1")])
+    }
+
     func testNothingTwiceNothingDeclinedNothingTooSoonAndNoNotes() {
         let e = event()
         var imported = recording(e)

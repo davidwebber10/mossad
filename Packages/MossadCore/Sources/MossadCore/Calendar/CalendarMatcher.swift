@@ -214,16 +214,21 @@ public struct CalendarRead: Sendable {
     public var google: CalendarSnapshot.Access.Read
     /// Whether the Mac's calendars could be read: `.no` without the permission.
     public var mac: CalendarSnapshot.Access.Read
-    public init(events: [CalendarEventInfo], known: Bool, google: CalendarSnapshot.Access.Read = .no, mac: CalendarSnapshot.Access.Read = .yes) {
+    /// False when Google's answer was cut short (more pages than are read): some events may be missing.
+    public var complete: Bool
+    public init(events: [CalendarEventInfo], known: Bool, google: CalendarSnapshot.Access.Read = .no, mac: CalendarSnapshot.Access.Read = .yes,
+                complete: Bool = true) {
         self.events = events
         self.known = known
         self.google = google
         self.mac = mac
+        self.complete = complete
     }
 
-    /// Every calendar that should answer did: no Google read failed, and the Mac's calendars were read unless Google was.
-    /// The cut by the marks reads anything less as an unknown calendar.
-    public var whole: Bool { known && google != .failed && (mac != .no || google == .yes) }
+    /// Every calendar that should answer did, whole: no Google read failed or was cut short, and the Mac's calendars were
+    /// read unless Google was. The cut by the marks and the invite read anything less as an unknown calendar: it never
+    /// says "no invite", never clears an invite, and never marks a meeting checked.
+    public var whole: Bool { known && complete && google != .failed && (mac != .no || google == .yes) }
 }
 
 extension CalendarSource {
@@ -244,6 +249,14 @@ public enum CalendarMatcher {
         }
     }
 
+    /// The key of an event's title as a Meet window shows it (`CallTitleWatch.key` of its meeting part).
+    public static func titleKey(of e: CalendarEventInfo) -> String? {
+        CallTitleWatch.meeting(inWindowTitle: "Meet - \(e.title) - Google Chrome").map(CallTitleWatch.key)
+    }
+
+    /// The pipeline reads the calendar this far before the call's start and after its end.
+    public static let readWindow: TimeInterval = 600
+
     /// The event names a call link of this platform in its text.
     public static func hasCallLink(_ e: CalendarEventInfo, platform: Platform) -> Bool {
         let text = (e.text.removingPercentEncoding ?? e.text).lowercased()
@@ -258,27 +271,43 @@ public enum CalendarMatcher {
         match(for: platform, meetingID: meetingID, start: start, end: end, in: events)?.event
     }
 
-    /// The best event, and whether it is surely the call's: the call's own meeting id is in it, or it is the only
-    /// event that could be the call.
-    public static func match(for platform: Platform, meetingID: String?, start: Date, end: Date,
+    /// The best event, and whether it is surely the call's. With a link: an event that holds it, sure when it overlaps the
+    /// call (a personal room has one id for all its meetings); no event holds it, nil. With no link, a Meet window's title
+    /// (`titleKey`): the event that `byTitle` finds, sure. Else the overlapping event with this platform's link and the
+    /// largest overlap, sure when it is the only one. In a room, the same with the events that have no call link.
+    public static func match(for platform: Platform, meetingID: String?, titleKey: String? = nil, start: Date, end: Date,
                              in events: [CalendarEventInfo]) -> (event: CalendarEventInfo, sure: Bool)? {
         func overlap(_ e: CalendarEventInfo) -> TimeInterval { min(end, e.end).timeIntervalSince(max(start, e.start)) }
         func text(_ e: CalendarEventInfo) -> String { (e.text.removingPercentEncoding ?? e.text).lowercased() }
         let timed = events.filter { !$0.isAllDay }
-        let candidates: [CalendarEventInfo]
         if let meetingID {
             let id = meetingID.lowercased()
-            candidates = timed.filter { text($0).contains(id) }
-        } else if platform == .inPerson {
+            let holding = timed.filter { text($0).contains(id) }
+            guard let best = holding.max(by: { overlap($0) < overlap($1) }) else { return nil }
+            return (best, overlap(best) > 0)
+        }
+        if let titleKey, platform == .meet, let e = byTitle(titleKey, start: start, end: end, in: timed) { return (e, true) }
+        if platform == .inPerson {
             // In a room there is no link to match: the overlapping event without a call link is the meeting.
             let callMarkers = Platform.callApps.flatMap(linkMarkers)
-            candidates = timed.filter { e in overlap(e) > 0 && !callMarkers.contains { text(e).contains($0) } }
-        } else {
-            candidates = timed.filter { e in overlap(e) > 0 && hasCallLink(e, platform: platform) }
+            let candidates = timed.filter { e in overlap(e) > 0 && !callMarkers.contains { text(e).contains($0) } }
+            guard let best = candidates.max(by: { overlap($0) < overlap($1) }) else { return nil }
+            return (best, candidates.count == 1)
         }
+        let candidates = timed.filter { e in overlap(e) > 0 && hasCallLink(e, platform: platform) }
         guard let best = candidates.max(by: { overlap($0) < overlap($1) }) else { return nil }
-        // A personal room has one id for all its meetings: only an event at the call's time is surely the call's.
-        return (best, overlap(best) > 0 && (meetingID != nil || candidates.count == 1))
+        return (best, candidates.count == 1)
+    }
+
+    /// The event of a Meet window's title key: the one event within `readWindow` of the call whose title has that key,
+    /// or of two or more such events the one that overlaps the call. Nil when it is not one event.
+    public static func byTitle(_ key: String, start: Date, end: Date, in events: [CalendarEventInfo]) -> CalendarEventInfo? {
+        let named = events.filter { e in
+            !e.isAllDay && e.end >= start.addingTimeInterval(-readWindow) && e.start <= end.addingTimeInterval(readWindow) && titleKey(of: e) == key
+        }
+        if named.count == 1 { return named[0] }
+        let overlapping = named.filter { min(end, $0.end) > max(start, $0.start) }
+        return overlapping.count == 1 ? overlapping[0] : nil
     }
 
     /// The event of a phone call: an overlapping event with no call link that invites exactly one person besides

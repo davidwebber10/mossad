@@ -378,6 +378,12 @@ public struct CallRecord: Codable, Equatable, Sendable {
     /// True once the cut of this recording by its marks was decided and gave no cut (`CutPlan` found none, or the cut
     /// was refused or failed): it is processed as one meeting and never decided again. Nil before the decision.
     public var cutChecked: Bool?
+    /// The Meet code that the call's own window title showed, when its tab gave no link at the start. Only the calendar
+    /// match reads it: never the join of two recordings, the do-not-record gate, or the move of a call. Nil otherwise.
+    public var titleLink: String?
+    /// True once the invite was matched with the voices of the recording (`InviteCheck`): the check of the meetings
+    /// written before it (`Pipeline.recheckInvites`) runs once for each. Nil before.
+    public var inviteChecked: Bool?
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
         self.id = id
@@ -410,6 +416,34 @@ public struct CallRecord: Codable, Equatable, Sendable {
         organizer = event.organizer ?? (same ? organizer : nil)
         plannedStart = event.isAllDay ? nil : event.start
         plannedEnd = event.isAllDay ? nil : event.end
+    }
+
+    /// What the calendar gave (`InviteAnswer`): a proved event is sure; a pick is saved as main saved it, with
+    /// `inviteNotSure` when it is not sure; "no invite" clears the invite; nothing changes nothing.
+    public mutating func apply(_ answer: InviteAnswer) {
+        switch answer {
+        case .proved(let e):
+            setInvite(e)
+            inviteNotSure = nil
+        case .picked(let e, let sure):
+            setInvite(e)
+            inviteNotSure = sure ? nil : true
+        case .noInvite: clearInvite()
+        case .nothing: return
+        }
+        inviteUnknown = nil
+    }
+
+    /// No invite: the title, the people, the series, and the planned times of one go, and the marks of a match with them.
+    public mutating func clearInvite() {
+        calendarTitle = nil
+        attendees = []
+        invitees = nil
+        calendarSeriesID = nil
+        organizer = nil
+        plannedStart = nil
+        plannedEnd = nil
+        inviteNotSure = nil
     }
 
     /// Every marker line of the transcript in time order: pauses, stops, and where a merged part begins.
@@ -518,6 +552,8 @@ extension CallRecord {
         callMarks = try c.decodeIfPresent([CallMark].self, forKey: .callMarks)
         cutFrom = try c.decodeIfPresent(String.self, forKey: .cutFrom)
         firstTitleKey = try c.decodeIfPresent(String.self, forKey: .firstTitleKey)
+        titleLink = try c.decodeIfPresent(String.self, forKey: .titleLink)
+        inviteChecked = try c.decodeIfPresent(Bool.self, forKey: .inviteChecked)
         cutChecked = try c.decodeIfPresent(Bool.self, forKey: .cutChecked)
     }
 }

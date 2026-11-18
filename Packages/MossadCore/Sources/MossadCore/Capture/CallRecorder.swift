@@ -515,6 +515,13 @@ public final class CallRecorder: @unchecked Sendable {
         edit { $0.firstTitleKey = key }
     }
 
+    /// Saves the Meet code of the call's own window title, once, for a call whose tab gave no link at the start. On the
+    /// capture queue; nothing for a room recording.
+    public func setTitleLink(_ code: String) {
+        guard isRecording, !isManual, let r = record, r.meetingID == nil, r.titleLink == nil else { return }
+        edit { $0.titleLink = code }
+    }
+
     /// Saves a sign that another call may have started in this recording, at the recording's second of `time`, as a
     /// bookmark is saved. On the capture queue; nothing when no call records.
 
@@ -646,6 +653,12 @@ public final class CallRecorder: @unchecked Sendable {
             $0.setInvite(event)
             $0.inviteNotSure = sure ? nil : true
         }
+    }
+
+    /// The live call has no invite: its link is known and no event holds it. A guess made before goes.
+    public func clearCalendar(forCall id: String) {
+        guard record?.id == id else { return }
+        edit { $0.clearInvite() }
     }
 
     /// A provisional title from the live transcript. Ignored when that call has ended or already has a generated one.
