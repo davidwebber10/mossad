@@ -21,8 +21,16 @@ struct AskPanelPoints: View {
 
     var body: some View {
         let points = controller.livePointList()
+        let waiting = controller.livePointWaiting()
         VStack(spacing: 0) {
-            if !points.isEmpty {
+            if points.isEmpty, !waiting.isEmpty {
+                // Not a 1:1 with these people: only the count of their points, never a word of one.
+                WaitingForOneOnOne(waiting: waiting)
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: AskPanelSizing.pointsRow, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(alignment: .top) { if divided { Rectangle().fill(Palette.hairline).frame(height: 1) } }
+            } else if !points.isEmpty {
                 TimelineView(.periodic(from: .now, by: 15)) { context in
                     let open = LivePointRules.open(points, marks: model.marks).count
                     let late = LivePointRules.nearEnd(plannedEnd: record.plannedEnd, now: context.date, open: open)

@@ -11,6 +11,9 @@ final class LivePointsModel: ObservableObject {
     /// made off the main thread. Only that person's points are in the list: a group call lists none.
     @Published private(set) var series: MeetingSeries? { willSet { owner?.objectWillChange.send() } }
     @Published private(set) var oneOnOne: String? { willSet { owner?.objectWillChange.send() } }
+    /// The saved people of the call (invited, or heard by name), for the count line of the people whose points wait
+    /// for a 1:1.
+    @Published private(set) var people: [String] = [] { willSet { owner?.objectWillChange.send() } }
     weak var owner: AppController?
     /// One write at a time, in order, so an older copy never replaces a newer one.
     private let saves = DispatchQueue(label: "com.dwebber.mossad.live-points-save", qos: .utility)
@@ -35,6 +38,7 @@ final class LivePointsModel: ObservableObject {
         callID = id
         series = nil
         oneOnOne = nil
+        people = []
         madeFor = nil
         marks = LivePointMarks.load(from: paths.callDirectory(id)) ?? LivePointMarks()
     }
@@ -82,17 +86,21 @@ final class LivePointsModel: ObservableObject {
         madeFor = key
         making?.cancel()
         making = Task {
-            let made = await Task.detached(priority: .utility) { () -> (MeetingSeries?, String?) in
+            let made = await Task.detached(priority: .utility) { () -> (MeetingSeries?, String?, [String]) in
                 let directory = PersonDirectory(profiles: inputs.profiles)
                 let s = LivePoints.series(ofLive: inputs.record, in: inputs.all, records: inputs.records, owner: inputs.owner,
                                           directory: directory, ownerEmails: [inputs.ownerEmail], aliases: inputs.aliases)
                 let one = OneOnOne.person(ofLive: inputs.record, otherVoices: inputs.voices, owner: inputs.owner, directory: directory,
                                           ownerEmails: [inputs.ownerEmail], people: inputs.refs)
-                return (s, one)
+                let named = inputs.voices.compactMap { $0 }
+                var people = NextTimeInvite.personIDs(inputs.record.attendees, people: inputs.refs)
+                for id in NextTimeInvite.personIDs(named, people: inputs.refs) where !people.contains(id) { people.append(id) }
+                return (s, one, people)
             }.value
             guard !Task.isCancelled, callID == inputs.record.id else { return }
             if series?.id != made.0?.id || series?.keys != made.0?.keys { series = made.0 }
             if oneOnOne != made.1 { oneOnOne = made.1 }
+            if people != made.2 { people = made.2 }
         }
     }
 }
@@ -118,6 +126,18 @@ extension AppController {
     func isLiveCall(_ callID: String) -> Bool {
         if case .recording(_, let since) = status { return CallRecorder.callID(for: since) == callID }
         return false
+    }
+
+    /// The people of the call whose points wait for a 1:1 with them, with how many: the live views say only the count.
+    func livePointWaiting() -> [(person: String, name: String, count: Int)] {
+        guard livePoints.callID != nil else { return [] }
+        let refs = series.people
+        let shown = Set(livePointList().map(\.id))
+        return series.book.personCounts(livePoints.people, oneOnOne: livePoints.oneOnOne, canonical: { refs.canonical($0) }).compactMap { w in
+            // A point ticked in this call is in the list already.
+            let n = series.book.points(forPerson: w.person, canonical: { refs.canonical($0) }).filter { !shown.contains($0.id) }.count
+            return n > 0 ? (w.person, refs.name(of: w.person) ?? w.person, n) : nil
+        }
     }
 
     func livePointList() -> [NextTimePoint] {
