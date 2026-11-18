@@ -29,4 +29,11 @@ extension AppController {
         let store = library.identity?.samples ?? (isInert ? VoiceSampleStore(directory: paths.voices) : nil)
         return store?.samples(of: person.id)
     }
+
+    /// The names whose person shows "From your directory" (`DirectoryMark`). It reads files: call it off the main thread.
+    nonisolated static func directoryMarks(_ profiles: [VoiceProfile], library: VoiceLibrary, paths: Paths, inert: Bool) -> Set<String> {
+        let people = library.identity?.people.people ?? (inert ? PeopleStore.peek(in: paths.people) ?? [] : [])
+        let samples = library.identity?.samples.samples ?? (inert ? VoiceSampleStore.peek(in: paths.voices) ?? [] : [])
+        return DirectoryMark.names(profiles: profiles, people: people, samples: samples, given: GeminiPeopleBook.load(paths)?.given)
+    }
 }
