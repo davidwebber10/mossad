@@ -121,6 +121,39 @@ final class TranscriptionProviderTests: XCTestCase {
         XCTAssertEqual(cost(.deepgram, "nova-3"), 0.258, accuracy: 0.0001)
         XCTAssertEqual(cost(.elevenlabs, "scribe_v2"), 0.22, accuracy: 0.0001)
         XCTAssertEqual(cost(.openai, "gpt-4o-transcribe-diarize"), 0.36, accuracy: 0.0001)
+        // STT-3.7 at $0.21 an hour with $0.02 for speaker labels.
+        XCTAssertEqual(cost(.assemblyai, "assemblyai-stt-3-7"), 0.23, accuracy: 0.0001)
+        XCTAssertEqual(cost(.assemblyai, "universal-2"), 0.17, accuracy: 0.0001)
+    }
+
+    // MARK: AssemblyAI models
+
+    func testAssemblyAIOffersTheAccountDefaultAndSTT37() {
+        let models = TranscriptionProvider.assemblyai.models
+        XCTAssertEqual(models.map(\.id), ["", "assemblyai-stt-3-7"], "the saved empty value stays the account's default")
+        XCTAssertEqual(models.map(\.name), ["Account default", "AssemblyAI-STT-3.7"])
+    }
+
+    func testTheAssemblyAICostWordsFollowTheChoice() {
+        let account = TranscriptionProvider.assemblyai.note(model: "")
+        let stt = TranscriptionProvider.assemblyai.note(model: "assemblyai-stt-3-7")
+        XCTAssertNotEqual(account, stt)
+        XCTAssertTrue(account.contains("$0.17 to $0.23"), account)
+        XCTAssertTrue(stt.contains("About $0.23 an hour"), stt)
+        XCTAssertEqual(TranscriptionProvider.assemblyai.note, account)
+    }
+
+    func testAnHourOfSTT37CostsItsOwnPriceForBothTracks() {
+        let cost = Pricing.hourCost(transcription: .assemblyai, transcriptionModel: "assemblyai-stt-3-7", ai: .anthropic, model: "")
+        XCTAssertEqual(cost.parts.first?.amount ?? 0, 0.46, accuracy: 0.0001)
+    }
+
+    /// A model the list does not know (left from another provider) sends no model field.
+    func testAnUnknownSavedModelUsesTheAccountDefault() throws {
+        let client = try XCTUnwrap(TranscriptionProvider.assemblyai.transcriber(model: "nova-3", apiKey: "k", usage: nil) as? AssemblyAIClient)
+        XCTAssertEqual(client.model, "")
+        let chosen = try XCTUnwrap(TranscriptionProvider.assemblyai.transcriber(model: "assemblyai-stt-3-7", apiKey: "k", usage: nil) as? AssemblyAIClient)
+        XCTAssertEqual(chosen.model, "assemblyai-stt-3-7")
     }
 }
 

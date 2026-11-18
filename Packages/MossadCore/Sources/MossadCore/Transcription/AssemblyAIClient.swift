@@ -63,13 +63,16 @@ public struct AssemblyAIClient: Transcribing {
     /// Uploads per attempt. A slow or dropping network (a plane) fails an upload now and then.
     static let uploadTries = 3
     private let usage: UsageLog?
+    /// The model asked for by its id, such as "assemblyai-stt-3-7"; empty sends no model, and the account's default runs.
+    let model: String
     /// The longest wait for one job; nil uses three times the audio's length, at least half an hour.
     private let maxWait: TimeInterval?
     /// Polls per status check: one dropped connection (the Mac sleeps after a call) must not fail a paid job.
     static let pollTries = 5
 
-    public init(apiKey: String, session: URLSession = .shared, pollInterval: Duration = .seconds(5), usage: UsageLog? = nil,
+    public init(apiKey: String, model: String = "", session: URLSession = .shared, pollInterval: Duration = .seconds(5), usage: UsageLog? = nil,
                 retryPause: Duration = .seconds(10), maxWait: TimeInterval? = nil) {
+        self.model = model
         self.maxWait = maxWait
         self.retryPause = retryPause
         self.usage = usage
@@ -97,7 +100,7 @@ public struct AssemblyAIClient: Transcribing {
         while true {
             switch job.status {
             case "completed":
-                usage?.record(service: .assemblyai, purpose: .transcription, model: job.speech_model, audioSeconds: job.audio_duration)
+                usage?.record(service: .assemblyai, purpose: .transcription, model: job.modelThatRan ?? model.nonBlank, audioSeconds: job.audio_duration)
                 return (job.utterances ?? []).flatMap { Self.split($0, track: track) }
             case "error":
                 await jobs?.save(nil)
@@ -148,8 +151,14 @@ public struct AssemblyAIClient: Transcribing {
     private func create(file: URL, track: Track, speakers: Int?, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> TranscriptResponse {
         progress(.uploading(0))
         let uploadURL = try await upload(file, progress: progress)
+        let create = try Self.createBody(audioURL: uploadURL.upload_url, track: track, speakers: speakers, model: model)
+        return try await send(request("transcript", method: "POST", json: true), body: create)
+    }
+
+    /// The body that starts a job, with its keys sorted so the same choices always send the same bytes.
+    static func createBody(audioURL: String, track: Track, speakers: Int?, model: String) throws -> Data {
         var body: [String: Any] = [
-            "audio_url": uploadURL.upload_url,
+            "audio_url": audioURL,
             "speaker_labels": true,
             // Keeps "um" and "uh" so the coach can count them.
             "disfluencies": true,
@@ -161,8 +170,9 @@ public struct AssemblyAIClient: Transcribing {
         } else if track == .me {
             body["speaker_options"] = ["max_speakers_expected": Self.maxRoomSpeakers]
         }
-        let create = try JSONSerialization.data(withJSONObject: body)
-        return try await send(request("transcript", method: "POST", json: true), body: create)
+        // The list field: the singular `speech_model` is deprecated, and AssemblyAI can refuse a current model in it.
+        if !model.isEmpty { body["speech_models"] = [model] }
+        return try JSONSerialization.data(withJSONObject: body, options: .sortedKeys)
     }
 
     private func upload(_ file: URL, progress: @escaping @Sendable (TranscriptionStage) -> Void) async throws -> UploadResponse {
@@ -238,6 +248,10 @@ public struct AssemblyAIClient: Transcribing {
         /// What AssemblyAI bills, in seconds.
         let audio_duration: Double?
         let speech_model: String?
+        /// Named in newer replies; either field may be missing or null.
+        let speech_model_used: String?
+
+        var modelThatRan: String? { speech_model_used?.nonBlank ?? speech_model?.nonBlank }
     }
 
     /// Splits an utterance where the words pause longer than this (AssemblyAI joins a speaker's

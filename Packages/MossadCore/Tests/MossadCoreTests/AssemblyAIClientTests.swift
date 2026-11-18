@@ -190,7 +190,7 @@ final class AssemblyAISplitTests: XCTestCase {
         let log = UsageLog(directory: tempDirectory())
         let audio = tempDirectory().appendingPathComponent("me.caf")
         try Data("audio".utf8).write(to: audio)
-        let c = AssemblyAIClient(apiKey: "k", session: StubURLProtocol.session(), pollInterval: .zero, usage: log)
+        let c = AssemblyAIClient(apiKey: "k", session: StubURLProtocol.session(), pollInterval: .zero, usage: log, retryPause: .zero)
         _ = try await UsageContext.$callID.withValue("call-1") { try await c.transcribe(file: audio, track: .me) }
         let e = try XCTUnwrap(log.all().first)
         XCTAssertEqual(e.callID, "call-1")
@@ -293,5 +293,62 @@ extension AssemblyAIClientTests {
             XCTFail("the attempt fails and the saved job is kept for the next one")
         } catch {}
         XCTAssertTrue(StubURLProtocol.requests.allSatisfy { $0.method == "GET" })
+    }
+}
+
+extension AssemblyAIClientTests {
+    // MARK: The model
+
+    private func text(_ data: Data) -> String { String(decoding: data, as: UTF8.self) }
+
+    /// The account's default: no model field, the same fields as before the choice existed.
+    func testTheAccountDefaultBodyNamesNoModel() throws {
+        let them = try AssemblyAIClient.createBody(audioURL: "https://cdn.assemblyai.com/upload/abc", track: .them, speakers: nil, model: "")
+        XCTAssertEqual(text(them), #"{"audio_url":"https:\/\/cdn.assemblyai.com\/upload\/abc","disfluencies":true,"language_code":"en_us","#
+                       + #""language_detection":false,"speaker_labels":true}"#)
+        let me = try AssemblyAIClient.createBody(audioURL: "u", track: .me, speakers: nil, model: "")
+        XCTAssertEqual(text(me), #"{"audio_url":"u","disfluencies":true,"language_code":"en_us","language_detection":false,"#
+                       + #""speaker_labels":true,"speaker_options":{"max_speakers_expected":20}}"#)
+    }
+
+    /// STT-3.7 is asked for in the list field; the singular `speech_model` is deprecated and can be refused.
+    func testSTT37BodyAsksForTheModelInTheListFieldOnly() throws {
+        let body = try AssemblyAIClient.createBody(audioURL: "u", track: .them, speakers: 3, model: "assemblyai-stt-3-7")
+        XCTAssertEqual(text(body), #"{"audio_url":"u","disfluencies":true,"language_code":"en_us","language_detection":false,"#
+                       + #""speaker_labels":true,"speakers_expected":3,"speech_models":["assemblyai-stt-3-7"]}"#)
+        XCTAssertFalse(text(body).contains(#""speech_model""#))
+    }
+
+    func testTheClientSendsTheChosenModelAndLogsTheModelThatRan() async throws {
+        StubURLProtocol.handler = { r in
+            switch (r.method, r.url.path) {
+            case ("POST", "/v2/upload"): return (200, json(["upload_url": "u"]))
+            case ("POST", "/v2/transcript"): return (200, json(["id": "t7", "status": "queued"]))
+            default: return (200, json(["id": "t7", "status": "completed", "audio_duration": 3600, "speech_model": NSNull(),
+                                        "speech_model_used": "assemblyai-stt-3-7", "utterances": NSNull()]))
+            }
+        }
+        let log = UsageLog(directory: tempDirectory())
+        let c = AssemblyAIClient(apiKey: "k", model: "assemblyai-stt-3-7", session: StubURLProtocol.session(), pollInterval: .zero, usage: log, retryPause: .zero)
+        _ = try await c.transcribe(file: file, track: .them)
+        let create = try JSONSerialization.jsonObject(with: StubURLProtocol.requests[1].body) as! [String: Any]
+        XCTAssertEqual(create["speech_models"] as? [String], ["assemblyai-stt-3-7"])
+        XCTAssertNil(create["speech_model"])
+        XCTAssertEqual(log.all().first?.model, "assemblyai-stt-3-7")
+    }
+
+    /// A reply that names no model is logged under the model asked for, so its price is the chosen one.
+    func testAReplyWithNoModelIsLoggedUnderTheChosenModel() async throws {
+        StubURLProtocol.handler = { r in
+            switch (r.method, r.url.path) {
+            case ("POST", "/v2/upload"): return (200, json(["upload_url": "u"]))
+            case ("POST", "/v2/transcript"): return (200, json(["id": "t8", "status": "queued"]))
+            default: return (200, json(["id": "t8", "status": "completed", "audio_duration": 60, "utterances": NSNull()]))
+            }
+        }
+        let log = UsageLog(directory: tempDirectory())
+        let c = AssemblyAIClient(apiKey: "k", model: "assemblyai-stt-3-7", session: StubURLProtocol.session(), pollInterval: .zero, usage: log, retryPause: .zero)
+        _ = try await c.transcribe(file: file, track: .them)
+        XCTAssertEqual(log.all().first?.model, "assemblyai-stt-3-7")
     }
 }

@@ -78,7 +78,7 @@ final class KeyChecker: ObservableObject {
 extension AppController {
     /// What an hour of meetings costs with every billed part that is on now. Setup and Settings show this one.
     var hourCost: HourCost {
-        Pricing.hourCost(transcription: transcriptionProvider, ai: aiProvider, model: aiModel,
+        Pricing.hourCost(transcription: transcriptionProvider, transcriptionModel: transcriptionModel, ai: aiProvider, model: aiModel,
                          // The live transcript opens its sessions only with an AssemblyAI key.
                          liveTranscript: liveTranscriptEnabled && hasKey(.assemblyai),
                          coach: coachEnabled, coachEmail: coachEmailEnabled || coachMonthlyEmail)
@@ -97,7 +97,7 @@ struct TranscriptionRows: View {
 
     var body: some View {
         let provider = controller.transcriptionProvider
-        ChoiceRow(title: "Provider", detail: [ProviderJob.transcription.detail, provider == .local ? nil : provider.note]
+        ChoiceRow(title: "Provider", detail: [ProviderJob.transcription.detail, provider == .local ? nil : provider.note(model: controller.transcriptionModel)]
             .compactMap { $0 }.joined(separator: " ")) {
             FillPicker(title: "Transcription provider", selection: $controller.transcriptionProvider,
                        choices: TranscriptionProvider.allCases.map { ($0, $0.displayName) })
