@@ -145,7 +145,7 @@ final class SeriesFixesTests: XCTestCase {
         XCTAssertEqual(NextTimeInvite.personIDs(["sam@example.com", "Dana Lee", "jo@example.com"], people: refs), ["p-sam"])
         var book = NextTimeBook()
         book.add("Offsite budget", personID: "p-old", personName: "Samuel Carter", at: now)
-        XCTAssertEqual(book.points(for: nil, people: ["p-sam"], canonical: refs.canonical).count, 1)
+        XCTAssertEqual(book.points(for: nil, oneOnOne: "p-sam", canonical: refs.canonical).count, 1)
     }
 
     // C1

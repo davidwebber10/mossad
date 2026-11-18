@@ -55,7 +55,7 @@ extension ChatTools {
     }
 
     /// Under a meeting's Summary: the owner's points it discussed, the ones it carried, and the open ones that
-    /// came up in a meeting Mossad has only the notes of.
+    /// came up in it: in a meeting Mossad has only the notes of, or a person's points in a meeting that was no 1:1.
     func meetingPoints(_ callID: String) -> String? {
         guard let book else { return nil }
         let discussed = book.discussed(in: callID)
@@ -66,7 +66,11 @@ extension ChatTools {
         if !discussed.isEmpty { parts.append("Your points discussed here:\n" + discussed.map(pointLine).joined(separator: "\n")) }
         if !carried.isEmpty { parts.append("Your points left for next time:\n" + carried.map(pointLine).joined(separator: "\n")) }
         if !leftOpen.isEmpty { parts.append("Your points for this meeting, still open:\n" + leftOpen.map(pointLine).joined(separator: "\n")) }
-        if !mentioned.isEmpty { parts.append("Your open points in these notes:\n" + mentioned.map(pointLine).joined(separator: "\n")) }
+        if !mentioned.isEmpty {
+            let record = records.first { $0.id == callID }
+            let label = record.map(NextTimeRules.ownerMissed) == false ? "Your points for a 1:1 that came up here, still open" : "Your open points in these notes"
+            parts.append(label + ":\n" + mentioned.map(pointLine).joined(separator: "\n"))
+        }
         return parts.isEmpty ? nil : parts.joined(separator: "\n")
     }
 }
