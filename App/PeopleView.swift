@@ -11,6 +11,8 @@ struct PeopleView: View {
     @StateObject private var org = OrgState(paths: Paths.live)
     @State private var profiles: [VoiceProfile] = []
     @State private var stats: [String: PersonStats] = [:]
+    /// The names whose person shows "From your directory".
+    @State private var marks: Set<String> = []
     @State private var loaded = false
     @State private var selection: String?
     @State private var search = ListSearchState()
@@ -150,14 +152,14 @@ struct PeopleView: View {
                 if !duplicates.isEmpty {
                     DuplicatesBanner(count: duplicates.count) { reviewingDuplicates = true }
                 }
-                PeopleList(owner: results.filter(\.isOwner), people: results.filter { !$0.isOwner }, stats: stats,
+                PeopleList(owner: results.filter(\.isOwner), people: results.filter { !$0.isOwner }, stats: stats, marks: marks,
                            selection: $selection, sort: $sort, needsSample: $needsSample, query: search.trimmed, matches: matches ?? [:],
                            rename: startEditing, delete: { deleting = $0 })
             }
             DetailColumn { toolbar } content: {
                 Group {
                         if let p = selected {
-                            PersonProfileView(profile: p, stats: stats[p.name] ?? PersonStats(),
+                            PersonProfileView(profile: p, stats: stats[p.name] ?? PersonStats(), fromDirectory: marks.contains(p.name),
                                               org: org.match(p.name), chart: org.chart,
                                               others: profiles.filter { $0.name != p.name },
                                               rename: { startEditing(p) }, merge: { merge(p, into: $0) },
@@ -273,7 +275,9 @@ struct PeopleView: View {
         let records = controller.meetings
         let computed = await Task.detached(priority: .utility) { PersonStatistics.compute(records) }.value
         stats = computed
-        profiles = PeopleSort.recent.order(controller.library.profiles, stats: computed)
+        let all = controller.library.profiles, library = controller.library, paths = controller.paths, inert = controller.isInert
+        marks = await Task.detached(priority: .utility) { AppController.directoryMarks(all, library: library, paths: paths, inert: inert) }.value
+        profiles = PeopleSort.recent.order(all, stats: computed)
         loaded = true
         if let wanted = controller.personToOpen {
             controller.personToOpen = nil
@@ -333,6 +337,7 @@ private struct PeopleList: View {
     let owner: [VoiceProfile]
     let people: [VoiceProfile]
     let stats: [String: PersonStats]
+    let marks: Set<String>
     @Binding var selection: String?
     @Binding var sort: String
     @Binding var needsSample: Bool
@@ -419,7 +424,7 @@ private struct PeopleList: View {
     }
 
     private func row(_ p: VoiceProfile) -> some View {
-        PersonRow(profile: p, stats: stats[p.name], selected: selection == p.name, match: matches[p.name]) {
+        PersonRow(profile: p, stats: stats[p.name], fromDirectory: marks.contains(p.name), selected: selection == p.name, match: matches[p.name]) {
             if selection != p.name { controller.navigation.jumpNext() }
             selection = p.name
             focused = true
@@ -444,6 +449,7 @@ private struct PeopleList: View {
 private struct PersonRow: View {
     let profile: VoiceProfile
     let stats: PersonStats?
+    let fromDirectory: Bool
     let selected: Bool
     var match: ListMatch?
     let select: () -> Void
@@ -454,9 +460,20 @@ private struct PersonRow: View {
             HStack(spacing: Space.m) {
                 PersonMark(name: profile.name, size: 28, isOwner: profile.isOwner)
                 VStack(alignment: .leading, spacing: Rhythm.pairGap) {
-                    Text(match?.title.boldMatches(size: Rhythm.bodySize) ?? AttributedString(profile.name))
-                        .font(.system(size: Rhythm.bodySize, weight: profile.isOwner || selected ? .semibold : .medium))
-                        .foregroundStyle(Palette.ink)
+                    HStack(alignment: .firstTextBaseline, spacing: Rhythm.pairGap) {
+                        Text(match?.title.boldMatches(size: Rhythm.bodySize) ?? AttributedString(profile.name))
+                            .font(.system(size: Rhythm.bodySize, weight: profile.isOwner || selected ? .semibold : .medium))
+                            .foregroundStyle(Palette.ink)
+                        // A glyph, not the words: the row keeps its height and the address its width. The band has the words.
+                        if fromDirectory {
+                            Image(systemName: "building.2")
+                                .font(.system(size: Rhythm.noteSize))
+                                .foregroundStyle(Palette.secondary)
+                                .help(DirectoryMark.text)
+                                .accessibilityLabel(DirectoryMark.text)
+                                .layoutPriority(1)
+                        }
+                    }
                     if let match, match.context != nil {
                         ListMatchLine(match: match, lines: 1)
                     } else if let sub {

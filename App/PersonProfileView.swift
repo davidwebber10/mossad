@@ -11,6 +11,8 @@ struct PersonProfileView: View {
     @EnvironmentObject var controller: AppController
     let profile: VoiceProfile
     let stats: PersonStats
+    /// "From your directory" (`DirectoryMark`).
+    let fromDirectory: Bool
     /// Where the org chart places them, when it does.
     let org: OrgChart.Match?
     let chart: OrgChart?
@@ -40,7 +42,7 @@ struct PersonProfileView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PersonHeader(profile: profile, stats: stats, org: org, chart: chart, others: others, together: meetings?.together,
+            PersonHeader(profile: profile, stats: stats, fromDirectory: fromDirectory, org: org, chart: chart, others: others, together: meetings?.together,
                          rename: rename, merge: merge, delete: delete, changed: changed)
                 .overlay(alignment: .bottom) {
                     DetailTabs(tab: tabBinding, tabs: tabs, accessibilityLabel: "Person tabs").offset(y: Detail.underTabs)

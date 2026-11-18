@@ -144,6 +144,19 @@ final class ChatPagesToolsTests: XCTestCase {
         for secret in ["notes.example.com", "owner@example.com", "bucket-name"] { XCTAssertFalse(text.contains(secret), secret) }
     }
 
+    // Without the directory part the step does nothing, so the line would say something untrue.
+    func testAppStatusNamesThePeopleFromGeminiNotesOnlyWithTheDirectoryPart() throws {
+        let suite = "mcp-status-\(UUID().uuidString)"
+        let d = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { d.removePersistentDomain(forName: suite) }
+        d.set(["calendar", "docs"], forKey: "googleScopes")
+        XCTAssertFalse(tools(settings: .read(d)).run("app_status", input: [:]).contains("Gemini notes"))
+        d.set(["calendar", "docs", "directory"], forKey: "googleScopes")
+        XCTAssertTrue(tools(settings: .read(d)).run("app_status", input: [:]).contains("adds people from Gemini notes: on"))
+        d.set(false, forKey: GeminiPeople.settingKey)
+        XCTAssertTrue(tools(settings: .read(d)).run("app_status", input: [:]).contains("adds people from Gemini notes: off"))
+    }
+
     func testStatsAddTheTrendsTheWeekAndTheOutcomes() {
         let text = tools().run("stats", input: [:])
         XCTAssertTrue(text.contains("Outcomes:"), text)
