@@ -516,15 +516,23 @@ public final class CallRecorder: @unchecked Sendable {
         return offset
     }
 
+    /// Saves the key of the call's own Meet title, once. On the capture queue; nothing for a room recording.
+    public func setFirstTitleKey(_ key: String) {
+        guard isRecording, !isManual, record?.firstTitleKey == nil else { return }
+        edit { $0.firstTitleKey = key }
+    }
+
     /// Saves a sign that another call may have started in this recording, at the recording's second of `time`, as a
     /// bookmark is saved. On the capture queue; nothing when no call records.
-    public func addCallMark(link: String?, platform: Platform, source: CallMark.Source, sure: Bool, at time: Date) {
-        guard isRecording else { return }
+
+    public func addCallMark(link: String?, platform: Platform, source: CallMark.Source, sure: Bool, at time: Date, titleKey: String? = nil) {
+        // A room recording owns the recorder: a mark on its way when it starts is not the room's.
+        guard isRecording, !isManual else { return }
         let now = recordedLength
         // While paused the files do not grow: the mark sits at the pause. Else the wall time since the sign is taken
         // back from where the recording is now, as for the last "muted" sighting.
         let at = isPaused ? now : min(now, max(0, now - max(0, clock().timeIntervalSince(time))))
-        let mark = CallMark(at: at, time: time, link: link, platform: platform, source: source, sure: sure)
+        let mark = CallMark(at: at, time: time, link: link, platform: platform, source: source, sure: sure, titleKey: titleKey)
         edit { $0.callMarks = ($0.callMarks ?? []) + [mark] }
         Log.info("Marked a possible new call in the recording (\(source.rawValue), \(sure ? "sure" : "not sure"))")
     }

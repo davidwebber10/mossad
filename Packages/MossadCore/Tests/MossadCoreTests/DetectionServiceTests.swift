@@ -50,8 +50,12 @@ final class FakeWindows: WindowTitleProbing {
     /// The titles of the copies that answered, when another copy did not (so `titles` is unknown).
     var answered: [String: [String]] = [:]
     var running: Set<String> = []
+    var answeredReads = 0
     func windowTitles(bundleID: String) -> [String]? { titles[bundleID] }
-    func answeredWindowTitles(bundleID: String) -> [String]? { answered[bundleID] ?? titles[bundleID] }
+    func answeredWindowTitles(bundleID: String) -> [String]? {
+        answeredReads += 1
+        return answered[bundleID] ?? titles[bundleID]
+    }
     func isRunning(bundleID: String) -> Bool { running.contains(bundleID) }
 }
 
@@ -941,7 +945,7 @@ final class DetectionServiceTests: XCTestCase {
 
     /// Two Meet calls, one after the other, with the mic in use the whole time: the owner opens the next link in the
     /// call's tab. One recording with a sure mark at the first reading of the change. The call goes on, and the mute
-    /// check follows the new link.
+    /// check and the service's link stay as they were: a wrong mark can never move the mute check to another page.
     func testANewLinkMarksTheCallAndDoesNotEndIt() {
         let chrome = "com.google.Chrome"
         let mute = FakeMute()
@@ -961,9 +965,9 @@ final class DetectionServiceTests: XCTestCase {
         service.tick(at: change.addingTimeInterval(4))
         XCTAssertEqual(tabs.queried, [chrome], "the second reading is a new read, before the cache's 10 s")
         XCTAssertEqual(marks(events), [.marked(link: "klm-nopq-rst", platform: .meet, source: .tabs, sure: true, at: change)])
-        XCTAssertEqual(service.meetingID, "klm-nopq-rst")
+        XCTAssertEqual(service.meetingID, "abc-defg-hij")
         service.checkMute(at: change.addingTimeInterval(5))
-        XCTAssertEqual(mute.lastMeetingID, "klm-nopq-rst", "the mute check reads the new call's window")
+        XCTAssertEqual(mute.lastMeetingID, "abc-defg-hij", "the mute check keeps the call's window")
         for i in 3...60 { service.tick(at: change.addingTimeInterval(Double(i) * 2)) }
         XCTAssertEqual(callEvents(events), [.started(platform: .meet, bundleID: chrome, at: now)], "a mark never ends or starts a call")
         XCTAssertEqual(marks(events).count, 1)
@@ -1007,7 +1011,7 @@ final class DetectionServiceTests: XCTestCase {
         for i in 11...40 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
         tabs.tabs[chrome] = [meetTab("abc-defg-hij", active: true)]
         for i in 41...70 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
-        let links = marks(events).map { event -> String? in if case .marked(let link, _, _, _, _) = event { return link } else { return nil } }
+        let links = marks(events).map { event -> String? in if case .marked(let link, _, _, _, _, _) = event { return link } else { return nil } }
         XCTAssertEqual(links, ["klm-nopq-rst", "abc-defg-hij"])
         XCTAssertEqual(callEvents(events).count, 1)
     }
@@ -1077,8 +1081,10 @@ final class DetectionServiceTests: XCTestCase {
     }
 
     /// A call found by the window title, with no tab list: it takes its link at the first sure list with one meeting,
-    /// and only then can a new link mark it.
-    func testACallWithNoLinkAdoptsItAndThenMarks() {
+    /// A call found by the window title, with no tab list: it takes the link of the one meeting tab on two readings
+    /// within 10 s. Its marks are not sure (the link was not read from the call's own tab at the start), and the
+    /// service's link and the mute check stay as they were.
+    func testACallWithNoLinkAdoptsItOnTwoReadingsAndItsMarksAreNotSure() {
         let chrome = "com.google.Chrome"
         let mute = FakeMute()
         let service = DetectionService(mic: mic, tabs: tabs, windows: windows, mute: mute)
@@ -1088,37 +1094,114 @@ final class DetectionServiceTests: XCTestCase {
         var events: [DetectorEvent] = []
         service.onEvent = { events.append($0) }
         service.tick(at: now)
-        XCTAssertNil(service.meetingID)
         tabs.unreadable = []
         tabs.tabs[chrome] = [meetTab("abc-defg-hij", active: true)]
-        service.tick(at: now.addingTimeInterval(10))
-        XCTAssertEqual(service.meetingID, "abc-defg-hij")
+        for t in stride(from: 2.0, through: 18, by: 2) { service.tick(at: now.addingTimeInterval(t)) }
+        XCTAssertNil(service.meetingID)
         XCTAssertEqual(marks(events), [], "taking the link is no mark")
-        service.checkMute(at: now.addingTimeInterval(11))
-        XCTAssertEqual(mute.lastMeetingID, "abc-defg-hij")
+        service.checkMute(at: now.addingTimeInterval(19))
+        XCTAssertNil(mute.lastMeetingID)
         tabs.tabs[chrome] = [meetTab("klm-nopq-rst", active: true)]
         windows.answered[chrome] = ["Meet - klm-nopq-rst - Google Chrome"]
-        for t in stride(from: 20.0, through: 60, by: 2) { service.tick(at: now.addingTimeInterval(t)) }
-        XCTAssertEqual(marks(events).count, 1)
+        for t in stride(from: 20.0, through: 120, by: 2) { service.tick(at: now.addingTimeInterval(t)) }
+        XCTAssertEqual(marks(events), [.marked(link: "klm-nopq-rst", platform: .meet, source: .tabs, sure: false, at: now.addingTimeInterval(24))])
         XCTAssertEqual(callEvents(events).count, 1)
+        XCTAssertNil(service.meetingID)
+    }
+
+    /// One reading of the one meeting tab is no link: a mark from the tab after it is not made.
+    func testOneReadingDoesNotGiveACallALink() {
+        let chrome = "com.google.Chrome"
+        tabs.unreadable = [chrome]
+        windows.answered[chrome] = ["Meet - abc-defg-hij - Google Chrome"]
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        var events: [DetectorEvent] = []
+        service.onEvent = { events.append($0) }
+        service.tick(at: now)
+        tabs.unreadable = []
+        tabs.tabs[chrome] = [meetTab("uvw-xyza-bcd", active: true)]
+        service.tick(at: now.addingTimeInterval(10))
+        tabs.unreadable = [chrome]
+        for t in stride(from: 12.0, through: 30, by: 2) { service.tick(at: now.addingTimeInterval(t)) }
+        tabs.unreadable = []
+        tabs.tabs[chrome] = [meetTab("abc-defg-hij", active: true)]
+        for t in stride(from: 32.0, through: 120, by: 2) { service.tick(at: now.addingTimeInterval(t)) }
+        XCTAssertEqual(marks(events), [], "the call took its own link, so its own tab is no change")
     }
 
     /// The tab list is unknown (a second copy of the browser answers): the windows' Meet title changes, and a mark
-    /// that is not sure is written 10 s later, at the time of the change. The call goes on.
+    /// that is not sure, with the key of the new title, is written 10 s later, at the time of the change.
     func testATitleChangeMarksAsNotSure() {
         let chrome = "com.google.Chrome"
         tabs.unreadable = [chrome]
         windows.answered[chrome] = ["Meet - Weekly sync - Google Chrome"]
         mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
         var events: [DetectorEvent] = []
+        var firstKeys: [String] = []
         service.onEvent = { events.append($0) }
-        for i in 0...10 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        service.onFirstTitleKey = { firstKeys.append($0) }
+        for i in 0...40 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
         windows.answered[chrome] = ["Meet - Budget review - Google Chrome"]
-        for i in 11...16 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        for i in 41...46 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
         XCTAssertEqual(marks(events), [], "a title mark waits 10 s for a sure mark of the same change")
-        for i in 17...60 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
-        XCTAssertEqual(marks(events), [.marked(link: nil, platform: .meet, source: .title, sure: false, at: now.addingTimeInterval(22))])
+        for i in 47...90 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(marks(events), [.marked(link: nil, platform: .meet, source: .title, sure: false, at: now.addingTimeInterval(82),
+                                               titleKey: "2be7ef95b4132e1d")])
+        XCTAssertEqual(firstKeys, ["08786467415118f4"])
         XCTAssertEqual(callEvents(events), [.started(platform: .meet, bundleID: chrome, at: now)])
+    }
+
+    /// The review's I5: Meet may show the code first and the meeting's name later for one call. Nothing is marked in
+    /// the first 60 s; the call's first title is the one it shows at 60 s, sent once.
+    func testNoTitleMarkInTheFirstMinuteAndTheFirstTitleIsTheOneAtSixtySeconds() {
+        let chrome = "com.google.Chrome"
+        tabs.unreadable = [chrome]
+        windows.answered[chrome] = ["Meet - abc-defg-hij - Google Chrome"]
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        var events: [DetectorEvent] = []
+        var firstKeys: [String] = []
+        service.onEvent = { events.append($0) }
+        service.onFirstTitleKey = { firstKeys.append($0) }
+        for i in 0...10 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        windows.answered[chrome] = ["Meet - Weekly sync - Google Chrome"]
+        for i in 11...28 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(firstKeys, [], "nothing before 60 s")
+        for i in 29...100 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(marks(events), [])
+        XCTAssertEqual(firstKeys, ["08786467415118f4"])
+    }
+
+    /// The owner looks at the next meeting's page and comes back before the mark is written: no mark.
+    func testATitleChangeAndItsReturnMarkNothing() {
+        let chrome = "com.google.Chrome"
+        tabs.unreadable = [chrome]
+        windows.answered[chrome] = ["Meet - Weekly sync - Google Chrome"]
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        var events: [DetectorEvent] = []
+        service.onEvent = { events.append($0) }
+        for i in 0...40 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        windows.answered[chrome] = ["Meet - Budget review - Google Chrome"]
+        for i in 41...44 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        windows.answered[chrome] = ["Meet - Weekly sync - Google Chrome"]
+        for i in 45...100 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(marks(events), [])
+    }
+
+    /// The window titles are read for the marks at most once each 4 s, and less often after a read that failed.
+    func testTheTitleReadHasAPaceAndABackOff() {
+        let chrome = "com.google.Chrome"
+        mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
+        tabs.tabs[chrome] = [meetTab("abc-defg-hij", active: true)]
+        windows.answered[chrome] = ["Meet - abc-defg-hij - Google Chrome"]
+        service.tick(at: now)
+        windows.answeredReads = 0
+        for i in 1...60 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertLessThanOrEqual(windows.answeredReads, 30, "one read each 4 s in 120 s")
+        XCTAssertGreaterThanOrEqual(windows.answeredReads, 29)
+        windows.answered[chrome] = nil
+        windows.answeredReads = 0
+        for i in 61...120 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertLessThanOrEqual(windows.answeredReads, 5, "after each failed read the next one waits longer")
     }
 
     /// The owner looks at a document: the window shows no Meet title, which says nothing.
@@ -1129,15 +1212,15 @@ final class DetectionServiceTests: XCTestCase {
         mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
         var events: [DetectorEvent] = []
         service.onEvent = { events.append($0) }
-        for i in 0...10 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        for i in 0...40 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
         windows.answered[chrome] = ["Quarterly plan - Google Docs - Google Chrome"]
-        for i in 11...40 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        for i in 41...70 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
         windows.answered[chrome] = ["Meet - Weekly sync - Google Chrome"]
-        for i in 41...60 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        for i in 71...90 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
         XCTAssertEqual(marks(events), [])
     }
 
-    /// The tabs and the title show the same change: one sure mark, no title mark.
+    /// The tabs and the title show the same change: one sure mark at the title's earlier time, no title mark.
     func testATitleChangeThatTheTabsConfirmIsOneSureMark() {
         let chrome = "com.google.Chrome"
         mic.list = [proc(2, "com.google.Chrome.helper", input: true)]
@@ -1145,14 +1228,11 @@ final class DetectionServiceTests: XCTestCase {
         windows.answered[chrome] = ["Meet - abc-defg-hij - Google Chrome"]
         var events: [DetectorEvent] = []
         service.onEvent = { events.append($0) }
-        for i in 0...10 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        for i in 0...40 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
         tabs.tabs[chrome] = [meetTab("klm-nopq-rst", active: true)]
         windows.answered[chrome] = ["Meet - klm-nopq-rst - Google Chrome"]
-        for i in 11...60 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
-        XCTAssertEqual(marks(events).count, 1)
-        guard case .marked(_, _, let source, let sure, _)? = marks(events).first else { return XCTFail() }
-        XCTAssertEqual(source, .tabs)
-        XCTAssertTrue(sure)
+        for i in 41...90 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(marks(events), [.marked(link: "klm-nopq-rst", platform: .meet, source: .tabs, sure: true, at: now.addingTimeInterval(82))])
     }
 
     /// The owner leaves the call, its tab stays open, and the next meeting's window is in front: the title changes at
@@ -1164,15 +1244,11 @@ final class DetectionServiceTests: XCTestCase {
         windows.answered[chrome] = ["Meet - abc-defg-hij - Google Chrome"]
         var events: [DetectorEvent] = []
         service.onEvent = { events.append($0) }
-        for i in 0...10 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        for i in 0...40 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
         tabs.tabs[chrome] = [meetTab("abc-defg-hij", inCall: false), meetTab("klm-nopq-rst", active: true)]
         windows.answered[chrome] = ["Meet - klm-nopq-rst - Google Chrome"]
-        for i in 11...60 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
-        XCTAssertEqual(marks(events).count, 1)
-        guard case .marked(let link, _, let source, let sure, _)? = marks(events).first else { return XCTFail() }
-        XCTAssertEqual(link, "klm-nopq-rst")
-        XCTAssertEqual(source, .tabs)
-        XCTAssertTrue(sure)
+        for i in 41...100 { service.tick(at: now.addingTimeInterval(Double(i) * 2)) }
+        XCTAssertEqual(marks(events), [.marked(link: "klm-nopq-rst", platform: .meet, source: .tabs, sure: true, at: now.addingTimeInterval(82))])
     }
 
     /// The title watch reads the windows of a Meet call only.

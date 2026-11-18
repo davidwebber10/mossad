@@ -58,11 +58,19 @@ final class CallLinkWatchTests: XCTestCase {
         XCTAssertEqual(w.observe(list, at: at(8)), .none)
         XCTAssertEqual(w.observe(nil, at: at(14)), .none)
         XCTAssertEqual(w.observe(list, at: at(20)), .none, "12 s after the last sure reading: a new wait")
-        XCTAssertEqual(w.pendingSince(at: at(20)), at(20))
+        XCTAssertEqual(w.pendingSince(at: at(20)), at(0), "the mark keeps the time of the first wait of the same change")
         XCTAssertEqual(w.observe(list, at: at(28)), .none)
         XCTAssertEqual(w.observe(list, at: at(36)), .none)
         XCTAssertEqual(w.observe(list, at: at(44)), .none)
         XCTAssertEqual(w.observe(list, at: at(50)), .newCall("klm-nopq-rst", .meet))
+    }
+
+    /// Two stray readings minutes apart do not carry the first one's time.
+    func testAWaitMinutesLaterHasItsOwnTime() {
+        var w = CallLinkWatch(link: "abc-defg-hij")
+        _ = w.observe([meet("klm-nopq-rst")], at: at(0))
+        _ = w.observe([meet("klm-nopq-rst")], at: at(180))
+        XCTAssertEqual(w.pendingSince(at: at(182)), at(180))
     }
 
     func testTheTabThatMovedToAnotherLinkIsANewCall() {
@@ -152,14 +160,35 @@ final class CallLinkWatchTests: XCTestCase {
         XCTAssertFalse(w.isPending(at: at(6)))
     }
 
-    func testACallWithNoLinkAdoptsTheOneMeetingAndNeverMarksBefore() {
+    func testACallWithNoLinkAdoptsTheOneMeetingOnTwoReadingsAndNeverMarksBefore() {
         var w = CallLinkWatch(link: nil)
         XCTAssertEqual(w.observe(nil, at: at(0)), .none)
         XCTAssertEqual(w.observe([meet("abc-defg-hij"), meet("klm-nopq-rst")], at: at(2)), .none, "two meetings: no link is sure")
         XCTAssertNil(w.link)
-        XCTAssertEqual(w.observe([meet("abc-defg-hij")], at: at(4)), .adopt("abc-defg-hij"))
+        XCTAssertEqual(w.observe([meet("abc-defg-hij")], at: at(4)), .none, "one reading is not enough")
+        XCTAssertTrue(w.isPending(at: at(6)))
+        XCTAssertEqual(w.observe(nil, at: at(8)), .none)
+        XCTAssertEqual(w.observe([meet("abc-defg-hij")], at: at(10)), .adopt("abc-defg-hij"))
         XCTAssertEqual(w.link, "abc-defg-hij")
-        XCTAssertEqual(w.observe([meet("abc-defg-hij")], at: at(6)), .none)
+        XCTAssertTrue(w.isAdopted)
+        XCTAssertEqual(w.observe([meet("abc-defg-hij")], at: at(12)), .none)
+    }
+
+    /// The review's I7: one reading of a pinned tab while the call's own tab shows no meeting title is no link.
+    func testAnAdoptionNeedsTheSameMeetingOnTwoReadingsWithinTenSeconds() {
+        var w = CallLinkWatch(link: nil)
+        XCTAssertEqual(w.observe([meet("klm-nopq-rst")], at: at(0)), .none)
+        XCTAssertEqual(w.observe([meet("abc-defg-hij")], at: at(4)), .none, "another meeting starts the count again")
+        XCTAssertEqual(w.observe([meet("abc-defg-hij")], at: at(20)), .none, "16 s later: a new count")
+        XCTAssertNil(w.link)
+        XCTAssertEqual(w.observe([meet("abc-defg-hij")], at: at(24)), .adopt("abc-defg-hij"))
+    }
+
+    func testALinkFromTheStartIsNotAdopted() {
+        var w = CallLinkWatch(link: "abc-defg-hij")
+        _ = w.observe([meet("klm-nopq-rst")], at: at(0))
+        XCTAssertEqual(w.observe([meet("klm-nopq-rst")], at: at(2)), .newCall("klm-nopq-rst", .meet))
+        XCTAssertFalse(w.isAdopted)
     }
 
     func testACallWithNoLinkDoesNotAdoptATabWithNoLink() {

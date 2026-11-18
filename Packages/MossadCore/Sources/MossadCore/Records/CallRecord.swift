@@ -140,8 +140,12 @@ public struct CallMark: Codable, Equatable, Sendable {
     public var source: Source
     /// True when the source says for sure that the call changed.
     public var sure: Bool
+    /// For a title mark: `CallTitleWatch.key` of the new title's meeting part, never the text. The same meeting gives
+    /// the same key, so a return to an earlier title can be read from the marks.
+    public var titleKey: String?
 
-    public init(at: TimeInterval, time: Date, link: String?, platform: Platform, source: Source, sure: Bool) {
+    public init(at: TimeInterval, time: Date, link: String?, platform: Platform, source: Source, sure: Bool, titleKey: String? = nil) {
+        self.titleKey = titleKey
         self.at = at
         self.time = time
         self.link = link
@@ -363,6 +367,9 @@ public struct CallRecord: Codable, Equatable, Sendable {
     public var callMarks: [CallMark]?
     /// The id of the recording this one was cut from. Nil for a recording that was never cut.
     public var cutFrom: String?
+    /// `CallTitleWatch.key` of the Meet title the call showed at its first minute (a code can become a name before).
+    /// Nil when no single Meet title showed.
+    public var firstTitleKey: String?
 
     public init(id: String, platform: Platform, bundleID: String, start: Date, end: Date, status: CallStatus) {
         self.id = id
@@ -502,6 +509,7 @@ extension CallRecord {
         pauses = try c.decodeIfPresent([PauseSpan].self, forKey: .pauses)
         callMarks = try c.decodeIfPresent([CallMark].self, forKey: .callMarks)
         cutFrom = try c.decodeIfPresent(String.self, forKey: .cutFrom)
+        firstTitleKey = try c.decodeIfPresent(String.self, forKey: .firstTitleKey)
     }
 }
 

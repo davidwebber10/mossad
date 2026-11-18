@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// Whether the browser's windows show another Meet meeting than the call's own. Accessibility answers for every copy
@@ -12,6 +13,12 @@ public struct CallTitleWatch: Equatable, Sendable {
     private var pendingAt: Date?
 
     public init() {}
+
+    /// The key of a meeting's part of a title: the first 8 bytes of its SHA-256, in hex. A record keeps this, never
+    /// the text.
+    public static func key(_ meeting: String) -> String {
+        SHA256.hash(data: Data(meeting.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
+    }
 
     /// The time of the first reading of a title change that waits for its second reading.
     public var pendingSince: Date? { pendingAt }
@@ -44,18 +51,28 @@ public struct CallTitleWatch: Equatable, Sendable {
         return nil
     }
 
-    /// Browser names that end a window title: never a meeting's name.
-    static let browserNames = ["Google Chrome", "Chromium", "Microsoft Edge", "Brave", "Arc", "Vivaldi", "Opera", "Safari", "Firefox"]
+    /// Browser names that end a window title, alone or with the browser's profile after them.
+    static let browserNames: Set<String> = ["Google Chrome", "Google Chrome Beta", "Google Chrome Canary", "Google Chrome Dev",
+                                            "Chromium", "Microsoft Edge", "Microsoft Edge Beta", "Microsoft Edge Dev",
+                                            "Microsoft Edge Canary", "Brave", "Brave Browser", "Arc", "Vivaldi", "Opera",
+                                            "Safari", "Firefox"]
+    static let separators = [" - ", " – ", " — "]
 
-    /// The meeting's part of a Meet window title ("Meet - <meeting> - <browser> - <profile>"): the text up to the next
-    /// separator, so a sound sign or the browser's profile is not a new meeting. A meeting name that holds a separator
-    /// is cut short; two such names can then look alike, which can only miss a mark, never make one.
+    /// The meeting's part of a Meet window title ("Meet - <meeting> - <browser> - <profile>"). The browser's name is
+    /// taken off only as the title's last part, or the one before a last part (the profile), by the title's own
+    /// separators: never from the start of a meeting's name. The meeting is the next part after "Meet - ", so a sound
+    /// sign is not a new meeting. A meeting name that holds a separator is cut short; two such names can then look
+    /// alike, which can only miss a mark, never make one.
     public static func meeting(inWindowTitle title: String) -> String? {
-        guard MeetingMatcher.meetWindowIsMeeting(title) else { return nil }
-        let rest = title.trimmingCharacters(in: .whitespaces).dropFirst("Meet - ".count)
-        let part = rest.components(separatedBy: " - ").first?.components(separatedBy: " – ").first ?? ""
-        let meeting = part.trimmingCharacters(in: .whitespaces)
-        guard !meeting.isEmpty, !browserNames.contains(where: { meeting.hasPrefix($0) }) else { return nil }
-        return meeting
+        var parts = [title.replacingOccurrences(of: "\u{200B}", with: "").trimmingCharacters(in: .whitespaces)]
+        for separator in separators { parts = parts.flatMap { $0.components(separatedBy: separator) } }
+        parts = parts.map { $0.trimmingCharacters(in: .whitespaces) }
+        if parts.count >= 2, browserNames.contains(parts[parts.count - 1]) {
+            parts.removeLast()
+        } else if parts.count >= 3, browserNames.contains(parts[parts.count - 2]) {
+            parts.removeLast(2)
+        }
+        guard parts.count >= 2, parts[0] == "Meet", !parts[1].isEmpty else { return nil }
+        return parts[1]
     }
 }

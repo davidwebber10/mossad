@@ -32,7 +32,7 @@ final class MovedRecordTests: XCTestCase {
     func testEveryFieldOfARecordHasARule() throws {
         XCTAssertEqual(storedFields, Set(MovedRecord.fields.keys), "a field of CallRecord with no rule, or a rule with no field")
         XCTAssertEqual(Set(try json(fullRecord()).keys), Set(MovedRecord.fields.keys), "fullRecord sets every field")
-        XCTAssertEqual(MovedRecord.fields.count, 66)
+        XCTAssertEqual(MovedRecord.fields.count, 67)
     }
 
     /// `fullRecord` sets every field to a value that is not its default, so the kept and cleared checks mean something
@@ -61,7 +61,7 @@ final class MovedRecordTests: XCTestCase {
             }
         }
         let counts = Dictionary(grouping: MovedRecord.fields.values, by: { $0 }).mapValues(\.count)
-        XCTAssertEqual(counts[.kept], 47)
+        XCTAssertEqual(counts[.kept], 48)
         XCTAssertEqual(counts[.changed], 5)
         XCTAssertEqual(counts[.cleared], 14)
     }

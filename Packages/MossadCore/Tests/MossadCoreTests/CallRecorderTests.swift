@@ -200,6 +200,28 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertEqual(marks.first?.at ?? 0, 40, accuracy: 0.05)
     }
 
+    func testATitleMarkKeepsItsKeyAndTheFirstTitleKeyIsSavedOnce() throws {
+        let id = try recorder.begin(platform: .meet, bundleID: "com.google.Chrome", processIDs: [1], at: t0)
+        speak(from: 0, to: 90)
+        recorder.setFirstTitleKey("08786467415118f4")
+        recorder.setFirstTitleKey("2be7ef95b4132e1d")
+        recorder.addCallMark(link: nil, platform: .meet, source: .title, sure: false, at: t0.addingTimeInterval(80), titleKey: "2be7ef95b4132e1d")
+        let r = try CallRecord.load(from: paths.callDirectory(id))
+        XCTAssertEqual(r.firstTitleKey, "08786467415118f4", "written once")
+        XCTAssertEqual(r.callMarks?.first?.titleKey, "2be7ef95b4132e1d")
+    }
+
+    /// A room recording owns the recorder: a mark or a title key on its way when it starts is not the room's.
+    func testARoomRecordingTakesNoMarkAndNoTitleKey() throws {
+        let id = try recorder.beginManual(at: t0)
+        speak(from: 0, to: 30)
+        recorder.addCallMark(link: "klm-nopq-rst", platform: .meet, source: .tabs, sure: true, at: t0.addingTimeInterval(20))
+        recorder.setFirstTitleKey("08786467415118f4")
+        let r = try CallRecord.load(from: paths.callDirectory(id))
+        XCTAssertNil(r.callMarks)
+        XCTAssertNil(r.firstTitleKey)
+    }
+
     func testACallMarkWithNoCallDoesNothing() throws {
         recorder.addCallMark(link: "klm-nopq-rst", platform: .meet, source: .tabs, sure: true, at: t0)
         XCTAssertNil(recorder.currentCallID)

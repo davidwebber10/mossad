@@ -416,52 +416,20 @@ final class NoRecordGateSessionTests: XCTestCase {
 
     // MARK: Marks during a call
 
-    /// The owner moves from a call that records to a meeting marked "do not record": the recording ends at the sure
-    /// mark, and the detector's later end of the call is the blocked call's, with nothing to stop.
-    func testASureMarkToAMeetingNotToRecordEndsTheRecording() {
+    /// A mark never ends a recording, also a sure one to a meeting under a do-not-record rule: the app hands a mark to
+    /// the recorder's `addCallMark` only, never to the gate. The call that records ends as any call.
+    func testASureMarkToALinkUnderADoNotRecordRuleDoesNotEndTheRecording() {
         let first = event("Team sync", in: 0, text: "https://meet.google.com/abc-defg-hij")
         let blocked = event("Vendor", in: 30, text: "https://meet.google.com/klm-nopq-rst")
         let g = gate(blocking: blocked, events: [first, blocked])
         XCTAssertFalse(g.blocksStart(platform: .meet, bundleID: chrome, meetingID: "abc-defg-hij", at: at(1)))
-        XCTAssertTrue(g.endsAtMark(platform: .meet, bundleID: chrome, link: "klm-nopq-rst", sure: true, at: at(31), forced: false))
-        XCTAssertTrue(g.isBlockingCall)
-        XCTAssertTrue(g.callEnded(at: at(60)))
-    }
-
-    func testAMarkThatIsNotSureNeverEndsTheRecording() {
-        let first = event("Team sync", in: 0, text: "https://meet.google.com/abc-defg-hij")
-        let blocked = event("Vendor", in: 30, text: "https://meet.google.com/klm-nopq-rst")
-        let g = gate(blocking: blocked, events: [first, blocked])
-        XCTAssertFalse(g.blocksStart(platform: .meet, bundleID: chrome, meetingID: "abc-defg-hij", at: at(1)))
-        XCTAssertFalse(g.endsAtMark(platform: .meet, bundleID: chrome, link: nil, sure: false, at: at(31), forced: false))
-        XCTAssertFalse(g.endsAtMark(platform: .meet, bundleID: chrome, link: "klm-nopq-rst", sure: false, at: at(31), forced: false))
+        let mark = DetectorEvent.marked(link: "klm-nopq-rst", platform: .meet, source: .tabs, sure: true, at: at(31))
+        XCTAssertFalse(mark.reachesTheGate)
+        // What the app does with an event that reaches the gate: a start asks `blocksStart`, an end `callEnded`.
+        if mark.reachesTheGate { _ = g.blocksStart(platform: .meet, bundleID: chrome, meetingID: "klm-nopq-rst", at: at(31)) }
         XCTAssertFalse(g.isBlockingCall)
-        XCTAssertFalse(g.callEnded(at: at(60)), "the call that records ends as any call")
-    }
-
-    func testASureMarkToAMeetingThatRecordsChangesNothing() {
-        let first = event("Team sync", in: 0, text: "https://meet.google.com/abc-defg-hij")
-        let blocked = event("Vendor", in: 30, text: "https://meet.google.com/klm-nopq-rst")
-        let g = gate(blocking: blocked, events: [first, blocked])
-        XCTAssertFalse(g.blocksStart(platform: .meet, bundleID: chrome, meetingID: "abc-defg-hij", at: at(1)))
-        XCTAssertFalse(g.endsAtMark(platform: .meet, bundleID: chrome, link: "xyz-abcd-efg", sure: true, at: at(31), forced: false))
-        XCTAssertFalse(g.isBlockingCall)
-    }
-
-    /// The owner's Record always wins, also over a mark.
-    func testTheOwnersRecordIsNotEndedByAMark() {
-        let blocked = event("Vendor", in: 30, text: "https://meet.google.com/klm-nopq-rst")
-        let g = gate(blocking: blocked)
-        XCTAssertFalse(g.endsAtMark(platform: .meet, bundleID: chrome, link: "klm-nopq-rst", sure: true, at: at(31), forced: true))
-        XCTAssertFalse(g.isBlockingCall)
-    }
-
-    /// A call that is already off the record is not asked again: a mark never starts a recording.
-    func testAMarkInACallThatIsOffTheRecordChangesNothing() {
-        let blocked = event("Vendor", in: 0, text: "https://meet.google.com/abc-defg-hij")
-        let g = gate(blocking: blocked)
-        XCTAssertTrue(g.blocksStart(platform: .meet, bundleID: chrome, meetingID: "abc-defg-hij", at: at(1)))
-        XCTAssertFalse(g.endsAtMark(platform: .meet, bundleID: chrome, link: "xyz-abcd-efg", sure: true, at: at(10), forced: false))
-        XCTAssertTrue(g.isBlockingCall, "the block of the call goes on")
+        XCTAssertFalse(g.callEnded(at: at(60)), "the recording ends at the call's own end, as any call")
+        XCTAssertTrue(DetectorEvent.started(platform: .meet, bundleID: chrome, at: at(1)).reachesTheGate)
+        XCTAssertTrue(DetectorEvent.ended(at: at(60), trimTo: nil).reachesTheGate)
     }
 }

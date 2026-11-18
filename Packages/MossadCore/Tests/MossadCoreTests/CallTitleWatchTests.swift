@@ -99,4 +99,27 @@ final class CallTitleWatchTests: XCTestCase {
         XCTAssertNil(CallTitleWatch.meeting(inWindowTitle: "Meet"))
         XCTAssertNil(CallTitleWatch.meeting(inWindowTitle: "Docs - Meet - notes"))
     }
+
+    /// The review's I6: a browser's name is taken off only as the end of the title, never from a meeting's name.
+    func testMeetingNamesThatBeginLikeABrowserAreMeetingNames() {
+        XCTAssertEqual(CallTitleWatch.meeting(inWindowTitle: "Meet - Operations review - Google Chrome"), "Operations review")
+        XCTAssertEqual(CallTitleWatch.meeting(inWindowTitle: "Meet - Architecture sync – Arc"), "Architecture sync")
+        XCTAssertEqual(CallTitleWatch.meeting(inWindowTitle: "Meet - Brave new plan - Brave"), "Brave new plan")
+        XCTAssertEqual(CallTitleWatch.meeting(inWindowTitle: "Meet - Safari launch"), "Safari launch")
+        XCTAssertEqual(CallTitleWatch.meeting(inWindowTitle: "Meet - Weekly sync - Google Chrome - Work"), "Weekly sync")
+        XCTAssertNil(CallTitleWatch.meeting(inWindowTitle: "Meet - Opera"))
+        XCTAssertNil(CallTitleWatch.meeting(inWindowTitle: "Meet - Google Chrome - Work"))
+        var w = CallTitleWatch()
+        _ = w.observe(["Meet - Operations review - Google Chrome"], at: at(0))
+        XCTAssertEqual(w.title, "Operations review")
+        _ = w.observe(["Meet - Budget review - Google Chrome"], at: at(2))
+        XCTAssertEqual(w.observe(["Meet - Budget review - Google Chrome"], at: at(4)), "Budget review")
+    }
+
+    /// The key of a meeting's name: the first 8 bytes of its SHA-256, in hex. Never the text.
+    func testTheKeyOfAMeetingName() {
+        XCTAssertEqual(CallTitleWatch.key("Weekly sync"), "08786467415118f4")
+        XCTAssertEqual(CallTitleWatch.key("Budget review"), "2be7ef95b4132e1d")
+        XCTAssertEqual(CallTitleWatch.key("abc-defg-hij"), "fbc346f7fdf4b387")
+    }
 }
