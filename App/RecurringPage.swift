@@ -251,7 +251,7 @@ struct NextTimeTab: View {
                             Text("Add a point for one person").font(.system(size: Rhythm.secondarySize, weight: .semibold)).foregroundStyle(Palette.accent)
                         }
                         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                        .help("A point for the next time you see this person, in this series or any other meeting")
+                        .help("A point for your next 1:1 with this person. It shows on that meeting, not on a meeting with more people")
                     }
                 }
             }

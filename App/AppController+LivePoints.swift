@@ -7,9 +7,10 @@ import MossadCore
 @MainActor
 final class LivePointsModel: ObservableObject {
     @Published private(set) var marks = LivePointMarks() { willSet { owner?.objectWillChange.send() } }
-    /// The call's series and saved people, made off the main thread.
+    /// The call's series, and the person when the call is a 1:1 with one sure person (`OneOnOne.person(ofLive:)`),
+    /// made off the main thread. Only that person's points are in the list: a group call lists none.
     @Published private(set) var series: MeetingSeries? { willSet { owner?.objectWillChange.send() } }
-    @Published private(set) var people: [String] = [] { willSet { owner?.objectWillChange.send() } }
+    @Published private(set) var oneOnOne: String? { willSet { owner?.objectWillChange.send() } }
     weak var owner: AppController?
     /// One write at a time, in order, so an older copy never replaces a newer one.
     private let saves = DispatchQueue(label: "com.dwebber.mossad.live-points-save", qos: .utility)
@@ -20,10 +21,11 @@ final class LivePointsModel: ObservableObject {
     private var making: Task<Void, Never>?
     var hearing: Task<Void, Never>?
 
-    /// The call's points: the series' first, then each person's, with the ones this call closed.
+    /// The call's points: the series' first, then the meeting's, then the person's in a 1:1, with the ones this call
+    /// closed.
     func points(_ book: NextTimeBook, refs: PersonReferences, record: CallRecord?) -> [NextTimePoint] {
         guard let callID else { return [] }
-        return LivePoints.list(book, series: series, people: people, callID: callID, record: record?.id == callID ? record : nil,
+        return LivePoints.list(book, series: series, oneOnOne: oneOnOne, callID: callID, record: record?.id == callID ? record : nil,
                                canonical: { refs.canonical($0) })
     }
 
@@ -32,7 +34,7 @@ final class LivePointsModel: ObservableObject {
         guard callID != id else { return }
         callID = id
         series = nil
-        people = []
+        oneOnOne = nil
         madeFor = nil
         marks = LivePointMarks.load(from: paths.callDirectory(id)) ?? LivePointMarks()
     }
@@ -57,7 +59,8 @@ final class LivePointsModel: ObservableObject {
         let ownerEmail: String
         let aliases: [String: String]
         let refs: PersonReferences
-        let heard: [String]
+        /// The call audio's voices with their names of now (`LiveTranscript.otherVoices`).
+        let voices: [String?]
         /// When the people file changed: a late read of it makes the list again.
         let peopleStamp: Date?
     }
@@ -71,21 +74,25 @@ final class LivePointsModel: ObservableObject {
         h.combine(inputs.record.calendarSeriesID)
         h.combine(inputs.record.attendees)
         h.combine(inputs.all.map(\.id))
-        h.combine(inputs.heard)
+        h.combine(inputs.voices)
+        h.combine(inputs.record.inviteNotSure)
         h.combine(inputs.peopleStamp)
         let key = h.finalize()
         guard key != madeFor else { return }
         madeFor = key
         making?.cancel()
         making = Task {
-            let made = await Task.detached(priority: .utility) { () -> (MeetingSeries?, [String]) in
+            let made = await Task.detached(priority: .utility) { () -> (MeetingSeries?, String?) in
+                let directory = PersonDirectory(profiles: inputs.profiles)
                 let s = LivePoints.series(ofLive: inputs.record, in: inputs.all, records: inputs.records, owner: inputs.owner,
-                                          directory: PersonDirectory(profiles: inputs.profiles), ownerEmails: [inputs.ownerEmail], aliases: inputs.aliases)
-                return (s, LivePoints.personIDs(attendees: inputs.record.attendees, heard: inputs.heard, people: inputs.refs))
+                                          directory: directory, ownerEmails: [inputs.ownerEmail], aliases: inputs.aliases)
+                let one = OneOnOne.person(ofLive: inputs.record, otherVoices: inputs.voices, owner: inputs.owner, directory: directory,
+                                          ownerEmails: [inputs.ownerEmail], people: inputs.refs)
+                return (s, one)
             }.value
             guard !Task.isCancelled, callID == inputs.record.id else { return }
             if series?.id != made.0?.id || series?.keys != made.0?.keys { series = made.0 }
-            if people != made.1 { people = made.1 }
+            if oneOnOne != made.1 { oneOnOne = made.1 }
         }
     }
 }
@@ -98,11 +105,11 @@ extension AppController {
         livePoints.owner = self
         refreshSeries()
         livePoints.open(record.id, paths: paths)
-        let heard = Array(Set(live.transcript.names.values)).sorted()
+        let voices = live.transcript.otherVoices(owner: ownerName)
         let peopleFile = paths.people.appendingPathComponent(PeopleStore.fileName)
         livePoints.refresh(.init(record: record, all: series.all, records: meetings, owner: ownerName, profiles: library.profiles,
                                  ownerEmail: UserDefaults.standard.string(forKey: "ownerEmail") ?? "", aliases: SeriesCatalog.aliases(calendarEvents),
-                                 refs: series.people, heard: heard,
+                                 refs: series.people, voices: voices,
                                  peopleStamp: (try? FileManager.default.attributesOfItem(atPath: peopleFile.path))?[.modificationDate] as? Date),
                            version: meetingsVersion)
     }

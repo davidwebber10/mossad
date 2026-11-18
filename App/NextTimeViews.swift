@@ -190,14 +190,16 @@ struct NextTimeList: View {
     }
 }
 
-/// "Came up on Nov 12, in a meeting Mossad has only the notes of ▸ 12:04": words that are true whether or not the
-/// owner listened. The lists hold open points only, so it never shows on a closed one.
+/// "Came up on Nov 12 in Product review ▸ 12:04" for a person's point that came up in a meeting that was not a 1:1
+/// with them, or "Came up on Nov 12, in a meeting Mossad has only the notes of" (`Mention.note`). The lists hold open
+/// points only, so it never shows on a closed one.
 struct MentionNote: View {
+    @EnvironmentObject var controller: AppController
     let mention: NextTimePoint.Mention
 
     var body: some View {
         HStack(spacing: Space.s) {
-            Text("Came up on \(mention.date.formatted(.dateTime.month(.abbreviated).day())), in a meeting Mossad has only the notes of")
+            Text(mention.note(meeting: controller.meetings.first { $0.id == mention.callID }))
                 .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
             SeriesMoment(callID: mention.callID, at: mention.at)
         }
@@ -392,11 +394,14 @@ struct PrepYourPoints: View {
         let waiting = series == nil ? book.waiting(for: meeting, upcoming: controller.calendarUpcoming, waiting: controller.waitingPoints) : []
         let refs = controller.series.people
         let invited = controller.series.invitedIDs[meeting.id] ?? []
-        // Each invited person with points of their own, as a list of its own: a drag never mixes two lists.
-        let people = invited.compactMap { id -> (id: String, name: String)? in
+        // A person's points belong to a 1:1 with them: in that 1:1 they are a list of its own (a drag never mixes two
+        // lists); in any other meeting only one quiet line says how many wait.
+        let oneOnOne = controller.series.oneOnOneIDs[meeting.id].map { refs.canonical($0) }
+        let people = oneOnOne.flatMap { id -> (id: String, name: String)? in
             guard !controller.series.book.points(forPerson: id, canonical: { refs.canonical($0) }).isEmpty else { return nil }
             return (id, refs.name(of: id) ?? id)
-        }
+        }.map { [$0] } ?? []
+        let waitingFor = controller.series.waitingForOneOnOne(meeting).map { (id: $0.person, name: refs.name(of: $0.person) ?? $0.person, count: $0.count) }
         MeetingAnalyticsGroup("Your points") {
             VStack(alignment: .leading, spacing: Rhythm.rowGap) {
                 if let series {
@@ -409,6 +414,11 @@ struct PrepYourPoints: View {
                     ForEach(waiting) { p in WaitingOffer(point: p, meeting: meeting, people: invited) }
                 }
                 ForEach(people, id: \.id) { p in PersonNextTimeSection(personID: p.id, name: p.name) }
+                if !waitingFor.isEmpty {
+                    VStack(alignment: .leading, spacing: Rhythm.pairGap) {
+                        ForEach(waitingFor, id: \.id) { p in PointsForOneOnOneRow(personID: p.id, name: p.name, count: p.count) }
+                    }
+                }
                 if let series {
                     Button { controller.openSeries(series.id) } label: {
                         HStack(spacing: Space.xs) {
@@ -421,6 +431,30 @@ struct PrepYourPoints: View {
                 }
             }
         }
+    }
+}
+
+/// "5 points for Sam ▸" on the prep page of a meeting that is not a 1:1 with Sam: the points wait for that 1:1, so
+/// no word of them shows here. A click opens the person's page, which starts with "Next time I see".
+struct PointsForOneOnOneRow: View {
+    @EnvironmentObject var controller: AppController
+    let personID: String
+    let name: String
+    let count: Int
+
+    var body: some View {
+        Button { controller.openPerson(personID) } label: {
+            HStack(spacing: Space.xs) {
+                Text("\(count) \(count == 1 ? "point" : "points") for \(SeriesNames.first(name))")
+                IconImage(.chevronRight, size: 9)
+            }
+            .secondaryText()
+            .foregroundStyle(Palette.secondary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Your points for your next 1:1 with \(SeriesNames.first(name)). They do not show on a meeting with more people.")
+        .accessibilityLabel("\(count) \(count == 1 ? "point" : "points") for your next 1:1 with \(name)")
     }
 }
 
@@ -447,11 +481,12 @@ struct MeetingPointsGroup: View {
         let carried = book.visible.filter { $0.isOpen && ($0.carried ?? []).contains(callID) }
         // The points of this one meeting that it did not raise: they stay here until the owner moves them.
         let leftOpen = book.leftOpen(in: callID, record: record)
-        // A meeting the owner missed (notes only, with no line of theirs) closes and carries nothing: its open points that came up are listed.
+        // A meeting the owner missed (notes only, with no line of theirs) closes and carries nothing, and a meeting that
+        // was not a 1:1 closes no person's point: their open points that came up are listed.
         let mentioned = book.mentioned(in: callID)
         VStack(spacing: 0) {
             if !mentioned.isEmpty {
-                LabelColumn(label: "Your open points in these notes") {
+                LabelColumn(label: MentionWords.label(record)) {
                     VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                         ForEach(mentioned) { p in
                             HStack(alignment: .firstTextBaseline, spacing: Space.m) {
@@ -460,7 +495,7 @@ struct MeetingPointsGroup: View {
                                     Text(p.text)
                                     if let m = p.mentions?.first(where: { $0.callID == callID }) {
                                         HStack(spacing: Space.s) {
-                                            Text("Still open. Mossad has only the notes of this meeting").font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
+                                            Text(MentionWords.still(p, in: record)).font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.tertiary)
                                             SeriesMoment(callID: callID, at: m.at)
                                         }
                                         Text("\u{201C}\(m.quote)\u{201D}").font(.system(size: Rhythm.secondarySize)).italic().foregroundStyle(Palette.secondary).lineLimit(2)
