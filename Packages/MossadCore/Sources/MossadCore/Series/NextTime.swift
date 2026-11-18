@@ -96,7 +96,8 @@ public struct NextTimePoint: Codable, Equatable, Sendable, Identifiable, Hashabl
     public func belongs(to s: MeetingSeries) -> Bool { s.matches(id: seriesID, keys: seriesKeys) }
 }
 
-/// The owner's answer to a suggestion: kept (yes), dismissed (no), or never this kind again.
+/// The owner's answer to a suggestion: kept (yes), dismissed, or never this kind again. A plain dismissal hides that
+/// one suggestion and teaches nothing; "Dismiss suggestions like this" is a dismissal with `lowers`.
 public struct SuggestionAnswer: Codable, Equatable, Sendable, Hashable, Identifiable {
     public enum Verdict: String, Codable, Sendable { case keep, dismiss, never }
     public var id = UUID()
@@ -107,16 +108,23 @@ public struct SuggestionAnswer: Codable, Equatable, Sendable, Hashable, Identifi
     public var date: Date
     /// When the owner took it back. The answer stays as a mark, so a sync with an older copy cannot bring it back.
     public var withdrawn: Date?
+    /// True for "Dismiss suggestions like this": the dismissal also lowers its kind. Nil for a plain dismissal and for
+    /// every answer saved before the field, which an older build reads and ignores; a new verdict would stop it
+    /// reading the whole book.
+    public var lowers: Bool?
 
     /// The time of its last change, which wins when devices merge.
     public var changed: Date { max(date, withdrawn ?? .distantPast) }
     public var counts: Bool { withdrawn == nil }
+    /// Whether it teaches the coach about its kind: a keep, a never, or a dismissal that lowers.
+    public var trains: Bool { verdict != .dismiss || lowers == true }
 
-    public init(key: String, kind: String, verdict: Verdict, date: Date) {
+    public init(key: String, kind: String, verdict: Verdict, date: Date, lowers: Bool? = nil) {
         self.key = key
         self.kind = kind
         self.verdict = verdict
         self.date = date
+        self.lowers = verdict == .dismiss && lowers == true ? true : nil
     }
 }
 
@@ -369,9 +377,9 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         }
     }
 
-    public mutating func answer(_ suggestion: SeriesSuggestion, _ verdict: SuggestionAnswer.Verdict, at date: Date = Date()) {
+    public mutating func answer(_ suggestion: SeriesSuggestion, _ verdict: SuggestionAnswer.Verdict, lowersKind: Bool = false, at date: Date = Date()) {
         answers.removeAll { $0.key == suggestion.key }
-        answers.append(SuggestionAnswer(key: suggestion.key, kind: suggestion.kind.rawValue, verdict: verdict, date: date))
+        answers.append(SuggestionAnswer(key: suggestion.key, kind: suggestion.kind.rawValue, verdict: verdict, date: date, lowers: lowersKind))
     }
 
     /// Undo of an answer: the suggestion can come again, and a point kept from it goes. The answer stays, marked.
@@ -380,9 +388,10 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
         for p in points where p.suggestion == key && !p.deleted { delete(p.id, at: date) }
     }
 
-    /// Turns a kind on again: its "never" and its dismissals no longer count.
+    /// Turns a kind on again: its "never" and its dismissals that lowered it no longer count. A plain dismissal stays:
+    /// it hid one suggestion and never turned the kind off.
     public mutating func allowAgain(_ kind: SeriesSuggestion.Kind, at date: Date = Date()) {
-        for i in answers.indices where answers[i].kind == kind.rawValue && answers[i].verdict != .keep && answers[i].counts { answers[i].withdrawn = date }
+        for i in answers.indices where answers[i].kind == kind.rawValue && answers[i].verdict != .keep && answers[i].trains && answers[i].counts { answers[i].withdrawn = date }
     }
 
     /// Both devices' changes: the newer copy of each point with the mentions of both copies, every answer, and

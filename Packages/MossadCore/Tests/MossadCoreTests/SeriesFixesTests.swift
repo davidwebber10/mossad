@@ -46,7 +46,7 @@ final class SeriesFixesTests: XCTestCase {
     // M8
     func testTheKindsThatAreOffAreListed() {
         let answers = [SuggestionAnswer(key: "a", kind: "unanswered", verdict: .never, date: now)]
-            + (0..<2).map { SuggestionAnswer(key: "d\($0)", kind: "openItem", verdict: .dismiss, date: now) }
+            + (0..<2).map { SuggestionAnswer(key: "d\($0)", kind: "openItem", verdict: .dismiss, date: now, lowers: true) }
         XCTAssertEqual(SuggestionTraining(answers: answers, asOf: now).off, [.openItem, .unanswered])
         var book = NextTimeBook()
         book.answers = answers
