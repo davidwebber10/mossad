@@ -129,7 +129,8 @@ final class RecordingCutTests: XCTestCase {
 
             let next = pipeline(a)
             await next.finishInterruptedCuts()
-            let forward = !["copying saved", "copying done", "checked saved", "checked done"].contains(point)
+            // From `checked` the next run checks the parts again and goes forward when they are whole.
+            let forward = !["copying saved", "copying done"].contains(point)
             if forward {
                 let ids = ["\(id)-2", second]
                 XCTAssertEqual(audioNames(a), ids, point)

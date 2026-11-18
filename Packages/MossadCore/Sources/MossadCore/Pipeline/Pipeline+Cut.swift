@@ -1,3 +1,5 @@
+import AVFoundation
+import CryptoKit
 import Darwin
 import Foundation
 import Synchronization
@@ -21,6 +23,7 @@ extension Pipeline {
         public var parts: [CallForget.CutPart]
         /// The removal steps of the original that ended.
         public var forgotten: [String] = []
+        public var renameTries: Int?
 
         func save(in dir: URL) throws {
             let e = JSONEncoder()
@@ -152,7 +155,7 @@ extension Pipeline {
             ledger.phase = .checked
             try ledger.save(in: dir)
             try cutStop("checked saved")
-            try Self.checkParts(of: dir, ids: ledger.ids, paths: paths)
+            try Self.checkParts(of: dir, ids: ledger.ids, cuts: sorted, paths: paths)
             try cutStop("checked done")
         } catch let stop as CutStop {
             throw stop
@@ -196,20 +199,51 @@ extension Pipeline {
     }
 
     /// The frames of the parts add up to the original's, for each track, and each part's record reads.
-    static func checkParts(of dir: URL, ids: [String], paths: Paths) throws {
+    /// The last gate before the parts are published: for each track, each part's file holds exactly the samples of its
+    /// range of the original, by count and by a SHA-256 of the samples, read in buffers. A short write fails it. Each
+    /// part's record reads and has its own id.
+    static func checkParts(of dir: URL, ids: [String], cuts: [Cut], paths: Paths) throws {
+        let borders = [0] + cuts.map(\.at).sorted()
         for track in [Track.me, .them] {
             let source = dir.appendingPathComponent(track.fileName)
             guard FileManager.default.fileExists(atPath: source.path) else { continue }
-            let total = try AudioCut.frames(source)
-            let sum = try ids.reduce(Int64(0)) { sum, id in
-                try sum + AudioCut.frames(paths.audio.appendingPathComponent(id + cuttingSuffix).appendingPathComponent(track.fileName))
+            let original = try AVAudioFile(forReading: source)
+            let rate = original.processingFormat.sampleRate, length = original.length
+            for (k, id) in ids.enumerated() {
+                let from = min(AudioCut.frame(borders[k], rate: rate), length)
+                let to = k + 1 < borders.count ? min(AudioCut.frame(borders[k + 1], rate: rate), length) : length
+                let part = try AVAudioFile(forReading: paths.audio.appendingPathComponent(id + cuttingSuffix).appendingPathComponent(track.fileName))
+                guard part.length == to - from else {
+                    throw CutError.failed("the part \(id) of \(track.fileName) holds \(part.length) of \(to - from) frames")
+                }
+                guard try digest(original, from: from, to: to) == digest(part, from: 0, to: part.length) else {
+                    throw CutError.failed("the samples of the part \(id) of \(track.fileName) differ from the original's")
+                }
             }
-            guard sum == total else { throw CutError.failed("the parts of \(track.fileName) hold \(sum) of \(total) frames") }
         }
         for id in ids {
             let r = try CallRecord.load(from: paths.audio.appendingPathComponent(id + cuttingSuffix))
             guard r.id == id else { throw CutError.failed("a part's record has another id") }
         }
+    }
+
+    /// A SHA-256 of the samples of a range, as the file's own format reads them.
+    private static func digest(_ file: AVAudioFile, from: Int64, to: Int64) throws -> SHA256.Digest {
+        var hasher = SHA256()
+        let chunk: AVAudioFrameCount = 16_000
+        let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: chunk)!
+        let bytesPerFrame = Int(file.processingFormat.streamDescription.pointee.mBytesPerFrame)
+        file.framePosition = from
+        while file.framePosition < to {
+            try file.read(into: buffer, frameCount: AVAudioFrameCount(min(Int64(chunk), to - file.framePosition)))
+            if buffer.frameLength == 0 { throw CutError.failed("a read ended early") }
+            let list = UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList)
+            for b in list {
+                guard let data = b.mData else { continue }
+                hasher.update(bufferPointer: UnsafeRawBufferPointer(start: data, count: Int(buffer.frameLength) * bytesPerFrame))
+            }
+        }
+        return hasher.finalize()
     }
 
     /// Before `published`: the parts' folders go, and the original is as it was.
@@ -229,19 +263,30 @@ extension Pipeline {
             try cutStop("published saved")
         }
         if ledger.phase == .published {
+            var failed = false
             for id in ledger.ids {
                 let made = paths.audio.appendingPathComponent(id + Self.cuttingSuffix), final = paths.callDirectory(id)
-                if fm.fileExists(atPath: final.path) { continue }
+                if isPart(id, of: ledger) { continue }
                 guard fm.fileExists(atPath: made.path) else {
-                    // Neither the part nor its copy: the original stays, whole, and nobody removes it.
-                    Log.error("A part \(id) of the cut of \(ledger.original) is missing; the original is kept")
+                    // Neither the part nor its copy: the original is still whole, so the cut is undone.
+                    abandonCut(in: dir, ledger, why: "a part is missing")
                     return
                 }
-                guard Darwin.rename(made.path, final.path) == 0 else {
-                    Log.error("Putting the part \(id) of \(ledger.original) in place failed; the next run tries again")
-                    return
+                if fm.fileExists(atPath: final.path) || Darwin.rename(made.path, final.path) != 0 {
+                    failed = true
+                    continue
                 }
                 try cutStop("published \(id)")
+            }
+            if failed {
+                ledger.renameTries = (ledger.renameTries ?? 0) + 1
+                if ledger.renameTries! >= Self.renameTries {
+                    abandonCut(in: dir, ledger, why: "a part could not be put in place \(Self.renameTries) times")
+                } else {
+                    try ledger.save(in: dir)
+                    Log.error("Putting a part of \(ledger.original) in place failed; the next run tries again")
+                }
+                return
             }
             try cutStop("published done")
             ledger.phase = .forgetting
@@ -269,6 +314,31 @@ extension Pipeline {
         try finishRemoval(ledger)
     }
 
+    /// How many runs may fail to put a part in place before the cut is undone.
+    static let renameTries = 3
+
+    /// The folder at the part's id is this cut's part: its record reads, has the id, and was cut.
+    private func isPart(_ id: String, of ledger: CutLedger) -> Bool {
+        guard let r = try? CallRecord.load(from: paths.callDirectory(id)) else { return false }
+        return r.id == id && r.cutFrom != nil
+    }
+
+    /// At `published`, when the cut cannot end: nothing of the original was forgotten yet, so the parts in place and the
+    /// copies go, then the ledger, and the original is processed as one meeting. Only while the original is whole.
+    private func abandonCut(in dir: URL, _ ledger: CutLedger, why: String) {
+        let whole = (try? CallRecord.load(from: dir)) != nil && !Self.trackLengths(dir).isEmpty
+        guard whole else {
+            Log.error("The cut of \(ledger.original) cannot end (\(why)) and the original is not whole; it is left as it is")
+            return
+        }
+        for id in ledger.ids {
+            if isPart(id, of: ledger) { try? FileManager.default.removeItem(at: paths.callDirectory(id)) }
+            try? FileManager.default.removeItem(at: paths.audio.appendingPathComponent(id + Self.cuttingSuffix))
+        }
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent(CutLedger.fileName))
+        Log.error("The cut of \(ledger.original) was undone (\(why)); it is processed as one meeting")
+    }
+
     /// The last phase: the original's folder and note go, then the ledger in the first part.
     private func finishRemoval(_ ledger: CutLedger) throws {
         guard try CallForget.removeFolder(ledger.original, paths: paths, outside: CallForget.deleting(paths), forgetLog: false,
@@ -292,7 +362,10 @@ extension Pipeline {
         for dir in dirs where !dir.lastPathComponent.hasSuffix(Self.cuttingSuffix) {
             guard fm.fileExists(atPath: dir.appendingPathComponent(CutLedger.fileName).path) else { continue }
             guard let ledger = CutLedger.load(in: dir) else {
-                Log.error("A cut ledger in \(dir.lastPathComponent) could not be read; leaving the folder as it is")
+                // Set aside under another name: the original is processed, and the parts in the making are swept.
+                let aside = dir.appendingPathComponent("cut.unreadable-\(Int(now().timeIntervalSince1970)).json")
+                try? fm.moveItem(at: dir.appendingPathComponent(CutLedger.fileName), to: aside)
+                Log.error("A cut ledger in \(dir.lastPathComponent) could not be read; it is set aside and the recording is processed as it is")
                 continue
             }
             named.formUnion(ledger.ids)
@@ -300,7 +373,12 @@ extension Pipeline {
             inFlight.insert(ledger.original)
             defer { inFlight.remove(ledger.original) }
             do {
-                if ledger.phase.isBefore(.published) {
+                if ledger.phase == .checked, dir.lastPathComponent == ledger.original,
+                   (try? Self.checkParts(of: dir, ids: ledger.ids, cuts: ledger.cuts, paths: paths)) != nil {
+                    // Checked again before anything is published.
+                    try await goForward(dir: dir, ledger: ledger)
+                    Log.info("Went on with the interrupted cut of \(ledger.original)")
+                } else if ledger.phase.isBefore(.published) {
                     rollBackCut(in: dir, ledger)
                     Log.info("Undid the interrupted cut of \(ledger.original)")
                 } else if ledger.phase == .removed {
