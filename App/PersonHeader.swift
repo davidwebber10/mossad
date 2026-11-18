@@ -7,6 +7,8 @@ struct PersonHeader: View {
     @EnvironmentObject var controller: AppController
     let profile: VoiceProfile
     let stats: PersonStats
+    /// "From your directory" (`DirectoryMark`).
+    let fromDirectory: Bool
     let org: OrgChart.Match?
     let chart: OrgChart?
     let others: [VoiceProfile]
@@ -43,6 +45,7 @@ struct PersonHeader: View {
                                 .padding(.horizontal, 7).frame(height: 18)
                                 .background(Palette.fill, in: Capsule())
                         }
+                        if fromDirectory { SourceMark.directory }
                     }
                     if let role = roleLine {
                         Text(role).font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink).lineLimit(1)
@@ -276,4 +279,9 @@ private struct AddEmailPopover: View {
             Log.error("Adding an address failed: \(error)")
         }
     }
+}
+
+extension SourceMark {
+    /// A person whom the Gemini people step made, and nothing else shaped yet. Information only.
+    static var directory: SourceMark { SourceMark(text: DirectoryMark.text, spoken: "Added from your Google directory") }
 }

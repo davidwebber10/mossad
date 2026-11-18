@@ -24,6 +24,8 @@ public struct ToolSettings: Sendable, Equatable {
     public var recordingDays = 90
     public var coachEmail = false
     public var googleParts: [GoogleScope] = []
+    /// "Add people from Gemini notes".
+    public var geminiPeople = true
 
     public init() {}
 
@@ -47,6 +49,7 @@ public struct ToolSettings: Sendable, Equatable {
         s.recordingDays = d.object(forKey: "recordingDays") as? Int ?? 90
         s.coachEmail = d.bool(forKey: "coachEmailEnabled")
         s.googleParts = (d.stringArray(forKey: "googleScopes") ?? []).compactMap(GoogleScope.init(rawValue:))
+        s.geminiPeople = GeminiPeople.isOn(d)
         return s
     }
 }

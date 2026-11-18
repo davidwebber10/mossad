@@ -287,6 +287,17 @@ final class CallRecorderTests: XCTestCase {
         XCTAssertEqual(recorder.currentRecord?.calendarTitle, "Tech Team Monthly Sync")
     }
 
+    /// Review C1: a live invite that is only a guess says so on the record, so nothing that follows the invite (the
+    /// points for next time of a move) takes it for the call's own.
+    func testALiveInviteThatIsOnlyAGuessIsMarkedNotSure() throws {
+        let id = try recorder.begin(platform: .zoom, bundleID: "us.zoom.xos", processIDs: [1], at: t0)
+        let event = CalendarEventInfo(title: "Budget review", start: t0, end: t0.addingTimeInterval(1800), attendees: [], text: "", isAllDay: false)
+        recorder.setCalendar(event, sure: false, forCall: id)
+        XCTAssertEqual(try CallRecord.load(from: paths.callDirectory(id)).inviteNotSure, true)
+        recorder.setCalendar(event, sure: true, forCall: id)
+        XCTAssertNil(try CallRecord.load(from: paths.callDirectory(id)).inviteNotSure)
+    }
+
     func testCalendarDetailsForAnEndedCallAreIgnored() throws {
         recorder.setCalendar(CalendarEventInfo(title: "Old", start: t0, end: t0, attendees: [], text: "", isAllDay: false), forCall: "20000101-000000")
         XCTAssertNil(recorder.currentRecord)

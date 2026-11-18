@@ -268,16 +268,22 @@ public struct NextTimeBook: Codable, Equatable, Sendable {
 
     /// A meeting that left this profile: a point it closed is open again, and no point names it (carried, reopened,
     /// mentioned, or checked). The id is kept in `movedCalls`, so a merge with a copy that still names it cleans that
-    /// copy too. A point of that one meeting goes with it: by its recordings, or by `record`'s invite (a call marked
-    /// for another profile during the call was never checked), and so does a point that the meeting moved to a person
-    /// in `gone` (the people who go with it). Each becomes the empty marker, with this Mac's detail gone.
+    /// copy too. `went`: the ids of the points that went with the meeting and that the target took (the ledger's list,
+    /// `MoveOut.points`); exactly those become the empty marker, with this Mac's detail gone, and every other point
+    /// keeps its words. Nil for a move whose ledger has no list (a move of an older build, which sent no points): then,
+    /// as before, a point of that one meeting (by its recordings, or by `record`'s invite when it is sure) and one of
+    /// it that was moved to a person in `gone` is emptied.
     @discardableResult
-    public mutating func forget(callID: String, record: CallRecord? = nil, gone: Set<String> = [], at date: Date = Date()) -> Bool {
+    public mutating func forget(callID: String, record: CallRecord? = nil, gone: Set<String> = [], went: Set<UUID>? = nil, at date: Date = Date()) -> Bool {
         var changed = false
         for i in points.indices where !Self.forgotten(points[i]) {
-            guard let m = points[i].meeting else { continue }
-            let own = m.calls?.contains(callID) == true || record.map(m.matches) == true
-            guard points[i].isForMeeting ? own : (own && points[i].isForPerson && points[i].personID.map(gone.contains) == true) else { continue }
+            if let went {
+                guard went.contains(points[i].id) else { continue }
+            } else {
+                guard let m = points[i].meeting else { continue }
+                let own = Self.ownMeeting(m, callID: callID, record: record)
+                guard own, points[i].isForMeeting || (points[i].isForPerson && points[i].personID.map(gone.contains) == true) else { continue }
+            }
             Self.empty(&points[i])
             points[i].updated = date
             changed = true

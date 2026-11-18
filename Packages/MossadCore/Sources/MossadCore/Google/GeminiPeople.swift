@@ -53,6 +53,26 @@ public enum GeminiPeople {
         return { email in emails.contains(email) || names.contains { CalendarInfo.isOwnersAddress(email, ownerName: $0) } }
     }
 
+    /// Settings › Google › "Add people from Gemini notes", in the profile's own settings; on unless the owner turned it
+    /// off. Off stops the step and removes nothing it made.
+    public static let settingKey = "geminiPeople"
+
+    public static func isOn(_ d: UserDefaults) -> Bool { d.object(forKey: settingKey) as? Bool ?? true }
+
+    public enum Gate: Equatable, Sendable {
+        case run
+        /// A call records: the step runs when it ends.
+        case afterCall
+        case off
+    }
+
+    /// Whether the step may run now: only where the directory is read (`Duty.upkeep`), with the directory part on and
+    /// the switch on, and never while a call records.
+    public static func gate(upkeep: Bool, directory: Bool, on: Bool, recording: Bool) -> Gate {
+        guard upkeep, directory, on else { return .off }
+        return recording ? .afterCall : .run
+    }
+
     /// What one run did, in counts only.
     public struct Outcome: Equatable, Sendable {
         public var made = 0
@@ -254,6 +274,12 @@ public struct GeminiPeopleBook: Codable, Equatable, Sendable {
     }
 
     public static func url(_ paths: Paths) -> URL { paths.root.appendingPathComponent("Google").appendingPathComponent("gemini-people.json") }
+
+    /// The addresses the step gave, for `DirectoryMark`: nil when the book does not tell, with no file too. The step
+    /// saves the book before it makes a person, so a step person with no file means the book was lost.
+    public static func knownGiven(_ paths: Paths) -> Set<String>? {
+        FileManager.default.fileExists(atPath: url(paths).path) ? load(paths)?.given : nil
+    }
 
     /// Empty when there is no file; nil when the file cannot be read or is from a newer build, so nothing is given.
     public static func load(_ paths: Paths) -> GeminiPeopleBook? {

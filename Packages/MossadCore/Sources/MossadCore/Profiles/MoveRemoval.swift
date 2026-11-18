@@ -110,7 +110,8 @@ public enum MoveRemoval {
             let to = out.to
             let forget = CallForget.Actions(coach: actions.coach, stopShares: actions.stopShares, backup: actions.backup,
                                             removeFolder: { await actions.removeFolder($0, to) })
-            return try await CallForget.run(shared, callID: callID, purpose: .move(gone: Set(out.people ?? [])), paths: paths,
+            let went = out.points.map { ids in out.pointsTaken == true ? Set(ids.compactMap(UUID.init(uuidString:))) : [] }
+            return try await CallForget.run(shared, callID: callID, purpose: .move(gone: Set(out.people ?? []), went: went), paths: paths,
                                             library: library, ownerName: ownerName, actions: forget, now: now, stop: stop)
         }
         // The folder is gone: each step before it ended in an earlier run.

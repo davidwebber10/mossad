@@ -4,7 +4,7 @@
 
 Mossad is work intelligence for your Mac. It records your calls without a bot, then keeps meeting notes, transcripts that know who spoke, decisions, action items, the promises you made, and a page for each person you meet. Before a meeting, it shows who is coming, what happened last time, and what you still owe. It is free and open source under the MIT License.
 
-- Latest version: 2.28.0
+- Latest version: 2.28.1
 - Requires: macOS 26 or later on Apple silicon
 - Price: free. Cloud AI providers that you connect bill you directly; models on your Mac cost nothing.
 - Website: https://getmossad.com/
@@ -271,7 +271,7 @@ Your meetings live in a folder on your Mac. Anything more is your choice.
   - A recording from your iPhone gets its notes while the Mac is in another profile
   - On your iPhone, each profile has its own meetings, and you change profile in Settings
   - A phone call that you share goes to the profile you pick
-  - A meeting that went to the wrong profile moves to the right one, with its recording, its notes, and the chats about that meeting alone
+  - A meeting that went to the wrong profile moves to the right one, with its recording, its notes, your points for that meeting, and the chats about that meeting alone
   - During a call you can say that it is for the other profile, and that profile writes the notes
   - When the call goes on as a new recording, your choice is kept; when Mossad is not sure it is the same call, it holds the recording until you choose
   - With one profile, nothing changes
@@ -289,6 +289,7 @@ Optional, read only, and through a Google app that you own.
   - Meetings you marked do not record stay out
   - The people who spoke join your People list with their address, only when your directory leaves no doubt who they are
   - A person you deleted or an address you said is not theirs stays gone
+  - Rather add people yourself? Turn it off in Settings, and everyone already added stays
 - **Names from your directory.** Your company directory and contacts fill in names and titles for the people you meet.
   - A name you typed is never replaced
 

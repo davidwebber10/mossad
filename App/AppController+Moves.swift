@@ -16,6 +16,8 @@ struct MoveRequest: Identifiable {
     let target: Profile
     let sent: MoveRules.Sent
     let deletedChats: Int
+    /// The points for next time that go with the meeting.
+    var points = 0
     var id: String { record.id }
 }
 
@@ -214,29 +216,33 @@ extension AppController {
     /// "Move to ▸ <profile>": reads what was sent and which chats are deleted, off the main actor, then opens the
     /// confirmation; a meeting that may not move gets its sentence instead.
     func askMove(_ r: CallRecord, to target: Profile) {
-        let dir = paths.callDirectory(r.id), usage = usage, chats = paths.chats
+        let dir = paths.callDirectory(r.id), usage = usage, chats = paths.chats, nextTime = paths.nextTime
         let open = moves[r.id], busy = progress[r.id] != nil
         let others = Set(meetings.filter { $0.id != r.id }.map(\.title))
         if AppIdentity.current.isPreview {
             // `MOSSAD_MOVE_CHATS=<n>`: the chats a made-up meeting would lose.
             let chats = Int(ProcessInfo.processInfo.environment["MOSSAD_MOVE_CHATS"] ?? "") ?? 0
-            moveRequest = MoveRequest(record: r, target: target, sent: MoveRules.sent(r, hasLiveFile: false, usage: []), deletedChats: chats)
+            // `MOSSAD_MOVE_POINTS=<n>`: the points for next time that would go with it.
+            let points = Int(ProcessInfo.processInfo.environment["MOSSAD_MOVE_POINTS"] ?? "") ?? 0
+            moveRequest = MoveRequest(record: r, target: target, sent: MoveRules.sent(r, hasLiveFile: false, usage: []), deletedChats: chats,
+                                      points: points)
             return
         }
         Task {
-            let found = await Task.detached(priority: .userInitiated) { () -> (MoveRules.Offer, MoveRules.Sent, Int) in
+            let found = await Task.detached(priority: .userInitiated) { () -> (MoveRules.Offer, MoveRules.Sent, Int, Int) in
                 let files = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
                 let events = usage.events(forCall: r.id).events
                 let offer = MoveRules.offer(r, busy: busy, files: files, usage: events, move: open)
                 let sent = MoveRules.sent(r, hasLiveFile: files.contains(LiveTranscript.fileName), usage: events)
                 let mine = ChatStore(directory: chats).all().filter { $0.callID == r.id }
-                return (offer, sent, MovedChats.split(mine, title: r.title, otherTitles: others).deleted.count)
+                let points = NextTimeBook.peek(in: nextTime)?.moved(callID: r.id, record: r)?.points.count ?? 0
+                return (offer, sent, MovedChats.split(mine, title: r.title, otherTitles: others).deleted.count, points)
             }.value
             switch found.0 {
             case .refused(let text): showMoveLine(.refusal(text, at: Date()).about(r.id))
-            case .offer: moveRequest = MoveRequest(record: r, target: target, sent: found.1, deletedChats: found.2)
+            case .offer: moveRequest = MoveRequest(record: r, target: target, sent: found.1, deletedChats: found.2, points: found.3)
             case .moving where moveRow(r)?.held == true:
-                moveRequest = MoveRequest(record: r, target: target, sent: found.1, deletedChats: found.2)
+                moveRequest = MoveRequest(record: r, target: target, sent: found.1, deletedChats: found.2, points: found.3)
             case .moving(let to): showMoveLine(.refusal(MoveWords.moving(to: profileName(to) ?? MoveWords.otherProfile), at: Date()).about(r.id))
             case .hidden: break
             }

@@ -849,14 +849,14 @@
             "A recording from your iPhone gets its notes while the Mac is in another profile",
             "On your iPhone, each profile has its own meetings, and you change profile in Settings",
             "A phone call that you share goes to the profile you pick",
-            "A meeting that went to the wrong profile moves to the right one, with its recording, its notes, and the chats about that meeting alone",
+            "A meeting that went to the wrong profile moves to the right one, with its recording, its notes, your points for that meeting, and the chats about that meeting alone",
             "During a call you can say that it is for the other profile, and that profile writes the notes",
             "When the call goes on as a new recording, your choice is kept; when Mossad is not sure it is the same call, it holds the recording until you choose",
             "With one profile, nothing changes"
           ],
           "icon": "person.2.crop.square.stack",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Profiles/ProfileRegistry.swift", "Packages/MossadCore/Sources/MossadCore/Support/AppIdentity.swift", "App/ProfileSwitcher.swift", "App/ProfileSettings.swift", "Packages/MossadCore/Sources/MossadCore/Worker/ProfileWorker.swift", "PhoneApp/PhoneProfiles.swift", "PhoneApp/ProfilesScreen.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/PhoneProfileBook.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/MovePlan.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/MoveAfterCall.swift", "App/AppController+Moves.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Profiles/ProfileRegistry.swift", "Packages/MossadCore/Sources/MossadCore/Support/AppIdentity.swift", "App/ProfileSwitcher.swift", "App/ProfileSettings.swift", "Packages/MossadCore/Sources/MossadCore/Worker/ProfileWorker.swift", "PhoneApp/PhoneProfiles.swift", "PhoneApp/ProfilesScreen.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/PhoneProfileBook.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/MovePlan.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/MovedPoints.swift", "Packages/MossadCore/Sources/MossadCore/Profiles/MoveAfterCall.swift", "App/AppController+Moves.swift"]
         }
       ]
     },
@@ -895,11 +895,12 @@
             "Every 15 minutes, never during a call",
             "Meetings you marked do not record stay out",
             "The people who spoke join your People list with their address, only when your directory leaves no doubt who they are",
-            "A person you deleted or an address you said is not theirs stays gone"
+            "A person you deleted or an address you said is not theirs stays gone",
+            "Rather add people yourself? Turn it off in Settings, and everyone already added stays"
           ],
           "icon": "doc.richtext",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Google/GeminiImport.swift", "Packages/MossadCore/Sources/MossadCore/Google/GeminiNotes.swift", "Packages/MossadCore/Sources/MossadCore/Google/GeminiPeople.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Google/GeminiImport.swift", "Packages/MossadCore/Sources/MossadCore/Google/GeminiNotes.swift", "Packages/MossadCore/Sources/MossadCore/Google/GeminiPeople.swift", "App/GoogleSetup.swift"]
         },
         {
           "id": "directory",

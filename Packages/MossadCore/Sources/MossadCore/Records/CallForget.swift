@@ -10,8 +10,9 @@ public enum CallForget {
 
     /// Why the call goes. Only the books and the notes differ.
     public enum Purpose: Sendable, Equatable {
-        /// The meeting left for another profile; `gone` is the people who went with it.
-        case move(gone: Set<String>)
+        /// The meeting left for another profile; `gone` is the people who went with it, `went` the points the target took
+        /// (nil for a ledger of an older build: see `NextTimeBook.forget`).
+        case move(gone: Set<String>, went: Set<UUID>?)
         /// The owner deleted it. No person goes: the owner deletes a person on the People page.
         case delete
         /// The recording was cut into parts: the owner's ticks and the live chat go to the part in which they were made.
@@ -127,11 +128,12 @@ public enum CallForget {
                 if tasks.forget(callID: callID, at: now) > 0 { try tasks.save(to: paths.commitments) }
                 try stop("books: the points")
                 switch purpose {
-                case let .move(gone):
-                    // A point of this one meeting goes with it, and so does a point it moved to a person who goes.
+                case let .move(gone, went):
+                    // Exactly the points that went and that the target took (the ledger's list, as the points are now); a
+                    // ledger of an older build has no list and empties what it emptied before.
                     let live = Set((library.identity?.people.people ?? []).filter(\.isLive).map(\.id.rawValue))
                     let leaving = gone.subtracting(live)
-                    _ = try NextTimeBook.change(in: paths.nextTime) { _ = $0.forget(callID: callID, record: r, gone: leaving, at: now) }
+                    _ = try NextTimeBook.change(in: paths.nextTime) { _ = $0.forget(callID: callID, record: r, gone: leaving, went: went, at: now) }
                 case .delete:
                     _ = try NextTimeBook.change(in: paths.nextTime) { _ = $0.forget(callID: callID, record: r, gone: [], at: now) }
                 case let .cut(parts):
