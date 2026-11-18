@@ -43,6 +43,9 @@ public enum DetectorEvent: Equatable, Sendable {
     case started(platform: Platform, bundleID: String, at: Date)
     /// `trimTo` is the last mic activity when the call ended by the mic-idle fallback.
     case ended(at: Date, trimTo: Date?)
+    /// The call may have changed to another meeting: a mark in the recording. The service sends it, the detector
+    /// never does, and it changes nothing of the call: the call goes on.
+    case marked(link: String?, platform: Platform, source: CallMark.Source, sure: Bool, at: Date)
 }
 
 /// Decides when a call starts and ends from a stream of snapshots.

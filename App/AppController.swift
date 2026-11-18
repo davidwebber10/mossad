@@ -807,7 +807,23 @@ final class AppController: ObservableObject {
                 let ids = detection.audioProcessIDs
                 let meetingID = detection.meetingID
                 let forced = detection.callIsForced
+                let callBundleID = detection.callBundleID
                 guard let self else { return }
+                // A mark goes into the recording like a bookmark; the call goes on. The one exception: a sure mark to a
+                // meeting the owner marked not to record ends the recording here, by the normal end, and the call
+                // stays off the record as a blocked start would. A mark never starts a recording.
+                if case .marked(let link, let platform, let source, let sure, let at) = event {
+                    CaptureQueue.queue.async { recorder.addCallMark(link: link, platform: platform, source: source, sure: sure, at: at) }
+                    guard sure, let callBundleID else { return }
+                    self.noRecordGate.waitForCalendar(timeout: 3)
+                    guard self.noRecordGate.endsAtMark(platform: platform, bundleID: callBundleID, link: link, sure: sure,
+                                                       at: at, forced: forced) else { return }
+                    self.tellNotRecorded(bundleID: callBundleID, platform: platform, atMark: true)
+                    let end = DetectorEvent.ended(at: at, trimTo: nil)
+                    CaptureQueue.queue.async { self.capture(end, processIDs: ids, meetingID: meetingID, recorder: recorder) }
+                    Task { @MainActor in self.show(end, meetingID: meetingID) }
+                    return
+                }
                 // Before anything records or streams: a meeting the owner marked stays off the record, for the whole
                 // call session (a late end, a mic gap, Off then On, a restart); the owner's Record wins. At launch the calendar comes a moment
                 // after detection, so the first call waits for it.
@@ -815,20 +831,13 @@ final class AppController: ObservableObject {
                 case .started(let platform, let bundleID, let at):
                     self.noRecordGate.waitForCalendar(timeout: 3)
                     if self.noRecordGate.blocksStart(platform: platform, bundleID: bundleID, meetingID: meetingID, at: at, forced: forced) {
-                        if let block = self.noRecordGate.currentBlock, block.listUnreadable {
-                            // Not the owner's choice, so never silent: say it at each call, with a way to record.
-                            Log.error("Not recording \(block.title): the do-not-record list could not be read")
-                            Task { @MainActor in
-                                self.notifier.postNotRecorded(title: block.title, bundleID: bundleID, platform: platform,
-                                                              problem: self.noRecordProblem ?? .own)
-                            }
-                        } else {
-                            Log.info("Not recording \(platform.displayName): the owner chose not to record this meeting")
-                        }
+                        self.tellNotRecorded(bundleID: bundleID, platform: platform, atMark: false)
                         return
                     }
                 case .ended(let at, _):
                     if self.noRecordGate.callEnded(at: at) { return }
+                case .marked:
+                    return
                 }
                 // Recorder commands go straight from the detection queue to the capture queue, so they keep
                 // the detector's order relative to the process updates below. The UI follows on the main actor.
@@ -2071,6 +2080,22 @@ final class AppController: ObservableObject {
 
     // MARK: Internals
 
+    /// The log line, and the notice when the do-not-record list could not be read. Runs on the detection queue.
+    private nonisolated func tellNotRecorded(bundleID: String, platform: Platform, atMark: Bool) {
+        if let block = noRecordGate.currentBlock, block.listUnreadable {
+            // Not the owner's choice, so never silent: say it at each call, with a way to record.
+            Log.error("Not recording \(block.title): the do-not-record list could not be read")
+            Task { @MainActor in
+                self.notifier.postNotRecorded(title: block.title, bundleID: bundleID, platform: platform,
+                                              problem: self.noRecordProblem ?? .own)
+            }
+        } else if atMark {
+            Log.info("The call moved to a meeting the owner chose not to record; the recording ends at the mark")
+        } else {
+            Log.info("Not recording \(platform.displayName): the owner chose not to record this meeting")
+        }
+    }
+
     /// Runs on the capture queue.
     private nonisolated func capture(_ event: DetectorEvent, processIDs: [AudioObjectID], meetingID: String?, recorder: CallRecorder) {
         switch event {
@@ -2110,6 +2135,8 @@ final class AppController: ObservableObject {
             }
             Task { @MainActor in self.update(record); self.refresh() }
             Task { @MainActor in self.endOfCall(record) }
+        case .marked:
+            break
         }
     }
 
@@ -2192,6 +2219,8 @@ final class AppController: ObservableObject {
             isPaused = false
             shownMute = .none
             stopLive()
+        case .marked:
+            break
         }
     }
 

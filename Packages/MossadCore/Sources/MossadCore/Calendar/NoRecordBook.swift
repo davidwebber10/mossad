@@ -379,6 +379,16 @@ public final class NoRecordGate: @unchecked Sendable {
         }
     }
 
+    /// Whether the recording ends at a mark in the call: only a sure mark with a link, whose meeting (by that link
+    /// and its calendar event) is one not to record, asked as a start of that meeting would be. The call then stays
+    /// off the record like a blocked start, so the detector's later end of it has nothing to stop. Never for a mark
+    /// that is not sure, never for the owner's Record, and never in a call that is already off the record: a mark
+    /// never starts a recording.
+    public func endsAtMark(platform: Platform, bundleID: String, link: String?, sure: Bool, at time: Date, forced: Bool) -> Bool {
+        guard sure, let link, !forced, !isBlockingCall else { return false }
+        return blocksStart(platform: platform, bundleID: bundleID, meetingID: link, at: time)
+    }
+
     /// The book decides for the invite that fits now (found here when not given). Runs inside the lock.
     private func decide(_ given: (event: CalendarEventInfo, key: String)?, _ platform: Platform, _ bundleID: String,
                         _ meetingID: String?, _ time: Date) -> Bool {
