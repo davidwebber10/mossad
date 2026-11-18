@@ -299,7 +299,8 @@ Optional, read only, and through a Google app that you own.
 Choose who transcribes and who writes the notes. Or keep it all on your Mac.
 
 - **Choose your transcription.** Use AssemblyAI, Deepgram, ElevenLabs, or OpenAI with your own key, or a model that runs on your Mac.
-  - Cloud transcription costs about $0.22 to $0.36 an hour of audio
+  - Cloud transcription costs about $0.17 to $0.36 an hour of audio
+  - With AssemblyAI, choose its newest model, STT-3.7, or keep your account's default
   - On your Mac: Parakeet, Whisper Large v3 Turbo, Apple Speech, or Qwen3-ASR, free
 - **Choose your model.** Summaries, chat, and the coach run on Anthropic, OpenAI, OpenRouter, a local server, or Apple's on-device model.
   - Local server: Ollama, LM Studio, or any OpenAI-compatible server
@@ -419,7 +420,7 @@ Needs: A Mac with Apple silicon and macOS 26, Xcode 16 or later, XcodeGen, and a
 
 ### What does Mossad cost?
 
-Mossad is free. The cloud providers that you connect bill you directly: cloud transcription is about $0.22 to $0.36 an hour of audio, and the notes model adds its own cost. Setup shows the cost per hour of your choices, and the Analytics page shows what each meeting cost. With local models, it costs nothing.
+Mossad is free. The cloud providers that you connect bill you directly: cloud transcription is about $0.17 to $0.36 an hour of audio, and the notes model adds its own cost. Setup shows the cost per hour of your choices, and the Analytics page shows what each meeting cost. With local models, it costs nothing.
 
 ### Where do my recordings and notes go?
 
