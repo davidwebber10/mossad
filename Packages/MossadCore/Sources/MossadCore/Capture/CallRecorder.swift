@@ -169,29 +169,10 @@ public final class CallRecorder: @unchecked Sendable {
     }
     public var currentRecord: CallRecord? { record }
 
-    public static func callID(for date: Date) -> String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyyMMdd-HHmmss"
-        return f.string(from: date)
-    }
+    public static func callID(for date: Date) -> String { CallIDs.callID(for: date) }
 
-    /// The ID has one-second resolution in local time, so the hour that repeats when daylight time ends (or a clock
-    /// change) can give the ID of an older call. That call's folder is never reused, nor the id of a part of a cut
-    /// recording that is being made (`<id>.cutting`).
-    public static func freeID(for date: Date, in paths: Paths) -> String {
-        let base = callID(for: date)
-        var id = base, n = 2
-        func taken(_ id: String) -> Bool {
-            FileManager.default.fileExists(atPath: paths.callDirectory(id).path)
-                || FileManager.default.fileExists(atPath: paths.audio.appendingPathComponent(id + ".cutting").path)
-        }
-        while taken(id) {
-            id = "\(base)-\(n)"
-            n += 1
-        }
-        return id
-    }
+    /// The rule of `CallIDs.freeID`: a folder that exists, or a part of a cut being made, keeps its id.
+    public static func freeID(for date: Date, in paths: Paths) -> String { CallIDs.freeID(for: date, in: paths) }
 
     private func freeCallID(for date: Date) -> String {
         let id = Self.freeID(for: date, in: paths)

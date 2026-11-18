@@ -107,9 +107,9 @@ extension Pipeline {
     private func freeIDs(_ starts: [Date]) -> [String] {
         var taken: Set<String> = []
         return starts.map { start in
-            var id = CallRecorder.freeID(for: start, in: paths)
+            var id = CallIDs.freeID(for: start, in: paths)
             var n = 2
-            let base = CallRecorder.callID(for: start)
+            let base = CallIDs.callID(for: start)
             while taken.contains(id) || FileManager.default.fileExists(atPath: paths.callDirectory(id).path)
                 || FileManager.default.fileExists(atPath: paths.audio.appendingPathComponent(id + Self.cuttingSuffix).path) {
                 id = "\(base)-\(n)"
