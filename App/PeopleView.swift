@@ -460,12 +460,9 @@ private struct PersonRow: View {
             HStack(spacing: Space.m) {
                 PersonMark(name: profile.name, size: 28, isOwner: profile.isOwner)
                 VStack(alignment: .leading, spacing: Rhythm.pairGap) {
-                    HStack(spacing: Rhythm.itemGap) {
-                        Text(match?.title.boldMatches(size: Rhythm.bodySize) ?? AttributedString(profile.name))
-                            .font(.system(size: Rhythm.bodySize, weight: profile.isOwner || selected ? .semibold : .medium))
-                            .foregroundStyle(Palette.ink)
-                        if fromDirectory { SourceMark.directory.layoutPriority(1) }
-                    }
+                    Text(match?.title.boldMatches(size: Rhythm.bodySize) ?? AttributedString(profile.name))
+                        .font(.system(size: Rhythm.bodySize, weight: profile.isOwner || selected ? .semibold : .medium))
+                        .foregroundStyle(Palette.ink)
                     if let match, match.context != nil {
                         ListMatchLine(match: match, lines: 1)
                     } else if let sub {
@@ -479,6 +476,8 @@ private struct PersonRow: View {
                 VStack(alignment: .trailing, spacing: Rhythm.pairGap) {
                     if !profile.isOwner { Text(meetingsText(stats?.meetings.count ?? 0)) }
                     if let last = stats?.lastHeard { Text(shortDay(last)) }
+                    // Under the count: the name and the address keep the row's width.
+                    if fromDirectory { SourceMark.directory }
                 }
                 .font(.system(size: Rhythm.secondarySize)).monospacedDigit()
                 .foregroundStyle(Palette.secondary)

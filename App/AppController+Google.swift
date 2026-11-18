@@ -46,6 +46,12 @@ final class GoogleConnector: ObservableObject {
         // Development hook for screenshots: MOSSAD_GOOGLE_SAMPLE shows a passed check with made-up values, and
         // MOSSAD_GOOGLE_SAMPLE=off shows no client and no sign-in.
         if Self.sample {
+            // MOSSAD_GOOGLE_PARTS=directory,contacts picks the parts on (comma-separated `GoogleScope` values).
+            #if DEBUG
+            if let parts = ProcessInfo.processInfo.environment["MOSSAD_GOOGLE_PARTS"] {
+                scopes = Set(parts.split(separator: ",").compactMap { GoogleScope(rawValue: String($0)) })
+            }
+            #endif
             phase = .done(GoogleCheck.Report(account: "owner@example.com", event: "Weekly design review",
                                              parts: [.calendar: GoogleError?.none, .docs: GoogleError?.none,
                                                                      .directory: GoogleError?.some(.apiDisabled(.people)), .contacts: GoogleError?.none]))
