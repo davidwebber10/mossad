@@ -415,7 +415,7 @@
           ],
           "icon": "calendar.badge.clock",
           "comingSoon": false,
-          "sources": ["Packages/MossadCore/Sources/MossadCore/Prep/MeetingPrep.swift", "App/UpcomingDetailView.swift", "App/PrepSections.swift", "Packages/MossadCore/Sources/MossadCore/Series/MeetingPoints.swift", "App/NextTimeViews.swift"]
+          "sources": ["Packages/MossadCore/Sources/MossadCore/Prep/MeetingPrep.swift", "App/UpcomingDetailView.swift", "App/PrepSections.swift", "Packages/MossadCore/Sources/MossadCore/Series/MeetingPoints.swift", "App/NextTimeViews.swift", "Packages/MossadCore/Sources/MossadCore/Series/OneOnOne.swift"]
         },
         {
           "id": "recurring",
@@ -425,7 +425,7 @@
             "A point counts as discussed only with a quote from the transcript",
             "The coach suggests points from open action items, open decisions, and unanswered questions",
             "Add a point from Chat or from another AI app",
-            "Points for a person show on that person's page and in your next one-on-one with them, never in a meeting with more people",
+            "Points for a person show on that person's page and in your one-on-ones with them",
             "Your points sit above the live transcript during the call, so nothing you meant to raise slips by",
             "Tick a point as you raise it, or let Mossad mark it when it hears you",
             "A heads-up near the planned end while points are still open, with no pop-up and no sound",
