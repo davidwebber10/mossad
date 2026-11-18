@@ -28,16 +28,18 @@ public enum CutRecord {
         // The owner's own title and tags; tags the model gave are made again.
         for k in ["customTitle", "tags", "tagsSetByOwner"] { f[k] = .first }
         // A notes-only meeting, a phone call, and a call whose mute silence is still to be written are refused, so
-        // `source`, `personHint`, and `mutedAudioPending` hold their plain values. `moveTo` stays on each part: a part of
-        // a marked recording is held for the owner.
-        for k in ["platform", "bundleID", "speakersExpected", "source", "personHint", "mutedAudioPending", "moveTo"] { f[k] = .same }
+        // `source`, `personHint`, and `mutedAudioPending` hold their plain values. A recording marked for another profile is
+        // refused, so `moveTo` is nil too.
+        for k in ["platform", "bundleID", "source", "personHint", "mutedAudioPending", "moveTo"] { f[k] = .same }
         // The lines, the voices, the summary and all from it, the invite, the titles, the backup, the jobs, the failure.
         for k in ["attempts", "nextAttempt", "calendarTitle", "generatedTitle", "plannedStart", "plannedEnd", "attendees", "invitees",
                   "calendarSeriesID", "organizer", "utterances", "meUtterances", "themUtterances", "failedStep", "failureReason",
                   "inviteUnknown", "inviteNotSure", "speakerNames", "speakerPeople", "unknownSpeakers", "speakerEmbeddings",
                   "speakerSamples", "fromInvite", "summary", "topics", "kind", "summaryVersion", "hasOutcomes", "actionItems",
                   "decisions", "decisionTimes", "headline", "markdownPath", "cloudKey", "cloudSize", "cloudBackend", "cloudServer",
-                  "cloudHash", "cloudLeftovers", "transcriptionJobs", "summaryMissing", "gemini"] { f[k] = .cleared }
+                  "cloudHash", "cloudLeftovers", "transcriptionJobs", "summaryMissing", "gemini",
+                  // The owner's number of speakers was for the whole recording, not for one part of it.
+                  "speakersExpected"] { f[k] = .cleared }
         return f
     }()
 
@@ -80,9 +82,10 @@ public enum CutRecord {
             })
             p.parts = dividedParts(r.parts, from: from, to: to, last: last, length: length)
             // A pause exactly on a border lies between two parts: their times already leave it out.
-            p.pauses = nonEmpty(r.pauses?.filter { $0.at > from || (k == 0 && $0.at == 0) }
+            // A record that knows its pauses gives each part a list, empty when it has none.
+            p.pauses = r.pauses?.filter { $0.at > from || (k == 0 && $0.at == 0) }
                 .filter { $0.at < to || (last && $0.at == to) }
-                .map { var s = $0; s.at -= from; return s })
+                .map { var s = $0; s.at -= from; return s }
             // A part never holds a mark at its own start: that is the mark of its own cut, and it would cut it again.
             p.callMarks = nonEmpty(r.callMarks?.filter { $0.at > from && (last || $0.at < to) }.map { var m = $0; m.at -= from; return m })
 
@@ -103,6 +106,8 @@ public enum CutRecord {
         if r.source != nil { return "A meeting made from notes has no recording to cut." }
         if r.platform == .phoneCall { return "A phone call is not cut." }
         if r.mutedAudioPending { return "The silence of a mute is not written yet." }
+        // Until each part can be held for the owner, a recording marked for another profile is not cut.
+        if r.moveTo != nil { return "The meeting is marked for another profile." }
         if !hasTracks { return "The two tracks of the recording are not on this Mac." }
         if cuts.isEmpty { return "No cut time was given." }
         let times = cuts.map(\.at).sorted()
@@ -204,5 +209,6 @@ public enum CutRecord {
         p.transcriptionJobs = nil
         p.summaryMissing = nil
         p.gemini = nil
+        p.speakersExpected = nil
     }
 }

@@ -59,8 +59,9 @@ final class CutRecordTests: XCTestCase {
         XCTAssertEqual(counts[.divided], 8)
         XCTAssertEqual(counts[.special], 6)
         XCTAssertEqual(counts[.first], 3)
-        XCTAssertEqual(counts[.same], 7)
-        XCTAssertEqual(counts[.cleared], 42)
+        XCTAssertEqual(counts[.same], 6)
+        XCTAssertEqual(counts[.cleared], 43)
+        XCTAssertEqual(parts.map(\.speakersExpected), [nil, nil], "the owner's number was for the whole recording")
 
         // The special fields.
         XCTAssertEqual(parts.map(\.id), ["20261101-100000-2", "20261101-101600"])
@@ -81,7 +82,7 @@ final class CutRecordTests: XCTestCase {
         XCTAssertEqual(parts[0].screenGaps, full.screenGaps)
         XCTAssertEqual(parts[0].deletedScreens, full.deletedScreens)
         XCTAssertEqual(parts[0].pauses, full.pauses)
-        XCTAssertNil(parts[1].pauses)
+        XCTAssertEqual(parts[1].pauses, [], "known: no pause in this part")
         XCTAssertNil(parts[0].callMarks)
         XCTAssertNil(parts[1].callMarks, "the mark of its own cut is not the second part's: it is never cut again by it")
     }
@@ -220,6 +221,9 @@ final class CutRecordTests: XCTestCase {
         r = ok
         r.platform = .phoneCall
         XCTAssertNotNil(CutRecord.refusal(r, cuts: cut, length: 1800, hasTracks: true))
+        r = ok
+        r.moveTo = "1a2b3c4d"
+        XCTAssertNotNil(CutRecord.refusal(r, cuts: cut, length: 1800, hasTracks: true), "marked for another profile, in any state")
         r = ok
         r.mutedAudioPending = true
         XCTAssertNotNil(CutRecord.refusal(r, cuts: cut, length: 1800, hasTracks: true))
