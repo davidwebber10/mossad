@@ -807,6 +807,14 @@ final class AppController: ObservableObject {
                 let ids = detection.audioProcessIDs
                 let meetingID = detection.meetingID
                 let forced = detection.callIsForced
+                // A mark goes into the recording and nowhere else (`reachesTheGate` is false): it never ends a recording,
+                // never starts one, and never asks the do-not-record gate.
+                if case .marked(let link, let platform, let source, let sure, let at, let titleKey) = event {
+                    CaptureQueue.queue.async {
+                        recorder.addCallMark(link: link, platform: platform, source: source, sure: sure, at: at, titleKey: titleKey)
+                    }
+                    return
+                }
                 guard let self else { return }
                 // Before anything records or streams: a meeting the owner marked stays off the record, for the whole
                 // call session (a late end, a mic gap, Off then On, a restart); the owner's Record wins. At launch the calendar comes a moment
@@ -829,6 +837,8 @@ final class AppController: ObservableObject {
                     }
                 case .ended(let at, _):
                     if self.noRecordGate.callEnded(at: at) { return }
+                case .marked:
+                    return
                 }
                 // Recorder commands go straight from the detection queue to the capture queue, so they keep
                 // the detector's order relative to the process updates below. The UI follows on the main actor.
@@ -843,6 +853,9 @@ final class AppController: ObservableObject {
                     // A missing permission is said one time a day, not on each use of the mic.
                     if call.reason == .noAutomation { self.quietUnconfirmed(call) }
                 }
+            }
+            detection.onFirstTitleKey = { @Sendable key in
+                CaptureQueue.queue.async { recorder.setFirstTitleKey(key) }
             }
             // The recorder ends a mute span where "muted" was last seen, not where the unmute was seen.
             detection.onMuteChangeAt = { @Sendable [weak self] muted, lastMutedSeen in
@@ -2110,6 +2123,8 @@ final class AppController: ObservableObject {
             }
             Task { @MainActor in self.update(record); self.refresh() }
             Task { @MainActor in self.endOfCall(record) }
+        case .marked:
+            break
         }
     }
 
@@ -2192,6 +2207,8 @@ final class AppController: ObservableObject {
             isPaused = false
             shownMute = .none
             stopLive()
+        case .marked:
+            break
         }
     }
 

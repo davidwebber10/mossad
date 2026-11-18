@@ -29,6 +29,35 @@ public final class DetectionService: @unchecked Sendable {
     /// already shows when the call ends; so the tabs of the call's browser are read at most this often.
     static let tabRefreshDuringCall: TimeInterval = 10
     private var tabCache: [String: (time: Date, tabs: [BrowserTab]?)] = [:]
+    /// The browser call's own link against each new tab list, and its windows' Meet title against each reading: a
+    /// change is a mark in the recording (`DetectorEvent.marked`), never an end or a start.
+    private var linkWatch = CallLinkWatch(link: nil)
+    private var titleWatch = CallTitleWatch()
+    /// The last sure mark of this call: a title change near it is the same change.
+    private var lastSureMark: Date?
+    /// A title change waits 10 s (`CallTitleWatch.readingGap`), and while a link change waits, for a sure mark of the
+    /// same change, which replaces it, or a return to the title before it, which drops it; then it is a mark that is
+    /// not sure, at the time of the change, with the key of the new title.
+    private var titleChange: (at: Date, key: String, fromKey: String?)?
+    /// The marks of this tick, sent before the detector's event.
+    private var marks: [DetectorEvent] = []
+    /// When the call started, for its first minute: no title mark then (Meet can show the code first and the name
+    /// later), and the call's own title is the one it shows at the end of that minute.
+    private var callStart = Date.distantPast
+    static let titleSettles: TimeInterval = 60
+    private var firstTitleSent = false
+    private var firstTitleKey: String?
+    /// The window titles are read for the marks at most this often, and after a read that failed or was slow the
+    /// next one waits longer (`titleBackoff`), so a browser that does not answer costs the tick little.
+    static let titleReadEvery: TimeInterval = 4
+    static let titleBackoff: [TimeInterval] = [10, 30, 60]
+    static let slowTitleRead: TimeInterval = 1
+    private var nextTitleRead = Date.distantPast
+    private var titleFailures = 0
+    /// While a link change waits for its next sure reading, the tabs are read at most this often instead of each
+    /// 10 s. A change is forgotten 10 s after its last sure reading, so unknown lists never read more often than
+    /// before. The probe's own back-off still holds.
+    static let tabRefreshWhileChangeWaits: TimeInterval = 4
     /// Outside a call, a browser that uses the mic for something else (dictation, a voice search) was asked for
     /// its tabs at every tick, for as long as that lasted. A "no meeting here" answer now holds this long. It is
     /// read again at once when the browser's mic use stops and starts, or its window titles change (a new tab, a
@@ -85,6 +114,9 @@ public final class DetectionService: @unchecked Sendable {
     public var onEvent: (DetectorEvent) -> Void = { _ in }
     /// Called after every tick during a call with the call app's audio process IDs.
     public var onCallProcesses: ([AudioObjectID]) -> Void = { _ in }
+    /// The key (`CallTitleWatch.key`) of the Meet title the call shows when its first minute ends, once per call. Runs
+    /// on the detection queue, before the tick's marks.
+    public var onFirstTitleKey: (String) -> Void = { _ in }
     /// Called when the person mutes or unmutes in the call app, during a call. Runs on the mute queue. A "muted" that
     /// cannot be read again for `MuteTracker.unknownLimit` reports unmuted; `lastMutedSeen` then tells when it was
     /// last seen.
@@ -167,6 +199,7 @@ public final class DetectionService: @unchecked Sendable {
         activeMeetingIDs = [:]
         signAtStart = []
         tabCache = [:]
+        watchMarks(from: nil, at: .distantPast)
         idleTabs = [:]
         suspects = []
         callSignSeen = false
@@ -187,16 +220,31 @@ public final class DetectionService: @unchecked Sendable {
     public func tick(at time: Date) {
         guard !isSuspended else { return }
         let snapshot = snapshot(at: time)
+        // The marks go out before the detector's event of this tick, while the call they belong to still goes on.
+        if detector.isInCall {
+            // A title change waits 10 s, and as long as the tabs still check a change: a sure mark replaces it.
+            if let change = titleChange, time.timeIntervalSince(change.at) > CallTitleWatch.readingGap, !linkWatch.isPending(at: time) {
+                Log.info("The window of the call shows another Meet meeting; marked as not sure, and the recording goes on")
+                marks.append(.marked(link: nil, platform: .meet, source: .title, sure: false, at: change.at, titleKey: change.key))
+                titleChange = nil
+            }
+            if let key = firstTitleKey { onFirstTitleKey(key) }
+            for mark in marks { onEvent(mark) }
+        }
+        firstTitleKey = nil
+        marks = []
         if let event = detector.process(snapshot) {
             switch event {
             case .started(let platform, let bundleID, _):
                 currentPlatform = platform
                 meetingID = activeMeetingIDs[bundleID]
+                watchMarks(from: meetingID, at: time)
                 callSignSeen = signAtStart.contains(bundleID)
                 callIsForced = false
             case .ended:
                 currentPlatform = nil
                 meetingID = nil
+                watchMarks(from: nil, at: .distantPast)
                 callSignSeen = false
                 callIsForced = false
                 muteLock.withLock {
@@ -204,6 +252,8 @@ public final class DetectionService: @unchecked Sendable {
                     lastLabels = nil
                     setMuteTimer(on: false)
                 }
+            case .marked:
+                break
             }
             onEvent(event)
             // After the event, so a mute change never reaches the recorder before its call does.
@@ -264,6 +314,7 @@ public final class DetectionService: @unchecked Sendable {
         Log.info("The owner chose to record \(bundleID) as \(platform.displayName)")
         currentPlatform = platform
         meetingID = nil
+        watchMarks(from: nil, at: time)
         callSignSeen = false
         callIsForced = true
         onEvent(event)
@@ -393,10 +444,20 @@ public final class DetectionService: @unchecked Sendable {
     }
 
     private func browserCandidate(group: String, micActive: Bool, isCurrent: Bool) -> MeetingCandidate? {
-        guard let list = readTabs(group, isCurrent: isCurrent) else {
+        let (list, fresh) = readTabs(group, isCurrent: isCurrent)
+        // The window titles of the copies of the browser that answer, read at most once in a tick.
+        var titlesRead: [String]??
+        func answeredTitles() -> [String]? {
+            if let titlesRead { return titlesRead }
+            let titles = windows.answeredWindowTitles(bundleID: group)
+            titlesRead = .some(titles)
+            return titles
+        }
+        if isCurrent { watchForMarks(list, fresh: fresh, group: group, titles: answeredTitles) }
+        guard let list else {
             // The window titles of the copies of the browser that answer can still show a Meet call (Accessibility).
             if !isCurrent || currentPlatform == .meet,
-               windows.answeredWindowTitles(bundleID: group)?.contains(where: MeetingMatcher.meetWindowIsMeeting) == true {
+               answeredTitles()?.contains(where: MeetingMatcher.meetWindowIsMeeting) == true {
                 return MeetingCandidate(platform: .meet, bundleID: group, micActive: micActive, meetingPresent: true)
             }
             // Otherwise unreadable tabs never start a call; during a call they count as unknown.
@@ -432,6 +493,78 @@ public final class DetectionService: @unchecked Sendable {
         }
         activeMeetingIDs[group] = MeetingMatcher.meetingID(forTabURL: first.1.url)
         return MeetingCandidate(platform: first.0, bundleID: group, micActive: micActive, meetingPresent: true)
+    }
+
+    /// Starts the watch of a call's marks again: at each start and end of a call.
+    private func watchMarks(from link: String?, at start: Date) {
+        linkWatch = CallLinkWatch(link: link)
+        titleWatch = CallTitleWatch()
+        lastSureMark = nil
+        titleChange = nil
+        marks = []
+        callStart = start
+        firstTitleSent = false
+        firstTitleKey = nil
+        nextTitleRead = .distantPast
+        titleFailures = 0
+    }
+
+    /// The call's link and its windows' Meet title against this tick's readings. Only a new read of the tabs counts,
+    /// never the cache. Nothing here ends or starts a call, and nothing changes the service's link or the mute check:
+    /// a change is a mark, sent with the tick. Only the watch's own link follows, so a later change is a later mark.
+    private func watchForMarks(_ list: [BrowserTab]?, fresh: Bool, group: String, titles: () -> [String]?) {
+        if fresh {
+            // A mark is at the first reading of its change.
+            let since = linkWatch.pendingSince(at: tickTime) ?? tickTime
+            switch linkWatch.observe(list, at: tickTime) {
+            case .none:
+                break
+            case .adopt:
+                Log.info("The call in \(group) has a meeting link now; its marks are not sure")
+            case .newCall(let link, let platform):
+                // A link taken during the call was not read from the call's own tab at its start.
+                let sure = !linkWatch.isAdopted
+                Log.info("The call in \(group) shows another meeting now; marked as \(sure ? "sure" : "not sure"), and the recording goes on")
+                // A title change of the same change that waits is its earlier sign.
+                let at = min(since, titleChange?.at ?? since)
+                lastSureMark = tickTime
+                titleChange = nil
+                // The windows show the new meeting from now on: their title is not a second change.
+                titleWatch = CallTitleWatch()
+                marks.append(.marked(link: link, platform: platform, source: .tabs, sure: sure, at: at))
+            }
+        }
+        guard currentPlatform == .meet else { return }
+        if !firstTitleSent, tickTime.timeIntervalSince(callStart) >= Self.titleSettles, let title = titleWatch.title {
+            firstTitleSent = true
+            firstTitleKey = CallTitleWatch.key(title)
+        }
+        guard tickTime >= nextTitleRead else { return }
+        let began = Date()
+        let read = titles()
+        if read == nil || Date().timeIntervalSince(began) > Self.slowTitleRead {
+            titleFailures += 1
+            nextTitleRead = tickTime.addingTimeInterval(Self.titleBackoff[min(titleFailures, Self.titleBackoff.count) - 1])
+        } else {
+            titleFailures = 0
+            // Half a second of slack, for a tick that comes a little early.
+            nextTitleRead = tickTime.addingTimeInterval(Self.titleReadEvery - 0.5)
+        }
+        let before = titleWatch.title
+        let seen = titleWatch.pendingSince ?? tickTime
+        guard let title = titleWatch.observe(read, at: tickTime) else { return }
+        let key = CallTitleWatch.key(title)
+        // Back to the title before a change that waits: the owner only looked at another meeting's page.
+        if let waiting = titleChange, waiting.fromKey == key {
+            titleChange = nil
+            return
+        }
+        if let sure = lastSureMark, tickTime.timeIntervalSince(sure) <= CallTitleWatch.readingGap { return }  // The same change.
+        // In the first minute a code can become the meeting's name: no mark.
+        guard seen.timeIntervalSince(callStart) >= Self.titleSettles else { return }
+        titleChange = (seen, key, titleChange?.fromKey ?? before.map(CallTitleWatch.key))
+        // The tabs may confirm it for sure: one new read at the next tick.
+        tabCache[group] = nil
     }
 
     /// Reads the owner's mute state for the current call, at most every 3 s, or every 1 s while muted. Runs on the
@@ -507,22 +640,24 @@ public final class DetectionService: @unchecked Sendable {
         labels.contains { let l = $0.lowercased(); return l.hasPrefix("mute") || l.hasPrefix("unmute") }
     }
 
-    private func readTabs(_ group: String, isCurrent: Bool) -> [BrowserTab]? {
-        if isCurrent, let cached = tabCache[group], tickTime.timeIntervalSince(cached.time) < Self.tabRefreshDuringCall {
-            return cached.tabs
+    /// The tabs, and whether they were read now (not from a cache).
+    private func readTabs(_ group: String, isCurrent: Bool) -> (tabs: [BrowserTab]?, fresh: Bool) {
+        let refresh = linkWatch.isPending(at: tickTime) ? Self.tabRefreshWhileChangeWaits : Self.tabRefreshDuringCall
+        if isCurrent, let cached = tabCache[group], tickTime.timeIntervalSince(cached.time) < refresh {
+            return (cached.tabs, false)
         }
         // The window titles are the proof that nothing changed. When they cannot be read, the tabs are read.
         let titles = isCurrent ? nil : windows.answeredWindowTitles(bundleID: group)
         if !isCurrent, let titles, let cached = idleTabs[group], cached.titles == titles,
            tickTime.timeIntervalSince(cached.time) < Self.idleTabRefresh {
-            return cached.tabs
+            return (cached.tabs, false)
         }
         let list = tabs.tabs(browserBundleID: group)
         tabCache[group] = (tickTime, list)
         idleTabs[group] = nil
         // Only a known "no meeting here" is kept: an unknown answer is asked again, and a meeting starts the call.
         if !isCurrent, let titles, let list, !Self.showsMeeting(list) { idleTabs[group] = (tickTime, list, titles) }
-        return list
+        return (list, true)
     }
 
     /// A selected tab that is a meeting: what starts a call.

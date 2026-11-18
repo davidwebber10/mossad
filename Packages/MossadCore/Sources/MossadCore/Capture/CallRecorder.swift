@@ -423,6 +423,7 @@ public final class CallRecorder: @unchecked Sendable {
         if let pause = pauseStart {
             r.markers.append(TranscriptMarker(offset: pause.offset, text: "Paused at \(Self.time(pause.date)); the recording ended while paused"))
             pausedTotal += max(0, time.timeIntervalSince(pause.date))
+            Self.closePause(&r, at: max(time, pause.date))
         } else if byPerson {
             r.markers.append(TranscriptMarker(offset: recordedLength, text: "Recording stopped at \(Self.time(time))"))
         }
@@ -515,6 +516,27 @@ public final class CallRecorder: @unchecked Sendable {
         return offset
     }
 
+    /// Saves the key of the call's own Meet title, once. On the capture queue; nothing for a room recording.
+    public func setFirstTitleKey(_ key: String) {
+        guard isRecording, !isManual, record?.firstTitleKey == nil else { return }
+        edit { $0.firstTitleKey = key }
+    }
+
+    /// Saves a sign that another call may have started in this recording, at the recording's second of `time`, as a
+    /// bookmark is saved. On the capture queue; nothing when no call records.
+
+    public func addCallMark(link: String?, platform: Platform, source: CallMark.Source, sure: Bool, at time: Date, titleKey: String? = nil) {
+        // A room recording owns the recorder: a mark on its way when it starts is not the room's.
+        guard isRecording, !isManual else { return }
+        let now = recordedLength
+        // While paused the files do not grow: the mark sits at the pause. Else the wall time since the sign is taken
+        // back from where the recording is now, as for the last "muted" sighting.
+        let at = isPaused ? now : min(now, max(0, now - max(0, clock().timeIntervalSince(time))))
+        let mark = CallMark(at: at, time: time, link: link, platform: platform, source: source, sure: sure, titleKey: titleKey)
+        edit { $0.callMarks = ($0.callMarks ?? []) + [mark] }
+        Log.info("Marked a possible new call in the recording (\(source.rawValue), \(sure ? "sure" : "not sure"))")
+    }
+
     /// Sets the note of the bookmark at `offset`; a blank note clears it and keeps the bookmark.
     /// Returns false when no call is being recorded, so the caller can edit the saved call instead.
     @discardableResult
@@ -524,6 +546,12 @@ public final class CallRecorder: @unchecked Sendable {
         record = r
         do { try r.save(to: paths.callDirectory(r.id)) } catch { Log.error("Saving \(r.id) failed: \(error)") }
         return true
+    }
+
+    /// Closes the open pause of the record, if any.
+    private static func closePause(_ r: inout CallRecord, at time: Date) {
+        guard let i = r.pauses?.indices.last, r.pauses?[i].to == nil else { return }
+        r.pauses?[i].to = time
     }
 
     private func addMarker(at offset: TimeInterval, _ text: String, isBookmark: Bool = false) {
@@ -555,7 +583,8 @@ public final class CallRecorder: @unchecked Sendable {
     public func pause() {
         guard isRecording, !isPaused else { return }
         isPaused = true
-        pauseStart = (clock(), recordedLength)
+        let pause = (date: clock(), offset: recordedLength)
+        pauseStart = pause
         themSource?.stop()
         meSource?.stop()
         // After the audio: the last picture may still be written, and the audio must not wait for that.
@@ -567,6 +596,8 @@ public final class CallRecorder: @unchecked Sendable {
             line?.feed.flush()
             line?.writer.pause()
         }
+        // Saved at once, so a crash during the pause keeps where it sits; `resume` or `end` closes it.
+        edit { $0.pauses = ($0.pauses ?? []) + [PauseSpan(at: pause.offset, from: pause.date, to: nil)] }
         Log.info("Recording paused")
     }
 
@@ -575,7 +606,12 @@ public final class CallRecorder: @unchecked Sendable {
         isPaused = false
         if let pause = pauseStart {
             pausedTotal += max(0, clock().timeIntervalSince(pause.date))
-            addMarker(at: pause.offset, "Paused from \(Self.time(pause.date)) to \(Self.time(clock())) (\(Self.length(clock().timeIntervalSince(pause.date))))")
+            let text = "Paused from \(Self.time(pause.date)) to \(Self.time(clock())) (\(Self.length(clock().timeIntervalSince(pause.date))))"
+            let to = max(clock(), pause.date)
+            edit {
+                $0.markers.append(TranscriptMarker(offset: pause.offset, text: text))
+                Self.closePause(&$0, at: to)
+            }
         }
         pauseStart = nil
         them?.writer.resume()
