@@ -366,6 +366,10 @@ final class PipelineScreenTests: XCTestCase {
 
     func testThePresenterIsMatchedToTheInvitedPeople() async throws {
         try makeCall("a", at: start, frames: [(12, slide, "dana lee")])
+        // The call's link proves the invite: with no link the overlap alone is a guess, which keeps no people.
+        var linked = try CallRecord.load(from: paths.callDirectory("a"))
+        linked.meetingID = "abc-defg-hij"
+        try linked.save(to: paths.callDirectory("a"))
         let calendar = FakeCalendar(events: [CalendarEventInfo(title: "Plan review", start: start, end: start.addingTimeInterval(1800),
                                                                attendees: ["Dana Lee"], text: "https://meet.google.com/abc-defg-hij", isAllDay: false)])
         await pipeline(calendar: calendar).process("a")
