@@ -79,6 +79,13 @@ extension AppController {
         return GoogleConnector.sample || google.isConnected
     }
 
+    /// The directory part is given and on: a preview's made-up connection reads the chosen parts.
+    var googleDirectoryOn: Bool {
+        _ = googleConnector.version
+        if GoogleConnector.sampleOff { return false }
+        return GoogleConnector.sample ? googleConnector.scopes.contains(.directory) : google.has(.directory)
+    }
+
     /// The client ID and the secret are both in the Keychain.
     var googleClientSaved: Bool {
         if GoogleConnector.sample { return true }
@@ -258,11 +265,17 @@ extension AppController {
     /// The speakers of Gemini meetings become saved people with their address, on a sure match with the invite and
     /// the directory (`GeminiPeople`). Every notes-only meeting is read at each run, so a match held back now is read
     /// again: after each directory read (at launch, the one the launch started), after an import that made a
-    /// meeting, and after a call that held a run back. Only where the directory is read (the window app), with the
-    /// directory part on, never while a call records. One run at a time; a call during a run starts one more after it.
+    /// meeting, after a call that held a run back, and when the owner turns the switch on. Only where the directory is
+    /// read (the window app), with the directory part and the switch on (`GeminiPeople.gate`), never while a call
+    /// records. One run at a time; a call during a run starts one more after it. The switch turned off ends a run at its
+    /// next stop check, and removes nothing.
     func linkGeminiPeople() {
-        guard mode.does(.upkeep), google.has(.directory), let people = library.identity?.people else { return }
-        guard !isRecording else { geminiPeopleAfterCall = true; return }
+        guard let people = library.identity?.people else { return }
+        switch GeminiPeople.gate(upkeep: mode.does(.upkeep), directory: google.has(.directory), on: GeminiPeople.isOn(.standard), recording: isRecording) {
+        case .off: return
+        case .afterCall: geminiPeopleAfterCall = true; return
+        case .run: break
+        }
         guard !geminiPeopleRunning else { geminiPeopleAgain = true; return }
         geminiPeopleRunning = true
         let paths = paths, library = library, flag = callFlag
@@ -276,7 +289,8 @@ extension AppController {
                 guard let cache = GoogleDirectoryCache.load(paths) else { return nil }
                 let notes = ProcessingQueue(paths: paths).allRecords().filter(\.isNotesOnly)
                 guard !notes.isEmpty else { return nil }
-                return GeminiPeople.link(notes, library: library, people: people, directory: cache.profiles, paths: paths, stop: { flag.recording })
+                return GeminiPeople.link(notes, library: library, people: people, directory: cache.profiles, paths: paths,
+                                        stop: { flag.recording || !GeminiPeople.isOn(.standard) })
             }.value
             guard let out else { return }
             // A call stopped the run: after that call, or at once when it already ended.

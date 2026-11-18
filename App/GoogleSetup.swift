@@ -82,9 +82,12 @@ struct GoogleSettings: View {
             SettingsGroup(label: "What Mossad reads", footer: "A part you turn off is asked for no more at the next Check.") {
                 GooglePartRows()
             }
-            if controller.googleConnected, connector.scopes.contains(.calendar), connector.scopes.contains(.docs) {
-                SettingsGroup(label: "Gemini notes", footer: "Every 15 minutes Mossad looks at the meetings of the last 2 days. A meeting you did not record becomes a meeting with Gemini's transcript and Mossad's own summary, marked \"Gemini notes\". A recorded meeting keeps its own transcript and gets the link. Meetings you declined are left out. The coach does not review these meetings.") {
-                    GooglePastNotesRows()
+            let notes = controller.googleConnected && connector.scopes.contains(.calendar) && connector.scopes.contains(.docs)
+            let people = controller.googleConnected && controller.googleDirectoryOn
+            if notes || people {
+                SettingsGroup(label: "Gemini notes", footer: notes ? "Every 15 minutes Mossad looks at the meetings of the last 2 days. A meeting you did not record becomes a meeting with Gemini's transcript and Mossad's own summary, marked \"Gemini notes\". A recorded meeting keeps its own transcript and gets the link. Meetings you declined are left out. The coach does not review these meetings." : nil) {
+                    if notes { GooglePastNotesRows() }
+                    if people { GeminiPeopleRow() }
                 }
             }
         }
@@ -347,6 +350,21 @@ struct GooglePartRows: View {
     private func detail(_ scope: GoogleScope) -> String {
         let pending = controller.google.isConnected && controller.google.scopes.contains(scope) != controller.googleConnector.scopes.contains(scope)
         return scope.detail + (pending ? " Press Check to apply." : "")
+    }
+}
+
+/// "Add people from Gemini notes": on by default. Off stops the step and removes no one; on again runs it once now.
+struct GeminiPeopleRow: View {
+    @EnvironmentObject var controller: AppController
+    @AppStorage(GeminiPeople.settingKey) private var on = true
+
+    var body: some View {
+        SettingsSwitchRow(title: "Add people from Gemini notes",
+                          detail: "The people who spoke join your People list with their address, only when your directory leaves no doubt who they are.",
+                          isOn: Binding(get: { on }, set: { new in
+                              on = new
+                              if new { controller.linkGeminiPeople() }
+                          }))
     }
 }
 
