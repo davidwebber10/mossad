@@ -4,7 +4,7 @@
 
 Mossad is work intelligence for your Mac. It records your calls without a bot, then keeps meeting notes, transcripts that know who spoke, decisions, action items, the promises you made, and a page for each person you meet. Before a meeting, it shows who is coming, what happened last time, and what you still owe. It is free and open source under the MIT License.
 
-- Latest version: 2.28.1
+- Latest version: 2.29.0
 - Requires: macOS 26 or later on Apple silicon
 - Price: free. Cloud AI providers that you connect bill you directly; models on your Mac cost nothing.
 - Website: https://getmossad.com/
@@ -32,6 +32,7 @@ Mossad records without a bot in the meeting and without a click from you.
 - **Stops when the call ends.** The recording ends when the meeting window or tab closes, not after a guess from a few quiet seconds.
   - If that signal is missing, three minutes without microphone use end the call
   - Calls shorter than one minute are not kept
+  - When Mossad sees the call change in your browser, two calls back to back become two meetings, each with its own notes
 - **Two tracks, no bot.** Your voice and the other side are recorded apart, so the transcript never confuses you with them.
   - The call track comes from a Core Audio tap on the call app only
   - Echo of the other side that your microphone picks up is removed from your track
