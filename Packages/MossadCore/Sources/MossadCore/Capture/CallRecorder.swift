@@ -169,23 +169,14 @@ public final class CallRecorder: @unchecked Sendable {
     }
     public var currentRecord: CallRecord? { record }
 
-    public static func callID(for date: Date) -> String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyyMMdd-HHmmss"
-        return f.string(from: date)
-    }
+    public static func callID(for date: Date) -> String { CallIDs.callID(for: date) }
 
-    /// The ID has one-second resolution in local time, so the hour that repeats when daylight time ends (or a clock
-    /// change) can give the ID of an older call. That call's folder is never reused.
+    /// The rule of `CallIDs.freeID`: a folder that exists, or a part of a cut being made, keeps its id.
+    public static func freeID(for date: Date, in paths: Paths) -> String { CallIDs.freeID(for: date, in: paths) }
+
     private func freeCallID(for date: Date) -> String {
-        let base = Self.callID(for: date)
-        var id = base, n = 2
-        while FileManager.default.fileExists(atPath: paths.callDirectory(id).path) {
-            id = "\(base)-\(n)"
-            n += 1
-        }
-        if id != base { Log.error("A call \(base) exists already; this one is saved as \(id)") }
+        let id = Self.freeID(for: date, in: paths)
+        if id != Self.callID(for: date) { Log.error("A call \(Self.callID(for: date)) exists already; this one is saved as \(id)") }
         return id
     }
 
@@ -198,6 +189,8 @@ public final class CallRecorder: @unchecked Sendable {
         let dir = paths.callDirectory(id)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var r = CallRecord(id: id, platform: platform, bundleID: bundleID, start: start, end: start, status: .recording)
+        // Known from the start: no pause yet. A record with no list is from an older build, which saved none.
+        r.pauses = []
         r.meetingID = meetingID
         let themWriter: TrackWriter, meWriter: TrackWriter
         do {

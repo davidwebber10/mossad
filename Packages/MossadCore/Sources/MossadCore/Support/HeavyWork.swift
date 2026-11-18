@@ -12,13 +12,15 @@ public enum HeavyStep: String, CaseIterable, Sendable {
     case onDeviceTranscription
     /// The mix and AAC encode of the whole call for the player.
     case recordingEncode
+    /// The copy of a recording into its parts, when one recording held two calls.
+    case recordingCut
 
     /// The join and the voices are short and read only parts of the call, so they run behind a call. A full-call
     /// encode and a model on this Mac wait for the call to end, unless the owner said "Process now".
     var runsDuringCall: Bool {
         switch self {
         case .trackJoin, .voiceIdentification: true
-        case .uploadEncode, .onDeviceTranscription, .recordingEncode: false
+        case .uploadEncode, .onDeviceTranscription, .recordingEncode, .recordingCut: false
         }
     }
 
@@ -29,6 +31,7 @@ public enum HeavyStep: String, CaseIterable, Sendable {
         case .uploadEncode: "the upload encode"
         case .onDeviceTranscription: "the transcription on this Mac"
         case .recordingEncode: "the recording encode"
+        case .recordingCut: "the cut of the recording"
         }
     }
 

@@ -21,8 +21,12 @@ public struct ProcessingQueue: Sendable {
     /// Every call folder, with the records that could be read. Throws when the folder itself cannot be listed.
     /// Unchanged records come from a cache, so a scan decodes only what changed since the last one.
     public func scan() throws -> RecordScan {
+        // A part of a cut recording that is still being made (`<id>.cutting`) is no meeting yet, and a meeting whose Delete
+        // has begun is no meeting any more.
+        let deleting = DeleteLedger.ids(paths)
         let dirs = try FileManager.default.contentsOfDirectory(at: paths.audio, includingPropertiesForKeys: [.isDirectoryKey])
-            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true && !$0.lastPathComponent.hasSuffix(Pipeline.cuttingSuffix)
+                && !deleting.contains($0.lastPathComponent) }
         var records: [CallRecord] = []
         var unreadable: [String] = []
         for dir in dirs {
@@ -34,10 +38,25 @@ public struct ProcessingQueue: Sendable {
     }
 
     public func pending(now: Date) -> [CallRecord] {
-        allRecords().filter { r in
-            // A meeting that leaves for another profile is never processed here.
+        let cutting = inCut()
+        return allRecords().filter { r in
+            // A meeting that leaves for another profile is never processed here, nor a recording in a cut or its parts.
             r.status != .written && r.status != .recording && r.status != .failed && r.moveTo == nil && (r.nextAttempt ?? .distantPast) <= now
+                && !cutting.contains(r.id)
         }
+    }
+
+    /// The original and the parts of every cut in progress: until its ledger is gone, none of them is processed.
+    func inCut() -> Set<String> {
+        let fm = FileManager.default
+        var out: Set<String> = []
+        for dir in (try? fm.contentsOfDirectory(at: paths.audio, includingPropertiesForKeys: nil)) ?? [] {
+            let url = dir.appendingPathComponent(Pipeline.CutLedger.fileName)
+            guard fm.fileExists(atPath: url.path) else { continue }
+            out.insert(dir.lastPathComponent)
+            if let ledger = Pipeline.CutLedger.load(in: dir) { out.insert(ledger.original); out.formUnion(ledger.ids) }
+        }
+        return out
     }
 
     /// Finishes calls that were still recording when the app stopped. Returns the calls whose muted parts could not

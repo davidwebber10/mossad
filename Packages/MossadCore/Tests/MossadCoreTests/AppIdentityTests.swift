@@ -137,7 +137,7 @@ final class AppIdentityPreviewTests: XCTestCase {
     }
 
     func testACommandNeverTakesThePreviewIdentity() {
-        for flag in ["--mcp", "--people-migration", "--persona-fill", "--persona-eval", "--import-keys"] {
+        for flag in ["--mcp", "--people-migration", "--persona-fill", "--persona-eval", "--import-keys", "--cut"] {
             for env in [[:], ["MOSSAD_ROOT": "/tmp/demo"]] {
                 XCTAssertFalse(id([flag], env).isPreview, flag)
                 XCTAssertFalse(id(["--ui-preview", flag], env).isPreview, flag)

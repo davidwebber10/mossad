@@ -241,9 +241,11 @@ public struct MoveOut: Codable, Equatable, Sendable {
     /// The meetings that the target took in and whose removal here has begun (`removing`, then `done` until the folder
     /// is gone): the sync takes them off the store at once, as if the folder were gone. Before that the meeting is
     /// still this profile's.
+    /// A meeting whose Delete has begun is held the same way (`DeleteLedger.ids`).
     public static func syncHeld(_ paths: Paths) -> Set<String> {
-        guard FileManager.default.fileExists(atPath: paths.moves.path) else { return [] }
-        return Set(all(paths).moves.filter { $0.state == .removing || $0.state == .done }.map(\.callID))
+        let deleting = DeleteLedger.ids(paths)
+        guard FileManager.default.fileExists(atPath: paths.moves.path) else { return deleting }
+        return Set(all(paths).moves.filter { $0.state == .removing || $0.state == .done }.map(\.callID)).union(deleting)
     }
 
     /// A move that is not done.
