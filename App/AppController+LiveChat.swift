@@ -39,7 +39,7 @@ extension AppController {
     /// names the voices got.
     func liveCallFacts(_ record: CallRecord, snapshot: LiveTranscript) -> LiveCallFacts {
         let invited = (record.invitees ?? []).filter { $0.isSelf != true }.compactMap { $0.name ?? $0.email }
-        var facts = LiveCallFacts(callID: record.id, title: record.sureCalendarTitle ?? record.title, platform: record.platform.displayName,
+        var facts = LiveCallFacts(callID: record.id, title: record.calendarTitle ?? record.title, platform: record.platform.displayName,
                                   start: record.start, invited: invited.isEmpty ? record.attendees.filter { $0 != ownerName } : invited,
                                   owner: ownerName)
         // The invite the live names use, matched again with the call's times so far.

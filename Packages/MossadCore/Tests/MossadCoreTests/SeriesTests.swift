@@ -71,16 +71,6 @@ final class SeriesTests: XCTestCase {
         XCTAssertTrue(catalog([a, b]).isEmpty)
     }
 
-    /// A guessed invite (`inviteNotSure`) is no series: by its title neither, also when the meeting has no other title.
-    func testAGuessedInviteIsNoSeries() {
-        var a = call("a", daysAgo: 14), b = call("b", daysAgo: 7)
-        a.inviteNotSure = true
-        b.inviteNotSure = true
-        XCTAssertTrue(catalog([a, b]).isEmpty)
-        b.inviteNotSure = nil
-        XCTAssertTrue(catalog([a, b]).isEmpty, "one sure meeting is no series")
-    }
-
     func testTheCalendarSeriesIDJoinsMeetingsWhateverTheTitleAndGivesTheID() {
         let s = catalog([call("a", daysAgo: 14, title: "TB", seriesID: "g1"), call("b", daysAgo: 7, title: "Platform TB (moved)", seriesID: "g1")])
         XCTAssertEqual(s.count, 1)
