@@ -41,11 +41,21 @@ public enum InviteAnswer: Equatable, Sendable {
     /// The answer after the voices of the recording (`evidence`): another event on positive evidence
     /// (`InviteCheck.replacement`), else this answer as it is.
     public func checked(platform: Platform, link: String?, start: Date, end: Date, events: [CalendarEventInfo], evidence: Set<String>,
-                        invited: (CalendarEventInfo) -> Set<String>) -> InviteAnswer {
+                        unknownVoices: Bool = false, invited: (CalendarEventInfo) -> Set<String>) -> InviteAnswer {
         guard voicesMayReplace, link == nil, Platform.callApps.contains(platform) else { return self }
         let pick: CalendarEventInfo? = if case .picked(let e, _) = self { e } else { nil }
         let candidates = InviteCheck.candidates(platform: platform, start: start, end: end, in: events)
-        return InviteCheck.replacement(pick: pick, candidates: candidates, evidence: evidence, invited: invited).map { .proved($0) } ?? self
+        return InviteCheck.replacement(pick: pick, candidates: candidates, evidence: evidence, unknownVoices: unknownVoices, invited: invited)
+            .map { .proved($0) } ?? self
+    }
+
+    /// "No invite" takes away an invite that the record has only when the read holds the record's own event (the same
+    /// title and planned start), which then does not hold the link. A read without it (a regenerate months later, a
+    /// changed calendar, a blind event store) proves nothing about that invite: the answer is `nothing`.
+    public func held(by r: CallRecord, events: [CalendarEventInfo]) -> InviteAnswer {
+        guard self == .noInvite, let title = r.calendarTitle else { return self }
+        let present = events.contains { e in e.title == title && (r.plannedStart.map { e.start == $0 } ?? true) }
+        return present ? self : .nothing
     }
 
     public var isSure: Bool {
@@ -74,18 +84,25 @@ public enum InviteCheck {
     /// An event that ended this long before the recording started, or starts this long after it ended, can be the call's.
     public static let near: TimeInterval = CalendarMatcher.readWindow
 
+    /// An overlap under both of these is no overlap for a replacement (a join some seconds early, a call that runs a
+    /// minute into the next event): that event follows the rule of a near event.
+    public static let leastOverlap: TimeInterval = 300
+
     public struct Candidates: Equatable, Sendable {
-        /// The events with the platform's call link that overlap the recording.
+        /// The events with the platform's call link that overlap the recording by `leastOverlap` or half of it at least.
         public var overlapping: [CalendarEventInfo]
-        /// The events with the platform's call link that end up to `near` before it or start up to `near` after it.
+        /// The other events with the platform's call link that touch the recording or end up to `near` before it or start
+        /// up to `near` after it.
         public var near: [CalendarEventInfo]
         public var all: [CalendarEventInfo] { overlapping + near }
     }
 
     public static func candidates(platform: Platform, start: Date, end: Date, in events: [CalendarEventInfo]) -> Candidates {
         var out = Candidates(overlapping: [], near: [])
+        let length = end.timeIntervalSince(start)
         for e in events where !e.isAllDay && CalendarMatcher.hasCallLink(e, platform: platform) {
-            if min(end, e.end) > max(start, e.start) {
+            let overlap = min(end, e.end).timeIntervalSince(max(start, e.start))
+            if overlap > 0, overlap >= leastOverlap || overlap >= length / 2 {
                 out.overlapping.append(e)
             } else if e.end >= start.addingTimeInterval(-near), e.start <= end.addingTimeInterval(near) {
                 out.near.append(e)
@@ -108,10 +125,11 @@ public enum InviteCheck {
     /// The event that replaces `pick`, or nil when the pick stays.
     /// - An overlapping event replaces it with at least one evidence voice among its invited people and strictly more than
     ///   the pick has, and more than any other overlapping event. A tie keeps the pick.
-    /// - An event that does not overlap replaces it only when every evidence voice is invited to it, the pick has none,
-    ///   the pick invites nobody through a room or a group (a group address can hide the right people), and it is the
-    ///   only such event.
-    public static func replacement(pick: CalendarEventInfo?, candidates: Candidates, evidence: Set<String>,
+    /// - A near event replaces it only when there is a pick, every evidence voice is invited to the near event, the pick
+    ///   has none of them, no voice heard on the call side is unknown (`unknownVoices`: it can be the pick's person), the
+    ///   pick invites nobody through a room or a group (seen only where the calendar marks one: Google does not), and it
+    ///   is the only such event.
+    public static func replacement(pick: CalendarEventInfo?, candidates: Candidates, evidence: Set<String>, unknownVoices: Bool = false,
                                    invited: (CalendarEventInfo) -> Set<String>) -> CalendarEventInfo? {
         guard !evidence.isEmpty else { return nil }
         func count(_ e: CalendarEventInfo) -> Int { invited(e).intersection(evidence).count }
@@ -120,9 +138,15 @@ public enum InviteCheck {
         if let top = others.max(by: { $0.1 < $1.1 }), top.1 >= 1, top.1 > held, others.filter({ $0.1 == top.1 }).count == 1 {
             return top.0
         }
-        guard held == 0, !(pick?.participants.contains { !$0.isPerson } ?? false) else { return nil }
-        let fits = candidates.near.filter { evidence.isSubset(of: invited($0)) }
+        guard let pick, held == 0, !unknownVoices, !pick.participants.contains(where: { !$0.isPerson }) else { return nil }
+        let fits = candidates.near.filter { $0 != pick && evidence.isSubset(of: invited($0)) }
         return fits.count == 1 ? fits[0] : nil
+    }
+
+    /// A voice of the call side with a fingerprint that has no name of a person: unknown, held back, or a letter.
+    public static func unknownVoices(names: [String: String], unknown: [String], fingerprints: [String: [Float]]) -> Bool {
+        let unnamed = unknown + names.filter { $0.value.hasPrefix("Speaker ") }.map(\.key)
+        return unnamed.contains { $0.hasPrefix("them:") && fingerprints[$0] != nil }
     }
 
     /// The saved voices each event invites, by `InviteRoster`'s rule, without the owner's.

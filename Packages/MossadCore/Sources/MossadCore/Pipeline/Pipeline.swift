@@ -930,7 +930,9 @@ public actor Pipeline {
                 }
                 reuse = pass
                 let checked = given.checked(platform: r.platform, link: nil, start: r.start, end: r.end, events: read.events,
-                                            evidence: inviteEvidence(names: pass.names, fromInvite: pass.fromInvite), invited: invitedVoices())
+                                            evidence: inviteEvidence(names: pass.names, fromInvite: pass.fromInvite),
+                                            unknownVoices: InviteCheck.unknownVoices(names: pass.names, unknown: pass.unknown, fingerprints: pass.embeddings),
+                                            invited: invitedVoices())
                 if checked != given {
                     r.apply(checked)
                     answer = checked
@@ -1012,9 +1014,10 @@ public actor Pipeline {
     private func inviteAnswer(_ r: CallRecord, read: CalendarRead, evidence: Set<String>?) -> InviteAnswer {
         let link = r.meetingID ?? r.titleLink
         let answer = InviteAnswer.of(platform: r.platform, link: link, titleKey: r.firstTitleKey, start: r.start, end: r.end,
-                                     events: read.events, whole: read.whole)
+                                     events: read.events, whole: read.whole).held(by: r, events: read.events)
         guard let evidence else { return answer }
         return answer.checked(platform: r.platform, link: link, start: r.start, end: r.end, events: read.events, evidence: evidence,
+                              unknownVoices: InviteCheck.unknownVoices(names: r.speakerNames, unknown: r.unknownSpeakers, fingerprints: r.speakerEmbeddings),
                               invited: invitedVoices())
     }
 

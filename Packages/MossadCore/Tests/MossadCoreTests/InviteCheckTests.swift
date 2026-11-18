@@ -41,12 +41,12 @@ final class InviteCheckTests: XCTestCase {
 
     /// The answer before the voices, then with `voices` as the evidence (nil: no check).
     func answer(_ platform: Platform = .meet, from: Double, to: Double, voices: Set<String>?, link: String? = nil, key: String? = nil,
-                events: [CalendarEventInfo]? = nil, whole: Bool = true) -> InviteAnswer {
+                events: [CalendarEventInfo]? = nil, whole: Bool = true, unknown: Bool = false) -> InviteAnswer {
         let events = events ?? morning
         let first = InviteAnswer.of(platform: platform, link: link, titleKey: key, start: at(from), end: at(to), events: events, whole: whole)
         guard let voices else { return first }
         return first.checked(platform: platform, link: link, start: at(from), end: at(to), events: events, evidence: voices,
-                             invited: InviteCheck.invitedVoices(profiles: profiles, people: []))
+                             unknownVoices: unknown, invited: InviteCheck.invitedVoices(profiles: profiles, people: []))
     }
 
     // MARK: The three calls of the bug
@@ -118,7 +118,9 @@ final class InviteCheckTests: XCTestCase {
         let late = event("Quick check", 30, 54, [("Dana Fox", "dana@example.com")], link: "bbb-bbbb-bbb")
         XCTAssertEqual(answer(from: 65, to: 79, voices: ["Dana Fox"], events: [late, meetup]), .picked(meetup, sure: true),
                        "it ended 11 minutes before: no candidate")
-        XCTAssertEqual(answer(from: 65, to: 79, voices: ["Dana Fox"], events: [quick]), .proved(quick), "no overlapping event: the near one")
+        XCTAssertEqual(answer(from: 65, to: 79, voices: ["Dana Fox"], events: [quick]), .nothing, "no pick: nothing is set, as on main")
+        XCTAssertEqual(answer(from: 65, to: 79, voices: ["Dana Fox"], unknown: true), .picked(meetup, sure: true),
+                       "a voice heard and not named can be the pick's person")
     }
 
     func testAnOverlappingEventNeedsStrictlyMoreThanThePick() {
@@ -147,5 +149,57 @@ final class InviteCheckTests: XCTestCase {
         XCTAssertTrue(pool?.guests.contains { $0.email == "dana@example.com" } == true, "the near event's person")
         XCTAssertTrue(pool?.guests.contains { $0.email == "guest3@example.com" } == true, "the overlapping event's person")
         XCTAssertFalse(pool?.guests.contains { $0.email == "sam@example.com" } == true, "an event out of the window")
+    }
+
+    // MARK: The second review
+
+    /// N1: the owner joins 30 s early, and the meeting before lists more of the heard voices than the pick. Its 30 s are
+    /// no overlap for a replacement: it is a near event, and the pick has a voice of its own, so the pick stays.
+    func testN1AnEarlyJoinDoesNotGiveTheCallToTheMeetingBefore() {
+        let teamSync = event("Team sync", -30, 0, [("Sam Carter", "sam@example.com"), ("Jordan Lee", "jordan@example.com")], link: "iii-iiii-iii",
+                             host: "https://zoom.us/j/")
+        let vendor = event("Vendor demo", 0, 60, [("Sam Carter", "sam@example.com"), ("Morgan Hale", "morgan@vendor.example")], link: "jjj-jjjj-jjj",
+                           host: "https://zoom.us/j/")
+        XCTAssertEqual(answer(.zoom, from: -0.5, to: 50, voices: ["Sam Carter", "Jordan Lee"], events: [teamSync, vendor]),
+                       .picked(vendor, sure: false))
+    }
+
+    /// N2: a client call after a prep 1:1 with a colleague; the colleague is named, the clients are unknown. The pick stays.
+    func testN2AClientCallAfterAPrepWithAColleagueStays() {
+        let prep = event("Prep", -30, 0, [("Sam Carter", "sam@example.com")], link: "kkk-kkkk-kkk")
+        let client = event("Client call", 0, 30, [("Morgan Hale", "morgan@client.example")], link: "lll-llll-lll")
+        XCTAssertEqual(answer(from: 1, to: 29, voices: ["Sam Carter"], events: [prep, client], unknown: true), .picked(client, sure: true))
+    }
+
+    /// N2: an unplanned call with no pick after a 1:1 that ended: no invite, as on main.
+    func testN2AnUnplannedCallAfterAOneOnOneGetsNoInvite() {
+        let oneOnOne = event("1:1", -30, 0, [("Sam Carter", "sam@example.com")], link: "mmm-mmmm-mmm")
+        XCTAssertEqual(answer(from: 5, to: 20, voices: ["Sam Carter"], events: [oneOnOne]), .nothing)
+    }
+
+    /// N2, the first review's I1 on a Google calendar: Google gives a group address no kind, so the guard cannot see it.
+    /// The three voices of "Design sync" are all named and all invited to it, the pick has none of them: it replaces the
+    /// pick. With the kind (the Mac's calendar marks a group), the pick stays.
+    func testN2TheGroupCaseOnGoogleIsReplacedAndOnTheMacStays() {
+        let design = event("Design sync", -30, 0, [("Sam Carter", "sam@example.com"), ("Jordan Lee", "jordan@example.com"),
+                                                  ("Robin Ash", "robin@example.com")], link: "ggg-gggg-ggg")
+        let voices: Set<String> = ["Sam Carter", "Jordan Lee", "Robin Ash"]
+        var google = event("Sprint review", 1, 61, [], link: "hhh-hhhh-hhh")
+        google.participants.append(Invitee(name: nil, email: "team@example.com"))
+        XCTAssertEqual(answer(from: 2, to: 58, voices: voices, events: [design, google]), .proved(design))
+        let mac = event("Sprint review", 1, 61, [], link: "hhh-hhhh-hhh", group: "team@example.com")
+        XCTAssertEqual(answer(from: 2, to: 58, voices: voices, events: [design, mac]), .picked(mac, sure: true))
+    }
+
+    /// N3: "no invite" takes away only an invite whose own event is in the read and does not hold the link.
+    func testN3NoInviteClearsOnlyAnInviteWhoseEventIsInTheRead() {
+        var r = CallRecord(id: "x", platform: .meet, bundleID: "b", start: at(84), end: at(94), status: .written)
+        r.setInvite(meetup)
+        XCTAssertEqual(InviteAnswer.noInvite.held(by: r, events: morning), .noInvite, "its event is in the read")
+        XCTAssertEqual(InviteAnswer.noInvite.held(by: r, events: [leadership]), .nothing, "its event is not in the read")
+        XCTAssertEqual(InviteAnswer.noInvite.held(by: r, events: []), .nothing, "a blind store")
+        r.clearInvite()
+        XCTAssertEqual(InviteAnswer.noInvite.held(by: r, events: []), .noInvite, "nothing to keep")
+        XCTAssertEqual(InviteAnswer.picked(meetup, sure: true).held(by: r, events: []), .picked(meetup, sure: true))
     }
 }

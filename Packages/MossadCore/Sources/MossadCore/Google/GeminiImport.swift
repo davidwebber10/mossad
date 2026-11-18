@@ -85,6 +85,10 @@ public enum GeminiImport {
         // A recording with a link that the event does not hold is proved not to be that event's meeting.
         let link = r.meetingID ?? r.titleLink
         if let link, CalendarMatcher.match(for: r.platform, meetingID: link, start: .distantPast, end: .distantFuture, in: [e]) == nil { return false }
+        // A sure invite of another event (another title, or another planned start) is proof too; a pick that is not sure
+        // keeps main's rule.
+        if let title = r.calendarTitle, r.inviteNotSure != true,
+           title.caseInsensitiveCompare(e.title) != .orderedSame || (r.plannedStart.map { $0 != e.start } ?? false) { return false }
         if r.calendarTitle?.caseInsensitiveCompare(e.title) == .orderedSame { return true }
         return CalendarMatcher.bestEvent(for: r.platform, meetingID: link, start: r.start, end: r.status == .recording ? now : r.end, in: [e]) != nil
     }

@@ -1515,6 +1515,8 @@ final class PipelineTests: XCTestCase {
     /// summary, and its one invited person with no voice names the voice left.
     func testTheVoicesTakeTheInviteToTheMeetingWhosePeopleSpoke() async throws {
         try library.add([0, 1, 0, 0], to: "Alex Rivera")
+        // Every voice heard is named (N2): an unknown voice could be a person of the pick.
+        try library.add([0, 0, 0, 1], to: "Amy Lee")
         let id = try makeRecord()
         let late = CalendarEventInfo(title: "Quick check", start: start.addingTimeInterval(-2100), end: start.addingTimeInterval(-300),
                                      attendees: ["Alex Rivera", "Amy Lee"], text: "https://meet.google.com/bbb-bbbb-bbb", isAllDay: false)
@@ -1526,7 +1528,7 @@ final class PipelineTests: XCTestCase {
         XCTAssertNil(r.inviteNotSure)
         XCTAssertEqual(r.inviteChecked, true)
         XCTAssertEqual(r.speakerNames["them:A"], "Alex Rivera")
-        XCTAssertEqual(r.speakerNames["them:B"], "Amy Lee", "named again with the proved invite")
+        XCTAssertEqual(r.speakerNames["them:B"], "Amy Lee")
         XCTAssertEqual(r.title, "Quick check")
     }
 
@@ -1548,14 +1550,26 @@ final class PipelineTests: XCTestCase {
         let coded = try makeRecord()
         var withCode = try load(coded)
         withCode.titleLink = "zzz-zzzz-zzz"
-        withCode.calendarTitle = "Team meetup"
-        withCode.attendees = ["Pat Quill", "Lee Morgan"]
+        withCode.setInvite(meetup)
         try withCode.save(to: paths.callDirectory(coded))
         await pipeline(calendar: FakeCalendar(events: [meetup])).process(coded)
         r = try load(coded)
         XCTAssertNil(r.calendarTitle, "the live pick goes: no event holds the call's code")
         XCTAssertEqual(r.attendees, [])
         XCTAssertEqual(r.title, "Freight call")
+    }
+
+    /// N3: "Regenerate summary" of an old meeting whose event is no longer in the read keeps its invite, and a blind store
+    /// (allowed, no events) clears nothing.
+    func testNoInviteNeverClearsAnInviteWhoseEventIsNotInTheRead() async throws {
+        let event = CalendarEventInfo(title: "Weekly Ops Sync", start: start, end: start.addingTimeInterval(1800),
+                                      attendees: ["Alex Rivera"], text: "https://meet.google.com/abc-defg-hij", isAllDay: false)
+        let id = try makeRecord(meetingID: "abc-defg-hij")
+        await pipeline(calendar: FakeCalendar(events: [event])).process(id)
+        XCTAssertEqual(try load(id).calendarTitle, "Weekly Ops Sync")
+        await pipeline(calendar: FakeCalendar(events: [])).regenerateSummary(id)
+        XCTAssertEqual(try load(id).calendarTitle, "Weekly Ops Sync", "the event left the calendar: the invite stays")
+        XCTAssertEqual(try load(id).attendees, ["Alex Rivera"])
     }
 
     /// An unknown calendar never says "no invite": a failed Google read keeps the live invite and marks nothing checked.

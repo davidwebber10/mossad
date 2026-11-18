@@ -64,6 +64,22 @@ final class GeminiImportTests: XCTestCase {
         XCTAssertEqual(GeminiImport.plan(events: [e], records: [byTitle], now: now).map(\.action), [.attach(callID: "rec-1")])
     }
 
+    /// N4: a recording whose sure invite is another event is not this event's meeting, also with no link; a not-sure
+    /// invite keeps main's behavior.
+    func testARecordingWithASureInviteOfAnotherEventGetsNoNotes() {
+        let e = event()
+        let other = event("Budget review", hoursAgo: 2.5, minutes: 60, doc: nil, link: "https://meet.google.com/zzz-zzzz-zzz", eventID: "evt2")
+        var sure = recording(e, meetingID: nil)
+        sure.setInvite(other)
+        XCTAssertEqual(GeminiImport.plan(events: [e], records: [sure], now: now).map(\.action), [.create])
+        var notSure = sure
+        notSure.inviteNotSure = true
+        XCTAssertEqual(GeminiImport.plan(events: [e], records: [notSure], now: now).map(\.action), [.attach(callID: "rec-1")])
+        var same = recording(e, meetingID: nil)
+        same.setInvite(e)
+        XCTAssertEqual(GeminiImport.plan(events: [e], records: [same], now: now).map(\.action), [.attach(callID: "rec-1")])
+    }
+
     func testNothingTwiceNothingDeclinedNothingTooSoonAndNoNotes() {
         let e = event()
         var imported = recording(e)
