@@ -49,6 +49,9 @@ final class SeriesModel: ObservableObject {
     /// The invites of the last catalog when its calendar read was whole, else nil: a meeting point still to come that
     /// none of them holds waits with the points of meetings that were not recorded (`NextTimeBook.unrecorded`).
     private var readInvites: [UpcomingMeeting]?
+    /// The invites of the last whole read, in memory only: a meeting point follows only to an invite new since then
+    /// (`MeetingPointRead.before`). Nil until the first whole read after a launch.
+    private var lastWhole: [UpcomingMeeting]?
     /// The people store, for the id a merged person has now.
     private(set) var people = PersonReferences(people: [])
 
@@ -71,6 +74,9 @@ final class SeriesModel: ObservableObject {
         let oneOnOne: [String: String]
         let usual: [String: [UsualPerson]]
         let people: PersonReferences
+        let every: [UpcomingMeeting]
+        let everyPeople: [String: [String]]
+        let everyCount: [String: Int]
     }
 
     struct UsualPerson: Sendable {
@@ -127,14 +133,27 @@ final class SeriesModel: ObservableObject {
                         return UsualPerson(id: id, name: refs.name(of: id) ?? name)
                     }
                 }
-                return Made(upcoming: upcoming, all: all, invited: invited, oneOnOne: oneOnOne, usual: usual, people: refs)
+                // Every invite of the read, also one that a recording hides from the lists: a meeting point whose invite
+                // went away follows or waits by these (`MeetingPointRead`).
+                let every = UpcomingMeeting.from(inputs.events, limit: .max)
+                var everyPeople: [String: [String]] = [:]
+                var everyCount: [String: Int] = [:]
+                for u in every {
+                    everyPeople[u.id] = NextTimeInvite.personIDs(u.attendees, people: refs)
+                    everyCount[u.id] = MeetingPrep.invited(u.attendees, owner: inputs.owner, directory: directory, ownerEmails: [inputs.ownerEmail]).count
+                }
+                return Made(upcoming: upcoming, all: all, invited: invited, oneOnOne: oneOnOne, usual: usual, people: refs,
+                            every: every, everyPeople: everyPeople, everyCount: everyCount)
             }.value
             guard !Task.isCancelled else { return }
             invitedIDs = made.invited
             oneOnOneIDs = made.oneOnOne
             usualIDs = made.usual.mapValues { $0.map { (id: $0.id, name: $0.name) } }
             people = made.people
-            readInvites = inputs.calendarWhole ? made.upcoming : nil
+            let whole = inputs.calendarWhole
+            readInvites = whole ? made.every : nil
+            let previous = lastWhole
+            if whole { lastWhole = made.every }
             all = made.all
             loaded = true
             // The points take the keys their series has now (one save, only on a change).
@@ -146,12 +165,12 @@ final class SeriesModel: ObservableObject {
             // the person of a sure 1:1 that was not recorded.
             if let owner, book.points.contains(where: { $0.isOpen && $0.isForMeeting }) {
                 var copy = book
-                let records = inputs.records, refs = made.people, whole = inputs.calendarWhole
-                if copy.followMeetings(upcoming: made.upcoming, series: made.all, records: records, name: { refs.name(of: $0) },
-                                       invited: made.invited, calendarWhole: whole) {
+                let records = inputs.records, refs = made.people
+                let read = whole ? MeetingPointRead(invites: made.every, before: previous, people: made.everyPeople, invited: made.everyCount,
+                                                    canonical: { refs.canonical($0) }) : nil
+                if copy.followMeetings(upcoming: made.upcoming, series: made.all, records: records, name: { refs.name(of: $0) }, read: read) {
                     owner.changeNextTime {
-                        $0.followMeetings(upcoming: made.upcoming, series: made.all, records: records, name: { refs.name(of: $0) },
-                                          invited: made.invited, calendarWhole: whole)
+                        $0.followMeetings(upcoming: made.upcoming, series: made.all, records: records, name: { refs.name(of: $0) }, read: read)
                     }
                 }
             }
