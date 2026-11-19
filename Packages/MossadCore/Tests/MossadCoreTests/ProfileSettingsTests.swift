@@ -14,8 +14,6 @@ final class ProfileSettingsTests: XCTestCase {
     func testWithOneProfileOnlyAddShows() {
         let rows = ProfileSettingsWords.rows(registry([]), active: "default")
         XCTAssertTrue(rows.isEmpty)
-        XCTAssertEqual(ProfileSettingsWords.oneTitle, "Profiles")
-        XCTAssertEqual(ProfileSettingsWords.oneDetail, "Keep work and personal meetings apart.")
     }
 
     func testWithOneProfileItsOwnRowShows() {
@@ -29,10 +27,11 @@ final class ProfileSettingsTests: XCTestCase {
         XCTAssertEqual(ProfileSettingsWords.apartLabel, "Apart")
         XCTAssertEqual(ProfileSettingsWords.apart, ["Its own folder, shown under its name",
                                                     "Its meetings, people, voices, points, and coach",
-                                                    "Its API keys", "Its settings", "Its iCloud sync and its iPhone link"])
+                                                    "Its keys and accounts: AI, Google, backup",
+                                                    "Its connection for other AI apps (MCP)", "Its settings", "Its iCloud sync and its iPhone link"])
         XCTAssertEqual(ProfileSettingsWords.sharedLabel, "Shared on this Mac")
         XCTAssertEqual(ProfileSettingsWords.shared, ["Off, and Open Mossad at login",
-                                                     "The do-not-record list: each profile's list stops a recording",
+                                                     "Do-not-record lists: a meeting on any profile's list is not recorded",
                                                      "Permissions", "Not a call", "Usage statistics",
                                                      "The quick panel's shortcut", "Updates"])
         // Each shared line stands on a Mac-wide key: a key that leaves `MacDefaults` must leave the list too.

@@ -22,8 +22,11 @@ struct ProfileSettings: View {
     var body: some View {
         LabelColumnStack {
             ProfileSettingsGroup()
-            ProfileFacts(label: ProfileSettingsWords.apartLabel, lines: ProfileSettingsWords.apart)
-            ProfileFacts(label: ProfileSettingsWords.sharedLabel, lines: ProfileSettingsWords.shared)
+            // A copy with no profiles (Rehearsal, a preview, a `MOSSAD_ROOT` run) shares and keeps apart other things.
+            if AppIdentity.current.takesProfiles {
+                ProfileFacts(label: ProfileSettingsWords.apartLabel, lines: ProfileSettingsWords.apart)
+                ProfileFacts(label: ProfileSettingsWords.sharedLabel, lines: ProfileSettingsWords.shared)
+            }
         }
         .sheet(item: $controller.profileSheet) { sheet in
             switch sheet {
