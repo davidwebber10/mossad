@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "2.29.4",
+      "date": "2026-11-19",
+      "notes": [
+        "Profiles now have their own page in Settings, after General. It lists your profiles and says what each profile keeps apart and what all profiles on this Mac share."
+      ]
+    },
+    {
       "version": "2.29.3",
       "date": "2026-11-19",
       "notes": [
