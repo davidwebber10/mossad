@@ -199,15 +199,21 @@ extension NextTimeBook {
 
     /// The open points of meetings that are over with no recording the owner was in (cancelled, skipped, too short to
     /// keep, not recorded, or missed), and the points whose meeting this Mac does not know (another Mac, a lost file),
-    /// so no point is in no list. A meeting that moves to another profile holds its points while it waits.
-    public func unrecorded(records: [CallRecord], now: Date = Date()) -> [NextTimePoint] {
+    /// so no point is in no list. A meeting that moves to another profile holds its points while it waits. `read` is
+    /// the invites of a whole read of the calendar, nil when the read is not known: a meeting still to come within the
+    /// read that no invite holds (cancelled, or moved where `followMeetings` cannot follow) waits at once.
+    public func unrecorded(records: [CallRecord], now: Date = Date(), read: [UpcomingMeeting]? = nil) -> [NextTimePoint] {
         let candidates = visible.filter { $0.isOpen && $0.isForMeeting }
         guard !candidates.isEmpty else { return [] }
         let held = records.filter { !NextTimeRules.ownerMissed($0) }
+        let horizon = now.addingTimeInterval(Double(UpcomingMeeting.days - 1) * 86_400)
         return candidates.filter { p in
             guard let m = p.meeting else { return false }
             guard let d = m.detail else { return m.calls?.isEmpty != false }
-            return d.end.addingTimeInterval(NextTimeMeeting.grace) < now && !held.contains { m.matches($0) }
+            guard !held.contains(where: { m.matches($0) }) else { return false }
+            if d.end.addingTimeInterval(NextTimeMeeting.grace) < now { return true }
+            guard let read, d.start > now, d.start < horizon, m.calls?.isEmpty != false else { return false }
+            return !read.contains { m.matches($0) }
         }.sorted { ($0.meeting?.detail?.start ?? $0.created, $0.rank) < ($1.meeting?.detail?.start ?? $1.created, $1.rank) }
     }
 
@@ -251,11 +257,20 @@ extension NextTimeBook {
     /// Summary, and in a 1:1 the check moves them to the person. A meeting that is over with no recording the owner
     /// was in, whose invite was a sure 1:1 (`MeetingDetail.onlyPerson`), gives its points to that person when `name`
     /// knows them. Returns whether anything changed. A move of the times is not the owner's change.
+    ///
+    /// When no invite holds a meeting still to come by its UID or its title and start (a detail with no UID hash, a
+    /// moved meeting of a repeated invite, a new UID), a whole read (`read`) lets it follow the moved invite
+    /// (`MeetingPointRead.moved`).
     @discardableResult
     public mutating func followMeetings(upcoming: [UpcomingMeeting], series all: [MeetingSeries], records: [CallRecord], at date: Date = Date(),
-                                        name: (String) -> String? = { _ in nil }) -> Bool {
+                                        name: (String) -> String? = { _ in nil }, read: MeetingPointRead? = nil) -> Bool {
         guard points.contains(where: { $0.isOpen && $0.isForMeeting }) else { return false }
         let waiting = Set(unrecorded(records: records, now: date).map(\.id))
+        let held = records.filter { !NextTimeRules.ownerMissed($0) }
+        // Which invite each other meeting holds is read as the pass began, so two points of one meeting follow
+        // together; an invite that a follow took in this pass is held too, for every other meeting.
+        let before = points
+        var took: [(from: NextTimeMeeting, invite: String)] = []
         var changed = false
         for i in points.indices where points[i].isOpen && points[i].isForMeeting {
             guard var m = points[i].meeting, let d = m.detail else { continue }
@@ -269,6 +284,15 @@ extension NextTimeBook {
                 m.detail?.title = u.title
                 points[i].meeting = m
                 changed = true
+            } else if invite == nil, let read, d.end > date, m.calls?.isEmpty != false, !held.contains(where: { m.matches($0) }),
+                      let u = read.moved(m, points: before, took: took.filter { !$0.from.same(m) }.map(\.invite)) {
+                took.append((m, u.id))
+                m.detail?.start = u.start
+                m.detail?.end = u.end
+                m.detail?.title = u.title
+                if !u.repeats, let event = NextTimeMeeting.event(u.uid) { m.detail?.event = event }
+                points[i].meeting = m
+                changed = true
             } else if waiting.contains(points[i].id), m.calls?.isEmpty != false, let id = d.onlyPerson, let who = name(id) {
                 move(points[i].id, toPerson: id, name: who, at: date)
                 changed = true
@@ -276,6 +300,68 @@ extension NextTimeBook {
         }
         return changed
     }
+
+}
+
+/// A whole read of the calendar (`CalendarRead.whole`), for a meeting point whose invite went away: its invites
+/// without the filter that hides a recorded one, each invite's sure people and count by its id, and the previous whole
+/// read, which this Mac keeps in memory only (nil after a launch: then nothing follows and the point waits).
+public struct MeetingPointRead {
+    public var invites: [UpcomingMeeting]
+    public var before: [UpcomingMeeting]?
+    /// The sure people of each invite by its id (`NextTimeInvite.personIDs`).
+    public var people: [String: [String]]
+    /// Everyone invited besides the owner, by the invite's id (`MeetingPrep.invited`).
+    public var invited: [String: Int]
+    /// The id a merged person has now.
+    public var canonical: (String) -> String
+    /// The owner's calendar: days are counted in its time zone.
+    public var calendar: Calendar
+
+    public init(invites: [UpcomingMeeting], before: [UpcomingMeeting]?, people: [String: [String]], invited: [String: Int],
+                canonical: @escaping (String) -> String = { $0 }, calendar: Calendar = .current) {
+        self.invites = invites
+        self.before = before
+        self.people = people
+        self.invited = invited
+        self.canonical = canonical
+        self.calendar = calendar
+    }
+
+    /// Fewer calendar days than this from the planned start: a weekly invite seven days on is the next meeting.
+    static let followDays = 7
+
+    /// One invite as a read had it: its UID hash, else its title, and its start. The same UID at a new start is new.
+    static func key(_ u: UpcomingMeeting) -> String {
+        "\(NextTimeMeeting.event(u.uid) ?? "title:" + MeetingDetail.key(u.title))@\(Int(u.start.timeIntervalSince1970))"
+    }
+
+    /// The invite a meeting moved to. Only in the read where its own invite went away (in the read before, not in this
+    /// one), and only to an invite that is new in this read: one that was there before is another meeting, and a
+    /// cancelled meeting waits. The same title (`MeetingDetail.key`), the same sure people by their ids of now and the
+    /// same count invited, fewer than `followDays` calendar days from the old start, and the nearest. None on a tie,
+    /// for a meeting with no sure people or no count, or to an invite that another open meeting holds or took (`took`).
+    func moved(_ m: NextTimeMeeting, points: [NextTimePoint], took: [String]) -> UpcomingMeeting? {
+        guard let before, let d = m.detail, let people = d.people, !people.isEmpty, let count = d.invited,
+              before.contains(where: { m.matches($0) }), !invites.contains(where: { m.matches($0) }) else { return nil }
+        let old = Set(before.map(Self.key)), key = MeetingDetail.key(d.title), want = Set(people.map(canonical))
+        let day = calendar.startOfDay(for: d.start)
+        let others = points.compactMap { p -> NextTimeMeeting? in
+            guard p.isOpen, p.isForMeeting, let o = p.meeting, o.detail != nil, !o.same(m) else { return nil }
+            return o
+        }
+        let fits = invites.filter { u in
+            guard MeetingDetail.key(u.title) == key, !old.contains(Self.key(u)), !took.contains(u.id),
+                  let days = calendar.dateComponents([.day], from: day, to: calendar.startOfDay(for: u.start)).day,
+                  abs(days) < Self.followDays else { return false }
+            return Set(sure(u).map(canonical)) == want && invited[u.id] == count && !others.contains { $0.matches(u) }
+        }
+        let gap = { (u: UpcomingMeeting) in abs(u.start.timeIntervalSince(d.start)) }
+        guard let best = fits.min(by: { gap($0) < gap($1) }) else { return nil }
+        return fits.filter { gap($0) == gap(best) }.count == 1 ? best : nil
+    }
+
+    private func sure(_ u: UpcomingMeeting) -> [String] { self.people[u.id] ?? [] }
 }
 
 extension NextTimeRules {

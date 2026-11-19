@@ -46,6 +46,12 @@ final class SeriesModel: ObservableObject {
     /// only there do that person's points show.
     private(set) var oneOnOneIDs: [String: String] = [:]
     private(set) var usualIDs: [String: [(id: String, name: String)]] = [:]
+    /// The invites of the last catalog when its calendar read was whole, else nil: a meeting point still to come that
+    /// none of them holds waits with the points of meetings that were not recorded (`NextTimeBook.unrecorded`).
+    private var readInvites: [UpcomingMeeting]?
+    /// The invites of the last whole read, in memory only: a meeting point follows only to an invite new since then
+    /// (`MeetingPointRead.before`). Nil until the first whole read after a launch.
+    private var lastWhole: [UpcomingMeeting]?
     /// The people store, for the id a merged person has now.
     private(set) var people = PersonReferences(people: [])
 
@@ -57,6 +63,8 @@ final class SeriesModel: ObservableObject {
         let profiles: [VoiceProfile]
         let ownerEmail: String
         let peopleDir: URL
+        /// The read of the calendar was whole: a meeting point that no invite holds may follow a moved one or wait.
+        var calendarWhole = false
     }
 
     private struct Made: Sendable {
@@ -66,6 +74,9 @@ final class SeriesModel: ObservableObject {
         let oneOnOne: [String: String]
         let usual: [String: [UsualPerson]]
         let people: PersonReferences
+        let every: [UpcomingMeeting]
+        let everyPeople: [String: [String]]
+        let everyCount: [String: Int]
     }
 
     struct UsualPerson: Sendable {
@@ -90,6 +101,7 @@ final class SeriesModel: ObservableObject {
         h.combine(version)
         h.combine(inputs.owner)
         h.combine(inputs.ownerEmail)
+        h.combine(inputs.calendarWhole)
         for e in inputs.events { h.combine(e.title); h.combine(e.start); h.combine(e.seriesID); h.combine(e.attendees) }
         for p in inputs.profiles { h.combine(p.name); h.combine(p.email) }
         let file = inputs.peopleDir.appendingPathComponent(PeopleStore.fileName)
@@ -121,13 +133,27 @@ final class SeriesModel: ObservableObject {
                         return UsualPerson(id: id, name: refs.name(of: id) ?? name)
                     }
                 }
-                return Made(upcoming: upcoming, all: all, invited: invited, oneOnOne: oneOnOne, usual: usual, people: refs)
+                // Every invite of the read, also one that a recording hides from the lists: a meeting point whose invite
+                // went away follows or waits by these (`MeetingPointRead`).
+                let every = UpcomingMeeting.from(inputs.events, limit: .max)
+                var everyPeople: [String: [String]] = [:]
+                var everyCount: [String: Int] = [:]
+                for u in every {
+                    everyPeople[u.id] = NextTimeInvite.personIDs(u.attendees, people: refs)
+                    everyCount[u.id] = MeetingPrep.invited(u.attendees, owner: inputs.owner, directory: directory, ownerEmails: [inputs.ownerEmail]).count
+                }
+                return Made(upcoming: upcoming, all: all, invited: invited, oneOnOne: oneOnOne, usual: usual, people: refs,
+                            every: every, everyPeople: everyPeople, everyCount: everyCount)
             }.value
             guard !Task.isCancelled else { return }
             invitedIDs = made.invited
             oneOnOneIDs = made.oneOnOne
             usualIDs = made.usual.mapValues { $0.map { (id: $0.id, name: $0.name) } }
             people = made.people
+            let whole = inputs.calendarWhole
+            readInvites = whole ? made.every : nil
+            let previous = lastWhole
+            if whole { lastWhole = made.every }
             all = made.all
             loaded = true
             // The points take the keys their series has now (one save, only on a change).
@@ -140,8 +166,12 @@ final class SeriesModel: ObservableObject {
             if let owner, book.points.contains(where: { $0.isOpen && $0.isForMeeting }) {
                 var copy = book
                 let records = inputs.records, refs = made.people
-                if copy.followMeetings(upcoming: made.upcoming, series: made.all, records: records, name: { refs.name(of: $0) }) {
-                    owner.changeNextTime { $0.followMeetings(upcoming: made.upcoming, series: made.all, records: records, name: { refs.name(of: $0) }) }
+                let read = whole ? MeetingPointRead(invites: made.every, before: previous, people: made.everyPeople, invited: made.everyCount,
+                                                    canonical: { refs.canonical($0) }) : nil
+                if copy.followMeetings(upcoming: made.upcoming, series: made.all, records: records, name: { refs.name(of: $0) }, read: read) {
+                    owner.changeNextTime {
+                        $0.followMeetings(upcoming: made.upcoming, series: made.all, records: records, name: { refs.name(of: $0) }, read: read)
+                    }
                 }
             }
         }
@@ -153,11 +183,12 @@ final class SeriesModel: ObservableObject {
         var h = Hasher()
         h.combine(bookVersion)
         h.combine(version)
+        h.combine(self.version)
         h.combine(Int(now.timeIntervalSince1970 / 300))
         let key = h.finalize()
         if key != waitingKey {
             waitingKey = key
-            waitingMemo = book.unrecorded(records: records, now: now)
+            waitingMemo = book.unrecorded(records: records, now: now, read: readInvites)
         }
         return waitingMemo
     }
@@ -208,7 +239,8 @@ extension AppController {
         series.owner = self
         series.reload(paths)
         series.refresh(.init(events: calendarEvents, records: meetings, owner: ownerName, profiles: library.profiles,
-                             ownerEmail: UserDefaults.standard.string(forKey: "ownerEmail") ?? "", peopleDir: paths.people), version: meetingsVersion)
+                             ownerEmail: UserDefaults.standard.string(forKey: "ownerEmail") ?? "", peopleDir: paths.people, calendarWhole: calendarWhole),
+                       version: meetingsVersion)
     }
 
     func openSeries(_ id: String) {

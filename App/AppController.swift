@@ -357,6 +357,8 @@ final class AppController: ObservableObject {
     let seriesFilter = SeriesFilterModel()
     /// True once the calendar was read at least once (also when it gave nothing).
     var calendarRead = false
+    /// True when the last read was whole (`CalendarRead.whole`): only then does a missing invite mean anything.
+    var calendarWhole = false
     private var filterTask: Task<Void, Never>?
     private var makingRecordings = false
 
@@ -2420,7 +2422,9 @@ final class AppController: ObservableObject {
         Task {
             let now = Date()
             // One read for the lists, the calendar, the prep pages, and the recurring meetings.
-            var events = await calendar.events(from: now.addingTimeInterval(-3600), to: now.addingTimeInterval(Double(UpcomingMeeting.days) * 86_400))
+            let answer = await calendar.read(from: now.addingTimeInterval(-3600), to: now.addingTimeInterval(Double(UpcomingMeeting.days) * 86_400))
+            var events = answer.events
+            var whole = answer.whole
             // Development hook: `--sample-upcoming` adds two events, since a preview build has no Calendar access.
             if CommandLine.arguments.contains("--sample-upcoming") {
                 events += [CalendarEventInfo(title: "Alex / Sam", start: now.addingTimeInterval(1500), end: now.addingTimeInterval(3300),
@@ -2433,8 +2437,10 @@ final class AppController: ObservableObject {
             if let sample = DevHooks.sampleInvites() {
                 events = sample
                 sampled = true
+                whole = true
                 DevHooks.samplePoints(self, events: sample)
             }
+            calendarWhole = whole
             calendarEvents = events
             calendarRead = true
             // For Chat's and other AI apps' tools, which cannot read the calendar: the events as read, without their
