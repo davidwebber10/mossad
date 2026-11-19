@@ -18,6 +18,30 @@ final class ProfileSettingsTests: XCTestCase {
         XCTAssertEqual(ProfileSettingsWords.oneDetail, "Keep work and personal meetings apart.")
     }
 
+    func testWithOneProfileItsOwnRowShows() {
+        let row = ProfileSettingsWords.only(.default)
+        XCTAssertEqual(row.name, "Mossad"); XCTAssertEqual(row.folder, "~/Mossad")
+        XCTAssertTrue(row.active); XCTAssertFalse(row.mayDelete)
+        XCTAssertEqual(ProfileSettingsWords.only(work).folder, "~/Mossad Work")
+    }
+
+    func testThePageSaysWhatAProfileKeepsApartAndWhatTheMacShares() {
+        XCTAssertEqual(ProfileSettingsWords.apartLabel, "Apart")
+        XCTAssertEqual(ProfileSettingsWords.apart, ["Its own folder, shown under its name",
+                                                    "Its meetings, people, voices, points, and coach",
+                                                    "Its API keys", "Its settings", "Its iCloud sync and its iPhone link"])
+        XCTAssertEqual(ProfileSettingsWords.sharedLabel, "Shared on this Mac")
+        XCTAssertEqual(ProfileSettingsWords.shared, ["Off, and Open Mossad at login",
+                                                     "The do-not-record list: each profile's list stops a recording",
+                                                     "Permissions", "Not a call", "Usage statistics",
+                                                     "The quick panel's shortcut", "Updates"])
+        // Each shared line stands on a Mac-wide key: a key that leaves `MacDefaults` must leave the list too.
+        for key in ["offUntil", "didSetLoginItem", "screenCaptureAsked", "notACall", "usageStatsEnabled", "askShortcut"] {
+            XCTAssertTrue(MacDefaults.isMacWide(key), key)
+        }
+        XCTAssertTrue(MacDefaults.isMacWide("SUEnableAutomaticChecks"))
+    }
+
     func testEachProfileIsARowAndOnlyAnotherInactiveOneMayBeDeleted() {
         let rows = ProfileSettingsWords.rows(registry([work, client]), active: "1a2b3c4d")
         XCTAssertEqual(rows.map(\.id), ["default", "1a2b3c4d", "9f8e7d6c"])

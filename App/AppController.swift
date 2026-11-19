@@ -438,7 +438,7 @@ final class AppController: ObservableObject {
     @Published var profiles: ProfileRegistry.Loaded = AppIdentity.current.registry
     /// Why the last change of profiles did not happen, in words for the owner.
     @Published var profileProblem: String? { didSet { profileProblemSince = Date() } }
-    /// The sheet of Settings > General > Profiles that is open.
+    /// The sheet of Settings > Profiles that is open.
     @Published var profileSheet: ProfileSheet?
     /// When `profileProblem` was set, for how long it shows.
     var profileProblemSince = Date()

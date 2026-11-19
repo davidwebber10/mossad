@@ -1,10 +1,27 @@
 import Foundation
 
-/// What Settings > General > Profiles and its sheets show: the rows, the footer for each state of the file, and
-/// the sheets' words. With one profile there are no rows, only the one row that offers "Add profile…".
+/// What Settings > Profiles and its sheets show: the rows, the footer for each state of the file, what a profile
+/// keeps apart and what the Mac shares, and the sheets' words. With one profile, the one row of that profile.
 public enum ProfileSettingsWords {
     public static let oneTitle = "Profiles"
     public static let oneDetail = "Keep work and personal meetings apart."
+
+    // What each profile keeps apart (`AppIdentity`: the folder, the Keychain service, the settings suite, the zone)
+    // and what stays the Mac's (`MacDefaults.keys` and `prefixes`, the gate's do-not-record lists). Facts only.
+    public static let apartLabel = "Apart"
+    public static let apart = ["Its own folder, shown under its name",
+                               "Its meetings, people, voices, points, and coach",
+                               "Its API keys",
+                               "Its settings",
+                               "Its iCloud sync and its iPhone link"]
+    public static let sharedLabel = "Shared on this Mac"
+    public static let shared = ["Off, and Open Mossad at login",
+                                "The do-not-record list: each profile's list stops a recording",
+                                "Permissions",
+                                "Not a call",
+                                "Usage statistics",
+                                "The quick panel's shortcut",
+                                "Updates"]
     public static let addExplanation = "A profile has its own keys, settings, people, voices, coach, sync, and MCP. Nothing is copied from another profile. Mossad restarts and takes you through setup for the new profile."
     public static let renameNote = "The folder keeps its name."
 
@@ -29,6 +46,12 @@ public enum ProfileSettingsWords {
         public let active: Bool
         /// Never the first profile, never the active one.
         public let mayDelete: Bool
+    }
+
+    /// The one row with fewer than two live profiles: the active profile, which is the only one, with no delete.
+    public static func only(_ profile: Profile) -> Row {
+        Row(id: profile.id, name: profile.name, color: profile.color, folder: profile.isDefault ? Profile.default.root : profile.root,
+            active: true, mayDelete: false)
     }
 
     /// One row for each live profile, or none with fewer than two.

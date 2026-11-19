@@ -113,7 +113,7 @@ enum DevHooks {
             DispatchQueue.main.async { c.open(section) }
         }
         // `MOSSAD_PROFILES=<file>` shows a made-up registry in the switcher and Settings (loaded by `AppIdentity`).
-        // `MOSSAD_PROFILE_SHEET=add|rename|delete|code` opens that sheet of Settings > General > Profiles; rename and
+        // `MOSSAD_PROFILE_SHEET=add|rename|delete|code` opens that sheet of Settings > Profiles; rename and
         // delete for the first profile that is not `default`.
         // `MOSSAD_WORKER_LINES="1a2b3c4d=2 meetings in work"` (more with `;`): the switcher's second lines.
         if preview, let lines = env["MOSSAD_WORKER_LINES"] {

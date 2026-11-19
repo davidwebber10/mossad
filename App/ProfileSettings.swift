@@ -1,7 +1,7 @@
 import MossadCore
 import SwiftUI
 
-/// The sheet of Settings > General > Profiles that is open.
+/// The sheet of Settings > Profiles that is open.
 enum ProfileSheet: Equatable, Identifiable {
     case add, rename(String), delete(String), code
 
@@ -15,9 +15,30 @@ enum ProfileSheet: Equatable, Identifiable {
     }
 }
 
-/// Settings > General > Profiles: with one profile one row that offers "Add profile…"; with more, a row for each
-/// with Rename and Delete, then "Add profile…". The footer says what stops a change.
-struct ProfileSettingsGroup: View {
+/// Settings > Profiles: the profiles, then what each keeps apart and what the Mac shares, as plain facts.
+struct ProfileSettings: View {
+    @EnvironmentObject var controller: AppController
+
+    var body: some View {
+        LabelColumnStack {
+            ProfileSettingsGroup()
+            ProfileFacts(label: ProfileSettingsWords.apartLabel, lines: ProfileSettingsWords.apart)
+            ProfileFacts(label: ProfileSettingsWords.sharedLabel, lines: ProfileSettingsWords.shared)
+        }
+        .sheet(item: $controller.profileSheet) { sheet in
+            switch sheet {
+            case .add: AddProfileSheet()
+            case .rename(let id): RenameProfileSheet(id: id)
+            case .delete(let id): DeleteProfileSheet(id: id)
+            case .code: ProfileCodeSheet()
+            }
+        }
+    }
+}
+
+/// With one profile its own row and "Add profile…"; with more, a row for each with Rename and Delete, then
+/// "Show code for iPhone…" and "Add profile…". The footer says what stops a change.
+private struct ProfileSettingsGroup: View {
     @EnvironmentObject var controller: AppController
     @Environment(\.rowStyle) private var style
 
@@ -25,9 +46,14 @@ struct ProfileSettingsGroup: View {
         let rows = ProfileSettingsWords.rows(controller.profiles.registry, active: controller.activeProfile.id)
         SettingsGroup(label: "Profiles", footer: ProfileSettingsWords.footer(controller.profiles, problem: controller.visibleProfileProblem)) {
             if rows.isEmpty {
-                SettingsRow(title: ProfileSettingsWords.oneTitle, detail: ProfileSettingsWords.oneDetail) {
+                // A copy with no profiles (a preview, Rehearsal, a `MOSSAD_ROOT` run) has no folder of its own to name.
+                ProfileRow(row: ProfileSettingsWords.only(controller.activeProfile), showsFolder: AppIdentity.current.takesProfiles,
+                           editable: false)
+                HStack {
+                    Spacer(minLength: 0)
                     addButton
                 }
+                .padding(.vertical, style.padding)
             } else {
                 ForEach(rows) { row in
                     ProfileRow(row: row)
@@ -41,14 +67,6 @@ struct ProfileSettingsGroup: View {
                 .padding(.vertical, style.padding)
             }
         }
-        .sheet(item: $controller.profileSheet) { sheet in
-            switch sheet {
-            case .add: AddProfileSheet()
-            case .rename(let id): RenameProfileSheet(id: id)
-            case .delete(let id): DeleteProfileSheet(id: id)
-            case .code: ProfileCodeSheet()
-            }
-        }
     }
 
     private var addButton: some View {
@@ -58,11 +76,34 @@ struct ProfileSettingsGroup: View {
     }
 }
 
-/// One profile: its dot, its name, its folder, "Active" on the active one, Rename and Delete.
+/// A short list of facts under a label: no controls and no instructions.
+private struct ProfileFacts: View {
+    let label: String
+    let lines: [String]
+
+    var body: some View {
+        LabelColumn(label: label) {
+            VStack(alignment: .leading, spacing: Rhythm.itemGap) {
+                ForEach(lines, id: \.self) { line in
+                    Text(line)
+                        .font(.system(size: Rhythm.bodySize)).foregroundStyle(Palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(label): \(lines.joined(separator: ", "))")
+        }
+    }
+}
+
+/// One profile: its dot, its name, its folder, "Active" on the active one, Rename and Delete. The only profile has
+/// no "Active" and no buttons.
 private struct ProfileRow: View {
     @EnvironmentObject var controller: AppController
     @Environment(\.rowStyle) private var style
     let row: ProfileSettingsWords.Row
+    var showsFolder = true
+    var editable = true
 
     var body: some View {
         HStack(spacing: Space.m) {
@@ -70,26 +111,30 @@ private struct ProfileRow: View {
             VStack(alignment: .leading, spacing: Rhythm.pairGap) {
                 HStack(spacing: Space.s) {
                     Text(row.name).font(.system(size: Rhythm.bodySize, weight: .medium)).foregroundStyle(Palette.ink).lineLimit(1)
-                    if row.active {
+                    if row.active, editable {
                         Text("Active").font(.system(size: Rhythm.noteSize, weight: .medium)).foregroundStyle(Palette.secondary)
                     }
                 }
                 // The registry's own `~/` text: it never holds the account's name.
-                Text(row.folder)
-                    .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
-                    .lineLimit(1).truncationMode(.middle)
+                if showsFolder {
+                    Text(row.folder)
+                        .font(.system(size: Rhythm.secondarySize)).foregroundStyle(Palette.secondary)
+                        .lineLimit(1).truncationMode(.middle)
+                }
             }
             Spacer(minLength: Space.m)
-            Button("Rename…") { controller.profileSheet = .rename(row.id) }
-                .buttonStyle(.settings)
-                .disabled(!controller.profiles.canSave)
-            Button("Delete…") { controller.profileSheet = .delete(row.id) }
-                .buttonStyle(.settings)
-                .disabled(!row.mayDelete || !controller.profiles.canSave)
+            if editable {
+                Button("Rename…") { controller.profileSheet = .rename(row.id) }
+                    .buttonStyle(.settings)
+                    .disabled(!controller.profiles.canSave)
+                Button("Delete…") { controller.profileSheet = .delete(row.id) }
+                    .buttonStyle(.settings)
+                    .disabled(!row.mayDelete || !controller.profiles.canSave)
+            }
         }
         .padding(.vertical, style.padding)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(row.name)\(row.active ? ", active" : "")")
+        .accessibilityLabel("\(row.name)\(row.active && editable ? ", active" : "")")
     }
 }
 
