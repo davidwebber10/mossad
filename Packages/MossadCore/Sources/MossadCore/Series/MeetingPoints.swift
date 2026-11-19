@@ -199,15 +199,21 @@ extension NextTimeBook {
 
     /// The open points of meetings that are over with no recording the owner was in (cancelled, skipped, too short to
     /// keep, not recorded, or missed), and the points whose meeting this Mac does not know (another Mac, a lost file),
-    /// so no point is in no list. A meeting that moves to another profile holds its points while it waits.
-    public func unrecorded(records: [CallRecord], now: Date = Date()) -> [NextTimePoint] {
+    /// so no point is in no list. A meeting that moves to another profile holds its points while it waits. `read` is
+    /// the invites of a whole read of the calendar, nil when the read is not known: a meeting still to come within the
+    /// read that no invite holds (cancelled, or moved where `followMeetings` cannot follow) waits at once.
+    public func unrecorded(records: [CallRecord], now: Date = Date(), read: [UpcomingMeeting]? = nil) -> [NextTimePoint] {
         let candidates = visible.filter { $0.isOpen && $0.isForMeeting }
         guard !candidates.isEmpty else { return [] }
         let held = records.filter { !NextTimeRules.ownerMissed($0) }
+        let horizon = now.addingTimeInterval(Double(UpcomingMeeting.days - 1) * 86_400)
         return candidates.filter { p in
             guard let m = p.meeting else { return false }
             guard let d = m.detail else { return m.calls?.isEmpty != false }
-            return d.end.addingTimeInterval(NextTimeMeeting.grace) < now && !held.contains { m.matches($0) }
+            guard !held.contains(where: { m.matches($0) }) else { return false }
+            if d.end.addingTimeInterval(NextTimeMeeting.grace) < now { return true }
+            guard let read, d.start > now, d.start < horizon, m.calls?.isEmpty != false else { return false }
+            return !read.contains { m.matches($0) }
         }.sorted { ($0.meeting?.detail?.start ?? $0.created, $0.rank) < ($1.meeting?.detail?.start ?? $1.created, $1.rank) }
     }
 
@@ -251,11 +257,19 @@ extension NextTimeBook {
     /// Summary, and in a 1:1 the check moves them to the person. A meeting that is over with no recording the owner
     /// was in, whose invite was a sure 1:1 (`MeetingDetail.onlyPerson`), gives its points to that person when `name`
     /// knows them. Returns whether anything changed. A move of the times is not the owner's change.
+    ///
+    /// When no invite holds a meeting still to come by its UID or its title and start (a detail with no UID hash, a
+    /// moved meeting of a repeated invite, a new UID), a whole read (`calendarWhole`) lets it follow the moved invite
+    /// (`moved`). `invited` is each invite's sure people by its id (`NextTimeInvite.personIDs`).
     @discardableResult
     public mutating func followMeetings(upcoming: [UpcomingMeeting], series all: [MeetingSeries], records: [CallRecord], at date: Date = Date(),
-                                        name: (String) -> String? = { _ in nil }) -> Bool {
+                                        name: (String) -> String? = { _ in nil }, invited: [String: [String]] = [:],
+                                        calendarWhole: Bool = false) -> Bool {
         guard points.contains(where: { $0.isOpen && $0.isForMeeting }) else { return false }
         let waiting = Set(unrecorded(records: records, now: date).map(\.id))
+        let held = records.filter { !NextTimeRules.ownerMissed($0) }
+        // Which invite each other meeting holds is read as the pass began: two points of one meeting follow together.
+        let before = points
         var changed = false
         for i in points.indices where points[i].isOpen && points[i].isForMeeting {
             guard var m = points[i].meeting, let d = m.detail else { continue }
@@ -269,12 +283,43 @@ extension NextTimeBook {
                 m.detail?.title = u.title
                 points[i].meeting = m
                 changed = true
+            } else if invite == nil, calendarWhole, d.end.addingTimeInterval(NextTimeMeeting.grace) >= date, m.calls?.isEmpty != false,
+                      !held.contains(where: { m.matches($0) }), let u = Self.moved(m, upcoming: upcoming, invited: invited, points: before) {
+                m.detail?.start = u.start
+                m.detail?.end = u.end
+                m.detail?.title = u.title
+                if !u.repeats, let event = NextTimeMeeting.event(u.uid) { m.detail?.event = event }
+                points[i].meeting = m
+                changed = true
             } else if waiting.contains(points[i].id), m.calls?.isEmpty != false, let id = d.onlyPerson, let who = name(id) {
                 move(points[i].id, toPerson: id, name: who, at: date)
                 changed = true
             }
         }
         return changed
+    }
+
+    /// The days a moved invite may be from the meeting's planned start and still be it.
+    static let followDays: TimeInterval = 7 * 86_400
+
+    /// The invite a meeting moved to: the same title (`MeetingDetail.key`), the same set of sure people, and a start
+    /// within `followDays`, the nearest one to the old start. None when two are as near, when the meeting has no sure
+    /// people, or when the invite is another open meeting's own (by its UID or its title and start).
+    private static func moved(_ m: NextTimeMeeting, upcoming: [UpcomingMeeting], invited: [String: [String]],
+                              points: [NextTimePoint]) -> UpcomingMeeting? {
+        guard let d = m.detail, let people = d.people, !people.isEmpty else { return nil }
+        let key = MeetingDetail.key(d.title), want = Set(people)
+        let others = points.compactMap { p -> NextTimeMeeting? in
+            guard p.isOpen, p.isForMeeting, let o = p.meeting, o.detail != nil, !o.same(m) else { return nil }
+            return o
+        }
+        let fits = upcoming.filter { u in
+            MeetingDetail.key(u.title) == key && abs(u.start.timeIntervalSince(d.start)) <= followDays
+                && Set(invited[u.id] ?? []) == want && !others.contains { $0.matches(u) }
+        }
+        let gap = { (u: UpcomingMeeting) in abs(u.start.timeIntervalSince(d.start)) }
+        guard let best = fits.min(by: { gap($0) < gap($1) }) else { return nil }
+        return fits.filter { gap($0) == gap(best) }.count == 1 ? best : nil
     }
 }
 
