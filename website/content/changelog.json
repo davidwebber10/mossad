@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "2.29.2",
+      "date": "2026-11-18",
+      "notes": [
+        "Dismiss on a coach suggestion now hides only that suggestion and teaches the coach nothing. To see fewer of a kind, choose Dismiss suggestions like this. With AssemblyAI, you can now choose its newest model, STT-3.7, in Settings, or keep your account's default."
+      ]
+    },
+    {
       "version": "2.29.1",
       "date": "2026-11-18",
       "notes": [
