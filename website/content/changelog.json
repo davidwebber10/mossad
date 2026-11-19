@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "2.29.3",
+      "date": "2026-11-19",
+      "notes": [
+        "Points for one meeting now follow the meeting when its time changes. If Mossad cannot find the meeting on your calendar, its points wait in view at the top of Recurring, so they never seem lost."
+      ]
+    },
+    {
       "version": "2.29.2",
       "date": "2026-11-18",
       "notes": [
