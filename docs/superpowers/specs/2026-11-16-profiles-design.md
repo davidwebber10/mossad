@@ -2,6 +2,11 @@
 
 Date: 2026-11-16. Status: approved by the owner on 2026-11-16.
 
+Note, 2026-11-19: Profiles moved out of Settings > General to its own page, Settings > Profiles, right after
+General. Read "Settings > General > Profiles" below as Settings > Profiles. "Manage profiles…" opens that page. With
+one profile the page shows that profile and "Add profile…". The page also lists what each profile keeps apart and
+what all profiles on the Mac share (`ProfileSettingsWords.apart` and `shared`).
+
 ## Intent
 
 The owner takes work calls and personal calls (a consulting client, for example) on the same Mac and iPhone. The

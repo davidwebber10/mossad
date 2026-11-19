@@ -88,9 +88,9 @@ struct ProfileProblemLine: View {
 }
 
 extension AppController {
-    /// Settings > General, with a sheet of the Profiles group when one is given.
+    /// Settings > Profiles, with one of its sheets when one is given.
     func openProfileSettings(sheet: ProfileSheet?) {
-        UserDefaults.standard.set(SettingsPage.general.rawValue, forKey: "settingsPage")
+        UserDefaults.standard.set(SettingsPage.profiles.rawValue, forKey: "settingsPage")
         open(.settings)
         profileSheet = sheet
     }

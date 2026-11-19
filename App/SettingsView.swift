@@ -48,6 +48,7 @@ struct SettingsView: View {
     private var content: some View {
         switch page {
         case .general: GeneralSettings()
+        case .profiles: ProfileSettings()
         case .recording: RecordingSettings()
         case .google: GoogleSettings()
         case .ai: AISettings()
@@ -146,13 +147,14 @@ private struct SettingsListRow: View {
 
 /// The pages of Settings, in the order of the list.
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, recording, google, ai, sync, coach
+    case general, profiles, recording, google, ai, sync, coach
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .general: "General"
+        case .profiles: "Profiles"
         case .recording: "Recording"
         case .google: "Google"
         case .ai: "AI"
@@ -165,6 +167,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var contents: String {
         switch self {
         case .general: "On/off, you, permissions, org chart"
+        case .profiles: "Your profiles, what they keep apart"
         case .recording: "Recording, voices, calendars, folders"
         case .google: "Calendar, Gemini notes, directory"
         case .ai: "Providers and other AI apps"
@@ -176,6 +179,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .general: "Turn Mossad on or off, and what it needs from you and from macOS."
+        case .profiles: "Your profiles, and what each keeps apart."
         case .recording: "How Mossad records, names voices, and reads your calendars."
         case .google: "Optional. Your own Google app reads your Google Calendar, the Gemini notes of meetings, and your company directory. Read-only."
         case .ai: "The services that transcribe and summarize your calls, and other apps that read them."
@@ -187,6 +191,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var icon: Icon {
         switch self {
         case .general: .settings
+        case .profiles: .people
         case .recording: .mic
         case .google: .link
         case .ai: .sparkle
